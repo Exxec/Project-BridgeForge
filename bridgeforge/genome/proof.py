@@ -20,8 +20,16 @@ two findings: an inherited Janino risk and the carrier's mod_info version.
 
 The copies are made without disturbing what the gene does not own: a CSV row is cut out of the table's text, a settings
 key's line out of settings.json, so the rest of each file reads exactly as before. A key whose value spans lines is
-removed by re-writing the file, and the proof says so. A jar-class member is removed from a zip copy, which is fine for
-these static scans; the boot halves must rebuild jars with the JDK `jar` tool (house rule) and are not run here.
+removed by re-writing the file (non-ASCII kept as text), and the proof says so. A jar that loses classes is written fresh
+from the donor's jar by copying each kept entry's ZipInfo, the method `patch-jar-class` uses; the jar that loaded no class
+in 2026-10 came from .NET ZipArchive's Update mode, not this. So the boot halves can stage these copies byte for byte.
+
+**Star systems (slice 7, 2026-11-20).** The registration is an element, not a member, so subtraction leaves the donor's plugin
+calling the removed generator: a new reference naming the generator is classified as the `registration`, and the proof lists
+the call sites (`registration_sites`). Such a donor cannot boot until slice 8 cuts the call, and its boot note says so. The
+carrier gets a generated plugin making the recorded call (`genome/carrier_plugin.py`), and every carrier's mod_info lists the
+jars it holds (the game loads only listed jars). A gene need (`needs.genes`) may stay unresolved in the carrier, like a
+vanilla need; the carrier's boot then waits for that gene.
 
 The boot halves (subtraction: the donor still boots; isolation: the carrier boots) need the test rig and are not written
 until live testing runs them.
@@ -36,6 +44,8 @@ import shutil
 import zipfile
 from pathlib import Path
 
+from bridgeforge.genome import carrier_plugin
+from bridgeforge.genome.carrier_plugin import CarrierPluginRefused
 from bridgeforge.genome.evidence import header
 from bridgeforge.genome.gene import describe, dumps
 from bridgeforge.licence_ledger import member_file
@@ -156,7 +166,9 @@ def subtract(root: Path, gene: dict, dest: Path) -> list[str]:
             if cut is None:
                 data, _ = _parse_json(text)
                 _nested_pop(data, tokens)
-                cut = json.dumps(data, indent=2) + "\n"
+                # Non-ASCII stays text: escaped, Eridani's 天苑四设计 designTypeColors key stopped matching its manufacturer
+                # (P3, 2026-11-20).
+                cut = json.dumps(data, indent=2, ensure_ascii=False) + "\n"
                 why = "a nested key" if len(tokens) > 1 else "its value spans lines"
                 notes.append(f"{file} re-written whole to remove {ptr} ({why})")
             atomic_write_text(target, cut, newline="")
@@ -187,13 +199,14 @@ def _write_jar_without(source_jar: Path, target: Path, entries: set[str]) -> Non
                 out.writestr(item, read_limited(source, item.filename))
 
 
-def build_carrier(root: Path, gene: dict, dest: Path) -> None:
-    """An empty mod holding only the gene's members."""
+def build_carrier(root: Path, gene: dict, dest: Path, *, vanilla_core: Path | None = None, work: Path | None = None) -> dict | None:
+    """An empty mod holding only the gene's members. Its mod_info lists the jars it holds: the game loads only listed jars, and
+    P2's carrier (2026-11-19) listed none, so a boot would have loaded no class. A star-system gene's carrier also gets a
+    generated plugin making the recorded call (`genome/carrier_plugin.py`); its record is returned, else None."""
     info = read_mod_info(root) or {}
     dest.mkdir(parents=True)
     carrier_info = {"id": f"gene_carrier_{gene['identity'][:12]}", "name": f"Gene carrier {gene['anchors'][0]}", "version": "0.0.1",
                     "gameVersion": info.get("gameVersion"), "dependencies": [{"id": mod} for mod in gene["needs"]["mods"]]}
-    atomic_write_text((dest / "mod_info.json"), json.dumps(carrier_info, indent=2) + "\n", newline="")
     settings: dict[str, dict] = {}
     for member in gene["members"]:
         path = member["path"]
@@ -226,7 +239,34 @@ def build_carrier(root: Path, gene: dict, dest: Path) -> None:
                 out.writestr(entry, data)
     for file, values in settings.items():
         (dest / file).parent.mkdir(parents=True, exist_ok=True)
-        atomic_write_text((dest / file), json.dumps(values, indent=2) + "\n", newline="")
+        atomic_write_text((dest / file), json.dumps(values, indent=2, ensure_ascii=False) + "\n", newline="")
+    plugin = None
+    if gene["kind"] == "star-system":
+        plugin = carrier_plugin.build(dest, gene["registrations"], vanilla_core, Path(work) if work else dest.parent)
+        carrier_info["modPlugin"] = plugin["class"]
+    jars = sorted(path.relative_to(dest).as_posix() for path in dest.rglob("*.jar"))
+    if jars:
+        carrier_info["jars"] = jars
+    atomic_write_text((dest / "mod_info.json"), json.dumps(carrier_info, indent=2) + "\n", newline="")
+    return plugin
+
+
+def registered_classes(gene: dict) -> list[str]:
+    """The classes the gene's registrations name: a combat plugin's class, or a star system's generator (`statement` is
+    `<class>: <methods called>`)."""
+    return sorted({element["statement"].split(":", 1)[0].strip() for element in gene["registrations"]})
+
+
+def boot_note(kind: str, gene: dict) -> str:
+    """What the boot half of one proof needs, said honestly before the rig runs it."""
+    if kind == "subtraction-proof" and gene["kind"] == "star-system":
+        return ("NOT_RUN: the donor's plugin still calls the removed generator (the recorded registrations); booting the "
+                "donor without the gene needs that call cut (94.G2 slice 8)")
+    genes = gene["needs"].get("genes") or []
+    if kind == "isolation-proof" and genes:
+        return (f"NOT_RUN: the carrier needs {', '.join(genes)}, a gene not closable yet; it cannot take the donor instead "
+                "(the donor would generate the gene a second time)")
+    return "NOT_RUN: needs the test rig; written by the live run when it happens"
 
 
 def _references(result) -> dict[tuple[str, str], set[str]]:
@@ -267,9 +307,20 @@ _SUMMARY_LINE = re.compile(r"^(?:[\w -]+:\s*\d+|.*\(\d+ ids?\)|common prefix: .*
 
 
 def classify_subtraction(before, after, gene: dict, used_by: list[dict]) -> dict:
-    dependents, leaks, unexplained, summaries = [], [], [], []
+    """PASS when every new reference is a dependent, a summary or, for a star system, its registration: the donor's plugin
+    calling the removed generator (the gene records that call site; slice 8 cuts it)."""
+    dependents, leaks, unexplained, summaries, registrations = [], [], [], [], []
     others = _gene_names(gene)
+    system = gene.get("kind") == "star-system"  # a partial gene (no kind) is not a star system
+    qualified = {form for cls in registered_classes(gene) for form in (cls, cls.replace(".", "/"))} if system else set()
+    simple = {cls.rsplit(".", 1)[-1] for cls in registered_classes(gene)} if system else set()
     for key, line in _new_references(before, after):
+        # A simple name ("Via") may be any word of a line, so it counts only in an import or class finding (review
+        # 2026-11-20: a faction or row named like the generator was filed as the registration, a false PASS).
+        names = qualified | (simple if re.search(r"import|class", key[0]) else set())
+        if any(_id_named(line, name) for name in names):
+            registrations.append({"finding": key[0], "file": key[1], "reference": line})
+            continue
         if _SUMMARY_LINE.match(line.strip()) and not any(_id_named(line, p.split(":", 1)[1]) for p in gene["provides"]):
             summaries.append({"finding": key[0], "file": key[1], "line": line})
             continue
@@ -282,13 +333,15 @@ def classify_subtraction(before, after, gene: dict, used_by: list[dict]) -> dict
         else:
             unexplained.append({"finding": key[0], "file": key[1], "reference": line})
     dependents = [dict(t) for t in sorted({tuple(sorted(d.items())) for d in dependents})]
+    sites = [{"locus": e["locus"], "statement": e["statement"], "status": "left in the donor, calling the removed generator"}
+             for e in gene["registrations"]] if system else []
     return {"verdict": "FAIL" if leaks or unexplained else "PASS", "dependents": dependents, "leaks": leaks, "unexplained": unexplained,
-            "summaries": summaries}
+            "summaries": summaries, "registrations": registrations, "registration_sites": sites}
 
 
 def classify_isolation(donor, carrier, gene: dict) -> dict:
     donor_keys = set(_references(donor))
-    allowed = set(gene["provides"]) | set(gene["needs"]["vanilla"])
+    allowed = set(gene["provides"]) | set(gene["needs"]["vanilla"]) | set(gene["needs"].get("genes") or [])
     inherited, carrier_own, failures = [], [], []
     for (finding, file), lines in sorted(_references(carrier).items()):
         if file in CARRIER_FILES:
@@ -313,32 +366,34 @@ def prove(mod: Path, anchor: str, out: Path, *, vanilla_core: Path | None = None
     vanilla_core = Path(vanilla_core) if vanilla_core is not None else None
     if out.exists() and any(out.iterdir()):
         raise ProofError(f"{out} is not empty: proofs go into a fresh folder")
-    if anchor.startswith("star-system:"):
-        raise ProofError("the proofs of a star-system gene need its registration cut from the plugin and a carrier plugin "
-                         "that calls the generator: 94.G2 slice 7; `gene describe` closes it now")
     gene = describe(mod, anchor, vanilla_core=vanilla_core)
     # Who in the donor uses the gene: vendor-plan from the gene's content ids and the classes it registers (a combat
     # plugin's anchor is not a vendor-plan id).
     from bridgeforge.vendor_plan import KINDS
 
     plan = vendor_plan(mod, [p for p in gene["provides"] if p.split(":", 1)[0] in KINDS], vanilla_core=vanilla_core,
-                       classes=[element["statement"] for element in gene["registrations"]])
+                       classes=registered_classes(gene))
     root = Path(plan["provider"])
     work = out / "work"
     notes = subtract(root, gene, work / "subtraction")
-    build_carrier(root, gene, work / "carrier")
+    try:
+        plugin = build_carrier(root, gene, work / "carrier", vanilla_core=vanilla_core, work=work)
+    except CarrierPluginRefused as refused:
+        raise ProofError(f"the carrier cannot make the gene's registered call: {refused}") from refused
     donor_scan = scan_mod(root, TargetProfile(), vanilla_core)
     subtraction = classify_subtraction(donor_scan, scan_mod(work / "subtraction", TargetProfile(), vanilla_core), gene, plan["used_by"])
     isolation = classify_isolation(donor_scan, scan_mod(work / "carrier", TargetProfile(), vanilla_core), gene)
     inputs = [("member", path) for path in sorted({member_file(m["path"]) for m in gene["members"]})]
     atomic_write_text(out / "gene.json", dumps(gene), newline="")
     written = {}
-    for kind, body, extra in (("subtraction-proof", subtraction, {"rewritten": notes}), ("isolation-proof", isolation, {})):
+    halves = (("subtraction-proof", subtraction, {"rewritten": notes}),
+              ("isolation-proof", isolation, {"carrier_plugin": plugin} if plugin else {}))
+    for kind, body, extra in halves:
         made = {**header(kind, gene, root=root, inputs=inputs, verdict=body["verdict"]), "half": "static", **body, **extra,
-                "boot": "NOT_RUN: needs the test rig; written by the live run when it happens"}
+                "boot": boot_note(kind, gene)}
         atomic_write_text(out / f"{kind}.json", json.dumps(made, indent=2, ensure_ascii=False) + "\n", newline="")
         written[kind] = body["verdict"]
     return {"gene": gene["identity"], "root": str(root), "verdicts": written, "out": str(out)}
 
 
-__all__ = ["ProofError", "build_carrier", "classify_isolation", "classify_subtraction", "cut_csv_row", "cut_json_key", "pointer_tokens", "prove", "subtract"]
+__all__ = ["ProofError", "boot_note", "build_carrier", "registered_classes", "classify_isolation", "classify_subtraction", "cut_csv_row", "cut_json_key", "pointer_tokens", "prove", "subtract"]

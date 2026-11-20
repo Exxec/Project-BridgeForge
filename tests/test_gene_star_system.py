@@ -1,6 +1,7 @@
 """94.G2 P3: star-system genes (Eridani's Pantheon is the pilot) and the campaign ids a gene's code names."""
 from __future__ import annotations
 
+import hashlib
 import json
 import shutil
 import subprocess
@@ -15,6 +16,9 @@ from bridgeforge.genome.proof import ProofError, prove
 from tests.support import resolved_temp_dir, write_text as _write
 
 API = {
+    "BaseModPlugin": "package com.fs.starfarer.api;\npublic class BaseModPlugin { public void onNewGame() { } }\n",
+    "Global": "package com.fs.starfarer.api;\npublic class Global { public static com.fs.starfarer.api.campaign.SectorAPI "
+              "getSector() { return null; } }\n",
     "SettingsAPI": "package com.fs.starfarer.api;\npublic interface SettingsAPI { String getString(String k); "
                    "String getString(String c, String i); float getFloat(String k); }\n",
     "campaign/StarSystemAPI": "package com.fs.starfarer.api.campaign;\npublic interface StarSystemAPI { }\n",
@@ -83,6 +87,13 @@ def _mod(root: Path) -> Path:
     return mod
 
 
+def _api_jar(root: Path, core: Path) -> None:
+    """The compiled stub API as the core's starfarer.api.jar (the carrier plugin compiles against it)."""
+    with zipfile.ZipFile(core / "starfarer.api.jar", "w") as jar:
+        for path in sorted((root / "classes" / "com").rglob("*.class")):
+            jar.write(path, path.relative_to(root / "classes").as_posix())
+
+
 def _core(root: Path) -> Path:
     core = root / "core"
     _write(core / "data" / "campaign" / "industries.csv", "id,name\nfarming,Farming\n")
@@ -102,6 +113,7 @@ class StarSystemGeneTests(unittest.TestCase):
         root = self._tmp.__enter__()
         self.addCleanup(self._tmp.__exit__, None, None, None)
         self.mod, self.core = _mod(root), _core(root)
+        _api_jar(root, self.core)
         self.gene = describe(self.mod, "star-system:Demo", vanilla_core=self.core)
 
     def test_the_gene_holds_its_generator_campaign_rows_and_graphics_but_not_the_plugin(self) -> None:
@@ -181,9 +193,121 @@ class StarSystemGeneTests(unittest.TestCase):
         self.assertIn("industry:demo_industry", found["provides"])
         self.assertEqual([s["mentions"] for s in found["suspects"]], [["condition", "industry"]])
 
-    def test_prove_refuses_until_slice_7(self) -> None:
-        with resolved_temp_dir() as out, self.assertRaisesRegex(ProofError, "slice 7"):
-            prove(self.mod, "star-system:Demo", out / "proof", vanilla_core=self.core)
+    def test_prove_passes_both_static_halves_with_a_generated_carrier_plugin(self) -> None:
+        with resolved_temp_dir() as out:
+            result = prove(self.mod, "star-system:Via", out / "proof", vanilla_core=self.core)
+            self.assertEqual(result["verdicts"], {"subtraction-proof": "PASS", "isolation-proof": "PASS"})
+            subtraction = json.loads((out / "proof" / "subtraction-proof.json").read_text(encoding="utf-8"))
+            self.assertEqual(subtraction["registration_sites"][0]["locus"], "demo.Helper.run")
+            self.assertIn("slice 8", subtraction["boot"])
+            isolation = json.loads((out / "proof" / "isolation-proof.json").read_text(encoding="utf-8"))
+            self.assertEqual(isolation["carrier_plugin"]["statement"], "new demo.Via().generate(Global.getSector())")
+            source = out / "proof" / "work" / "carrier-plugin" / "bfgene" / "CarrierPlugin.java"
+            self.assertEqual(hashlib.sha256(source.read_bytes()).hexdigest(), isolation["carrier_plugin"]["source_sha256"])
+            carrier = out / "proof" / "work" / "carrier"
+            info = json.loads((carrier / "mod_info.json").read_text(encoding="utf-8"))
+            self.assertEqual(info["modPlugin"], "bfgene.CarrierPlugin")
+            self.assertEqual(info["jars"], ["jars/bfgene_carrier.jar", "jars/demo.jar"])  # the game loads only listed jars
+            with zipfile.ZipFile(carrier / "jars" / "bfgene_carrier.jar") as jar:
+                self.assertEqual(jar.namelist(), ["bfgene/CarrierPlugin.class"])
+            with zipfile.ZipFile(out / "proof" / "work" / "subtraction" / "jars" / "demo.jar") as jar:
+                self.assertNotIn("demo/Via.class", jar.namelist())
+                self.assertIn("demo/Helper.class", jar.namelist())  # the call site stays in the donor
+
+    def test_a_generator_the_carrier_cannot_call_refuses_the_proof(self) -> None:
+        with resolved_temp_dir() as out, self.assertRaisesRegex(ProofError, "javac refused the carrier's plugin"):
+            prove(self.mod, "star-system:Demo", out / "proof", vanilla_core=self.core)  # Gen.generate takes three arguments
+
+
+class CarrierPluginTests(unittest.TestCase):
+    def test_unsafe_names_disagreeing_calls_and_unknown_hooks_are_refused(self) -> None:
+        from bridgeforge.genome.carrier_plugin import CarrierPluginRefused, call_of
+
+        good = {"locus": "a.Plugin.setUp", "statement": "a.Gen: <init>, generate", "hooks": ["onNewGame"]}
+        self.assertEqual(call_of([good]), ("a.Gen", "generate", "onNewGame"))
+        for bad in ({**good, "statement": "a.Gen(){};Runtime x: <init>, generate"},
+                    {**good, "statement": "a.Gen: <init>, generate()"}, {**good, "hooks": ["onApplicationLoad"]}):
+            with self.subTest(bad), self.assertRaises(CarrierPluginRefused):
+                call_of([bad])
+        with self.assertRaisesRegex(CarrierPluginRefused, "2 distinct"):
+            call_of([good, {**good, "statement": "a.Other: <init>, generate"}])
+
+    def test_the_hook_is_taken_in_lifecycle_order_not_by_name(self) -> None:
+        from bridgeforge.genome.carrier_plugin import call_of
+
+        # `hooks` is sorted by name; onGameLoad would have generated the system on every load.
+        shared = {"locus": "a.Helper.run", "statement": "a.Gen: <init>, generate", "hooks": ["onGameLoad", "onNewGame"]}
+        self.assertEqual(call_of([shared])[2], "onNewGame")
+        early = {**shared, "hooks": ["onApplicationLoad", "onNewGame"]}  # the first has no generated form, the second does
+        self.assertEqual(call_of([early])[2], "onNewGame")
+
+    def test_a_nested_or_default_package_generator_is_refused_by_name(self) -> None:
+        from bridgeforge.genome.carrier_plugin import CarrierPluginRefused, call_of
+
+        for generator in ("a.B$C", "Gen"):
+            with self.subTest(generator), self.assertRaisesRegex(CarrierPluginRefused, "nested class or in the default package"):
+                call_of([{"locus": "a.P.s", "statement": f"{generator}: <init>, generate", "hooks": ["onNewGame"]}])
+
+    def test_a_nested_rewrite_keeps_non_ascii_text(self) -> None:
+        from bridgeforge.genome.proof import subtract
+
+        with resolved_temp_dir() as root:
+            mod = root / "mod"
+            _write(mod / "data" / "config" / "settings.json", json.dumps(
+                {"designTypeColors": {"天苑四设计": [1, 2, 3, 255]}, "graphics": {"intel": {"x": "a.png", "y": "b.png"}}},
+                ensure_ascii=False))
+            gene = {"members": [{"what": "json-entry", "path": "data/config/settings.json#/graphics/intel/x"}]}
+            subtract(mod, gene, root / "copy")
+            text = (root / "copy" / "data" / "config" / "settings.json").read_text(encoding="utf-8")
+            self.assertIn("天苑四设计", text)
+            self.assertNotIn('"x"', text)
+
+    def test_boot_notes_say_what_each_boot_half_needs(self) -> None:
+        from bridgeforge.genome.proof import boot_note
+
+        system = {"kind": "star-system", "needs": {"vanilla": [], "mods": [], "genes": ["faction:f"]}}
+        self.assertIn("slice 8", boot_note("subtraction-proof", system))
+        self.assertIn("faction:f", boot_note("isolation-proof", system))
+        hullmod = {"kind": "hullmod", "needs": {"vanilla": [], "mods": []}}
+        self.assertIn("needs the test rig", boot_note("subtraction-proof", hullmod))
+
+
+def _scan(*findings):
+    from types import SimpleNamespace
+
+    return SimpleNamespace(findings=[SimpleNamespace(id=i, file=f, evidence=list(e), explanation="") for i, f, e in findings])
+
+
+_SYSTEM = {"kind": "star-system", "provides": ["star-system:Demo"], "members": [
+    {"what": "jar-class", "path": "jars/demo.jar!demo/Gen.class"}],
+    "needs": {"vanilla": [], "mods": [], "genes": ["faction:demo_faction"]},
+    "registrations": [{"locus": "demo.Plugin.setUp", "statement": "demo.Gen: <init>, generate", "hooks": ["onNewGame"]}]}
+
+
+class ClassifierTests(unittest.TestCase):
+    def test_the_plugin_calling_the_removed_generator_is_the_registration_not_a_leak(self) -> None:
+        from bridgeforge.genome.proof import classify_subtraction
+
+        after = _scan(("source-import-unresolved", "", ["demo.Gen"]))
+        result = classify_subtraction(_scan(), after, _SYSTEM, [])
+        self.assertEqual((result["verdict"], result["leaks"]), ("PASS", []))
+        self.assertEqual(result["registrations"], [{"finding": "source-import-unresolved", "file": "", "reference": "demo.Gen"}])
+        self.assertEqual(result["registration_sites"][0]["locus"], "demo.Plugin.setUp")
+        # The simple name elsewhere is not the registration (a faction named like the generator): a false PASS before.
+        named_alike = _scan(("content-reference-unresolved", "data/world/factions/x.faction", ["faction:Gen"]))
+        self.assertEqual(classify_subtraction(_scan(), named_alike, _SYSTEM, [])["verdict"], "FAIL")
+        simple_import = _scan(("source-import-unresolved", "", ["Gen"]))
+        self.assertEqual(classify_subtraction(_scan(), simple_import, _SYSTEM, [])["verdict"], "PASS")
+        hullmod = {**_SYSTEM, "kind": "hullmod", "provides": ["hullmod:x"], "registrations": []}
+        self.assertEqual(classify_subtraction(_scan(), after, hullmod, [])["verdict"], "FAIL")  # only a star system's call
+
+    def test_a_gene_need_may_stay_unresolved_in_the_carrier(self) -> None:
+        from bridgeforge.genome.proof import classify_isolation
+
+        carrier = _scan(("content-reference-unresolved", "data/campaign/industries.csv", ["faction:demo_faction"]))
+        self.assertEqual(classify_isolation(_scan(), carrier, _SYSTEM)["verdict"], "PASS")
+        other = _scan(("content-reference-unresolved", "data/campaign/industries.csv", ["faction:somebody_else"]))
+        self.assertEqual(classify_isolation(_scan(), other, _SYSTEM)["verdict"], "FAIL")
 
 
 class ParameterSlotTests(unittest.TestCase):

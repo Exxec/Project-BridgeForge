@@ -1,0 +1,1 @@
+- `gene prove` proves star-system genes: the plugin's call into the removed generator is the recorded registration, and the carrier gets a generated plugin making that call; every carrier's mod_info lists its jars, and proof rewrites keep non-ASCII text (ROADMAP-3 94.G2 slice 7).
