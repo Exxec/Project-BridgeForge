@@ -18,6 +18,10 @@ while [ $# -gt 0 ]; do
     shift
 done
 POLL=30; waited=0; head=""
+# gh prints a multi-line "hint: ... gh event listen" on stderr at every call (seen 2026-11-20, PR #194: ten copies). Keep
+# stderr out of the log and show it only when a call fails.
+errors="$(mktemp)"; trap 'rm -f "$errors"' EXIT
+gh() { command gh "$@" 2>"$errors" || { cat "$errors" >&2; return 1; }; }
 sleep 15  # checks register a few seconds after a push; an empty list must not read as "settled"
 while [ "$waited" -lt "$TIMEOUT" ]; do
     now="$(gh pr view "$PR" --json headRefOid,mergeStateStatus,state -q '.headRefOid + " " + .mergeStateStatus + " " + .state')"
