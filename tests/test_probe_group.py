@@ -997,3 +997,24 @@ class RegressionNoiseTests(unittest.TestCase):
         other = [{"level": "ERROR", "message": "NullPointerException in something", "suspect": None}]
         with mock.patch("bridgeforge.log_triage.triage_log", return_value={"fatal": [], "mod_errors": other, "counts": counts}):
             self.assertEqual(self._report("", ["mod_a"])["members"]["mod_a"]["verdict"], "UNCLEAR")
+
+
+class ReloadNextStepTests(unittest.TestCase):
+    """93.63: after a save-reload run the hint named `run-manifest evaluate`, which does not exist (SA-SR3-20261119)."""
+
+    def test_the_hint_names_a_command_the_parser_accepts(self) -> None:
+        import shlex
+
+        from bridgeforge.cli import build_parser
+        from bridgeforge.probe.cmd_probe_group import reload_next_step
+        line = reload_next_step(Path("rig"), "SA-SR3", {"equal": True, "diff_sections": []})
+        command = line.split("bridgeforge ", 1)[1].split(" (", 1)[0]
+        args = build_parser().parse_args(shlex.split(command))
+        self.assertEqual((args.run_manifest_command, args.run_id, args.json), ("check", "SA-SR3-reload", True))
+        self.assertNotIn("RC8-41", line)
+
+    def test_a_lone_systems_diff_points_at_rc8_41(self) -> None:
+        from bridgeforge.probe.cmd_probe_group import reload_next_step
+        self.assertIn("RC8-41", reload_next_step(Path("rig"), "T", {"equal": False, "diff_sections": ["systems"]}))
+        self.assertNotIn("RC8-41", reload_next_step(Path("rig"), "T", {"equal": False, "diff_sections": ["systems", "markets"]}))
+        self.assertNotIn("RC8-41", reload_next_step(Path("rig"), "T", None))

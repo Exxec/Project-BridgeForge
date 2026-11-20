@@ -153,7 +153,7 @@ of an arbitrary market or fleet.
 Harness: `probe-group live <ID> --save-reload` plays the normal live run (the drive also waits for the `fingerprint|save` line), then starts the
 game a second time under manifest `<ID>-reload`, clicks Continue (RC8-29) and waits for the compare line (`bridgeforge/save_reload_run.py`).
 Manual fallback if the click path fails: start the rig game yourself, press Continue (or Load Game and pick the newest save), then run
-`run-manifest evaluate` on that log; `milestones.reload_after_save` is read from the log, never set by hand. The campaign is paused after a
+`run-manifest check` on that log; `milestones.reload_after_save` is read from the log, never set by hand. The campaign is paused after a
 load (RC8-28), which does not matter here: the compare runs in `onGameLoad`, before any tick.
 
 ## Salvor profile (ROADMAP-3 item 78.5, not yet bumped)

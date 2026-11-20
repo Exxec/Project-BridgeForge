@@ -1,0 +1,1 @@
+- After a save-reload run, `probe-group live` names `run-manifest check` (it named a nonexistent `run-manifest evaluate`) and points a lone `systems` fingerprint diff at RC8-41 (ROADMAP-3 93.63).

@@ -160,7 +160,7 @@ def _observation_failures(stage: dict, spec: dict, repeat: dict | None) -> list[
 
 
 def fingerprint_judgement(spec: dict, evidence: object, run_id: object) -> dict:
-    """Judge probe save-reload fingerprint records (`evidence["fingerprint_records"]`, each a `run-manifest evaluate` result of a reload
+    """Judge probe save-reload fingerprint records (`evidence["fingerprint_records"]`, each a `run-manifest check` result of a reload
     run, optionally with `shipped_hash`) for the `reload_saved` stage. A record COUNTS only when it is observed and bound: status
     ACCEPTABLE, the run id the evaluation is bound to, `milestones.reload_after_save` true (the compare line was seen) and a
     `shipped_hash` equal to the new candidate's. A counted record whose fingerprint is not equal is a FAILURE; a counted equal one is
@@ -263,7 +263,7 @@ def add_parser(subcommands) -> None:
     evaluate.add_argument("--run-id", help="run identity id (from the R1 run manifest once available)")
     evaluate.add_argument("--run-hash", help="the shipped hash that run identity records")
     evaluate.add_argument("--fingerprint-record", type=Path, action="append", default=[], metavar="JSON",
-                          help="a `run-manifest evaluate` result of a save-reload run (milestones.reload_after_save, fingerprint block) plus the shipped_hash it ran; repeatable")
+                          help="a `run-manifest check` result of a save-reload run (milestones.reload_after_save, fingerprint block) plus the shipped_hash it ran; repeatable")
     evaluate.add_argument("--out", type=Path, help="also write the verdict JSON here")
     evaluate.add_argument("--json", action="store_true")
 
