@@ -48,6 +48,14 @@ def add_parser(subcommands) -> None:
     prove_cmd.add_argument("--provider-root", type=Path, action="append", default=[],
                            help="a mods/ folder holding the libraries the donor's sources import, for cutting a star system's "
                                 "registration from its plugin (repeatable)")
+    set_cmd = gene_sub.add_parser("prove-set", help="one carrier for a gene and every gene its needs name, in turn, with its static "
+                                                    "isolation proof (94.G2 slice 11); one progress line per gene, resumable")
+    set_cmd.add_argument("mod", type=Path, help="mod folder or workspace (working/ is used)")
+    set_cmd.add_argument("anchor", help=f"kind:id, kind one of {', '.join(CLOSABLE_KINDS)}")
+    set_cmd.add_argument("--out", type=Path, required=True, help="a new or empty folder outside the repository (it holds copies of the "
+                                                                "mod); a checkpoint sits beside it while running")
+    set_cmd.add_argument("--vanilla-core", type=Path, required=True, help="starsector-core, for vanilla needs and the scans")
+    set_cmd.add_argument("--quiet", action="store_true", help="no per-gene progress lines on stderr")
     evidence_cmd = gene_sub.add_parser("evidence", help="evidence files about a gene (WP5): check that one carries the common header and is "
                                                         "about this gene as it stands")
     evidence_sub = evidence_cmd.add_subparsers(dest="evidence_command", required=True)
@@ -105,11 +113,28 @@ def _run_prove(args: argparse.Namespace) -> int:
     return 0 if all(v == "PASS" for v in result["verdicts"].values()) else 1
 
 
+def _run_prove_set(args: argparse.Namespace) -> int:
+    from .gene_set import prove_set
+    from .proof import ProofError
+
+    try:
+        result = prove_set(args.mod, args.anchor, args.out, vanilla_core=args.vanilla_core, quiet=args.quiet)
+    except (ProofError, GeneError, VendorPlanError, OSError) as exc:
+        print(f"bridgeforge: {exc}", file=sys.stderr)
+        return 2
+    print(f"set-isolation-proof: {result['verdict']} (static half; boot half NOT_RUN): {result['carried']} gene(s) carried, "
+          f"{result['refused']} refused, {result['failures']} unresolved reference(s)")
+    print(f"gene {result['gene'][:16]}; evidence in {result['out']}")
+    return 0 if result["verdict"] == "PASS" else 1
+
+
 def run_cli(args: argparse.Namespace) -> int:
     if args.command != "gene":
         return 2
     if args.gene_command == "prove":
         return _run_prove(args)
+    if args.gene_command == "prove-set":
+        return _run_prove_set(args)
     if args.gene_command == "census":
         return _run_census(args)
     if args.gene_command == "evidence":

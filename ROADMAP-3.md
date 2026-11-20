@@ -1865,6 +1865,59 @@ history as the closure benchmark, a cross-repository trace check, an early Java 
     An independent review found two defects, both fixed: role wings typed as variants, and misshapen read keys dropped
     silently. It also raised `custom` holding ids and suspects naming nothing, both changed. Mutation-checked: 19 mutants,
     all killed.
+  **Slice 11 Done 2026-11-20: a gene set's carrier and its static isolation proof (`gene prove-set`, `genome/gene_set.py`).**
+  P3's system needs the faction and the faction needs 54 genes, so P3's boot needs one carrier for the whole closure (advisor
+  2026-11-20; static half only, faction `prove` stays refused).
+  - **Walk:** from the anchor, every `needs.genes` gene is described once, breadth first. A need `describe` refuses is
+    kept and FAILs the set. There is one progress line per gene and a checkpoint beside `--out`; `gene prove-set` is in
+    `progress.LONG_RUNNING_COMMANDS`.
+  - **Carrier:** built by `proof.build_carrier` from the merged members:
+    - a path several genes hold is written once, and one path with two contents is refused, never last-wins;
+    - its id comes from the sorted identities of the carried genes;
+    - it makes only a star system's registration (one star system per set). Every other recorded registration is listed
+      as not made;
+    - `cut_csv_row` takes the table's key column (`gene.TABLE_KEYS`), so the faction's `factions.csv` row is carried. The
+      subtraction copy still cuts by `id`, since faction `prove` is refused.
+  - **Isolation:** unresolved references may name only the set's `provides` and its vanilla needs; the single gene's
+    `needs.genes` allowance is dropped.
+  - **Evidence:** one file, `set-isolation-proof.json`, under the anchor's header. The header allows added fields, so
+    `carried` lists anchors and identities, and every carried member file is an input; the contract is unchanged. Each
+    carried manifest is kept under `closure/`. Suspects are bucketed by file. `not_carried` lists the ids they mention
+    that the set does not provide and no carried gene lists as a vanilla need. Mentions are untyped, so a core id no gene
+    lists still appears.
+  - **P3** (`In operation/Eridani-Combine/genes/p3-set-20261120/`, about 13 minutes): **PASS**.
+    - 56 genes carried, none refused, no unresolved reference;
+    - carrier `gene_carrier_b9e6470362d7`: 321 members, 184 input files, Eridani's jar (26 classes) plus the generated
+      plugin; it depends on BoxUtil, MagicLib and LazyLib;
+    - not made: the faction's `getFaction` and `addParticipatingFaction` in `ECEModPlugin.generate`;
+    - `not_carried`: 32 ids, all named by the faction file (its `music_ECE_*` tracks, voices, name sets, commander skills,
+      tags).
+  - **The 13 hull mods are one unit.** Each Eridani hull mod gene holds the same 43 members: every hull mod's row, sprite
+    and class, because they all extend `ECE_BaseHullmod`, which imports `ECE_IDs`, a constants class naming all 13 ids.
+    Every hull holds those 43 too. So the 56 genes are fewer separable pieces: taking one Eridani hull or hull mod takes
+    all 13 hull mods. Telling "names an id as a constant" from "needs that content" is a later closure refinement.
+  - **Regression:** P1's and P2's carriers are unchanged, file for file (P2's jar entries are identical; only `writestr`'s
+    zip dates differ, as before).
+  - Tests: `tests/test_gene_set.py`:
+    - merging and conflicts, the set identity, registrations not made, suspect buckets, the faction row cut;
+    - the walk, with a cycle, a refusal, progress lines and a resumed checkpoint;
+    - a fixture faction carried with its weapon and hull mod, whose proof passes `evidence check`;
+    - a refused need FAILing the set;
+    - two star systems, a member conflict, a used folder, no core and a refused anchor, each refused.
+
+    An independent review found no defect in the carrier or the header. Five points were fixed with tests:
+    - **The anchor-first test could not fail:** the anchor already sorted first. `carried_order` is now tested with an
+      anchor that sorts last.
+    - **Several genes writing one table, one settings file and one jar was untested.** It now is: rows in order,
+      entries merged, a shared class written once.
+    - **A checkpoint resumed after the mod changed would replay old manifests.** Its header now carries a fingerprint
+      (paths, sizes, times) of `working/` and of the core. It covers `working/` only, because P3's checkpoint sits in the
+      workspace beside it.
+    - **A file one gene holds whole and another in part** (a row, a JSON entry, a class) is now a conflict. P3's 56
+      genes merge with none.
+    - **The `not_carried` wording now says what is checked.**
+
+    Mutation-checked: 17 mutants, all killed (the anchor refusal and the workspace fingerprint each needed a new test).
 - 94.G3 **Gene bank**: content-addressed store, alleles across the corpus, lineage, licence state; RevenantLib distributes genes
   from vanished authors (GD-3). The store's payloads live under `data_root()`, like `Done/`, never in this public
   repository; only manifests of the owner's own or permitted content become committed fixtures (2026-11-19).
