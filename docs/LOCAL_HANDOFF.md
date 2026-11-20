@@ -211,10 +211,12 @@ Built and unit-tested offline; nothing below has been run. Order matters: R1 fir
     [BF r1] 1.0.e+bf.1 and (c) RevenantLib 1.2.0+bf.1 were archived before any live run. BF-Legacy-Fleets has no original/ by
     design (BridgeForge's own mod). No LIVE_VALIDATED workspace lacks an archive; no prepared revision is unfinished. Gates
     bf-strag-*.
-    **(a) done 2026-11-19:** Station Augments 2.4.3+bf.1, the 96.2 port, ran SA-SR3-20261119 on Test1's 0.98.5a rig (`--save-reload
-    --direct`): LIVE_DONE, report PASS, FATAL 0; the reload LIVE_DONE with `reload_after_save` true. Its fingerprint differed only in
-    `systems` (galatia 285 to 243 entities), the RC8-41 shape that all 20 save-reload compares on Test1 show. Recorded and
-    archived with `--refresh`; gate bf-strag-station-augments PASS.
+    **(a) done 2026-11-19:** Station Augments 2.4.3+bf.2 (the 96.2 port; its workspace folder is still named
+    `Station.Augments-2.4.3+bf.1`) ran SA-SR3-20261119 on Test1's 0.98.5a rig (`--save-reload --direct`, Fast Rendering; the
+    install omitted `--also-enable starsector_prepatcher`, so Prepatcher was not an enabled mod): LIVE_DONE, report PASS, FATAL 0;
+    the reload LIVE_DONE with `reload_after_save` true. Its fingerprint differed only in `systems` (galatia 285 to 243
+    entities), the RC8-41 shape that all 20 save-reload compares on Test1 show. Recorded and archived with `--refresh`; gate
+    bf-strag-station-augments PASS.
 
 Rewritten 2026-09-27 after the local and cloud histories merged. Closed and removed: the MOVES.log
 shadowing audit (P14 item 27, done locally in `0183ab3`) and the Maelstrom dependency-jar check
