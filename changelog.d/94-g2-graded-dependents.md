@@ -1,0 +1,1 @@
+- `gene prove` lists every file that still names what a gene provides as a dependent, graded `reference` or `mention`, with an evidenced load condition (always, on mission start, with a provider mod, unknown); a finding's sibling lines are context, not unexplained references (ROADMAP-3 94.G2 slice 9).

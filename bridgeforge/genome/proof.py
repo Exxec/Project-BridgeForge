@@ -308,6 +308,7 @@ def _gene_names(gene: dict) -> list[str]:
 
 # A scanner's own totals inside a finding's evidence ("differ:0", "source-only:9", "common prefix: x_ (3 ids)"): counts, not
 # references to anything (P2, 2026-11-19). Set aside as summaries when they name nothing of the gene.
+_PROSE = re.compile(r"^[A-Za-z][A-Za-z ,']*$")  # a qualifier in words: no id, path, number or punctuation an id carries
 _SUMMARY_LINE = re.compile(r"^(?:[\w -]+:\s*\d+|.*\(\d+ ids?\)|common prefix: .*)$")
 
 
@@ -315,6 +316,7 @@ def classify_subtraction(before, after, gene: dict, used_by: list[dict]) -> dict
     """PASS when every new reference is a dependent, a summary or, for a star system, its registration: the donor's plugin
     calling the removed generator (the gene records that call site; slice 8 cuts it)."""
     dependents, leaks, unexplained, summaries, registrations = [], [], [], [], []
+    dependent_keys: set[tuple[str, str]] = set()
     others = _gene_names(gene)
     system = gene.get("kind") == "star-system"  # a partial gene (no kind) is not a star system
     qualified = {form for cls in registered_classes(gene) for form in (cls, cls.replace(".", "/"))} if system else set()
@@ -333,15 +335,27 @@ def classify_subtraction(before, after, gene: dict, used_by: list[dict]) -> dict
         if provided:
             sources = sorted(u["path"] for u in used_by if any(p.split(":", 1)[1] in u["mentions"] for p in provided))
             dependents += [{"from": source, "to": p} for p in provided for source in (sources or ["(not located)"])]
+            dependent_keys.add(key)
         elif any(_id_named(line, name) for name in others):
             leaks.append({"finding": key[0], "file": key[1], "reference": line})
         else:
             unexplained.append({"finding": key[0], "file": key[1], "reference": line})
+    # One finding's lines are judged together: when a line names what the gene provides, the finding's location line
+    # ("mission:data/missions/testbed/MissionDefinition.java") and its plain-prose qualifiers ("no mod under the provider roots
+    # defines it") are context, not references (slice 9: the testbed mission's finding failed the whole-lobster proof on them).
+    # Anything id-like stays unexplained: a broad finding naming one provided id must not absolve its other lines (review).
+    def is_context(item: dict) -> bool:
+        line = item["reference"].strip()
+        located = bool(item["file"]) and line.endswith(item["file"])
+        return (item["finding"], item["file"]) in dependent_keys and (located or _PROSE.match(line) is not None)
+
+    context = [u for u in unexplained if is_context(u)]
+    unexplained = [u for u in unexplained if not is_context(u)]
     dependents = [dict(t) for t in sorted({tuple(sorted(d.items())) for d in dependents})]
     sites = [{"locus": e["locus"], "statement": e["statement"], "status": "left in the donor, calling the removed generator"}
              for e in gene["registrations"]] if system else []
     return {"verdict": "FAIL" if leaks or unexplained else "PASS", "dependents": dependents, "leaks": leaks, "unexplained": unexplained,
-            "summaries": summaries, "registrations": registrations, "registration_sites": sites}
+            "summaries": summaries, "registrations": registrations, "registration_sites": sites, "context": context}
 
 
 def classify_isolation(donor, carrier, gene: dict) -> dict:
@@ -394,6 +408,9 @@ def prove(mod: Path, anchor: str, out: Path, *, vanilla_core: Path | None = None
         raise ProofError(f"the carrier cannot make the gene's registered call: {refused}") from refused
     donor_scan = scan_mod(root, TargetProfile(), vanilla_core)
     subtraction = classify_subtraction(donor_scan, scan_mod(work / "subtraction", TargetProfile(), vanilla_core), gene, plan["used_by"])
+    from bridgeforge.genome.dependents import graded
+
+    subtraction["dependents"] = graded(gene, subtraction["dependents"], vanilla_core, [Path(p) for p in provider_roots or []], root)
     if cut and cut.get("cut"):
         for site in subtraction["registration_sites"]:
             site["status"] = "cut from the copy's build source and class (registration_cut)"

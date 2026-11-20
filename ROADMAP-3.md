@@ -1718,6 +1718,63 @@ history as the closure benchmark, a cross-repository trace check, an early Java 
     `_rig-0985a/fast_rendering/fr.jar` as its Java agent and classpath entry. So `_rig-genes` and R8's `_rig-r8` loaded
     Fast Rendering from the primary rig. The earlier relocatability check looked only for backslash paths and missed it,
     and R8's "primary untouched" reading did not cover that folder. A rig builder must rewrite it (candidate).
+  **Slice 9 Done 2026-11-20: the subtraction proof lists every file that still names the gene, graded, with a load condition.**
+  - **Measured first:** for `variant:sa_lobster_royal`, vendor-plan already listed all five files LOBSTER-SUB-20261120 hit as
+    the gene's suspects ("mentions a closure id but nothing in the closure references this file"). The proof never used
+    them, so the gap was in `prove`, not in finding the files.
+  - **`genome/dependents.py`** turns those suspects, and the dependents the scanner located, into dependents with a `grade`
+    (`reference` when the file's loader is evidenced, else `mention`) and a `loaded` condition from evidence only:
+    - `always`: the core has the same path (`default_ship_roles.json`, `title_screen_variants.csv`), or the file is a spec in
+      a folder the game scans. These are vendor-plan's spec folders: `.wpn` and `.proj` under `data/weapons`, `.ship` and
+      `.skin` under `data/hulls`, `.variant` under `data/variants`, `.system` under `data/shipsystems`. So Tania's
+      `data/variants/with_script_trigger_hullmods/` counts, and a mod's own `data/config/x.json` does not;
+    - `on mission start`: `data/missions/<name>/MissionDefinition.java`;
+    - `with <mod id>`: a provider jar (under `--provider-root`) names the path exactly, as a concatenation template, or as
+      a specific folder. MagicLib's `MagicBountyLoader` has `data/config/modFiles/magicBounty_data.json`; Nexerelin's
+      `NexFactionConfig` has `data/config/exerelinFactionConfig/\x01.json` (measured on MagicLib 1.6.1 and Nexerelin
+      0.12.2d). A bare folder literal (AshLib's `data/`, MagicLib's `data/config/`) names nothing; a folder needs three
+      segments and names only its direct files. A template needs a fixed folder and a fixed part of the name: a bare
+      `"data/config/" + name` would name every config file;
+    - `unknown` otherwise.
+
+    A file is read again and a provided id counts only as a whole token: vendor-plan's mentions are substrings, so
+    `sa_lobster` was found inside `sa_lobster_royal`. A `(not located)` dependent goes only when a `reference` was found for
+    the same id; a mere mention does not explain it.
+    `loaded` is what a boot half needs: a dependent explains a Fatal only when its condition held in that run.
+  - **One finding's lines are judged together.** When a line names what the gene provides, two kinds of sibling line in the
+    same finding become `context`: its location line (ending with the finding's file) and its plain-prose qualifiers ("no mod
+    under the provider roots defines it"). The testbed mission's finding had failed the royal proof on exactly those.
+    Anything id-like stays unexplained.
+  - **The royal variant now lists exactly the five files**, each with its condition: `default_ship_roles.json` and
+    `title_screen_variants.csv` always, `magicBounty_data.json` with MagicLib, `exerelinFactionConfig/sindrian_diktat.json`
+    with nexerelin, and the testbed mission on mission start. Its subtraction still fails on one unexplained line,
+    `Sindrian Diktat`, the designTypeColors key left unused once its only hull is gone. Whether a manufacturer's colour key
+    is a gene member is left as a separate decision.
+  - **P1, P2 and P3 re-proved:** same identities, both halves PASS.
+    - P1's dependent `sa_lobster.ship` is `reference always`.
+    - P2 lists its two variants as `reference always` (a scanned spec folder), plus two build sources under `src/` as
+      `mention unknown`.
+    - P3 has no dependents.
+  - Also: 93.65's review nits. A folder name holding `]` is read whole, and the same load error logged twice is one entry.
+  - **Candidate, not built:** the shared scanner could report a ship-role list naming a missing variant (Fatal at load,
+    LOBSTER-SUB-20261120). Changing it would shift findings across the whole corpus, so it waits for its own item.
+  - Tests: `tests/test_gene_dependents.py`:
+    - literals, templates and specific folders match, and bare folders do not;
+    - conditions from the core, nesting, missions and a compiled provider jar's literal;
+    - whole-token mentions and dropping `(not located)`;
+    - a finding's sibling lines are context.
+
+    `tests/test_probe_group.py` covers the two nits.
+
+    An independent review (one agent, the diff only) found five defects, all fixed with tests:
+    - a core folder holding `settings.json` made a mod's own `data/config/x.json` `always`; now only spec folders or the
+      exact path count;
+    - the folder search was recursive;
+    - a template leaving the whole file name variable matched every file of its folder;
+    - a broad finding naming one provided id absolved its id-like sibling lines, a false PASS;
+    - a mere mention hid a `(not located)` reference.
+
+    Mutation-checked: 12 mutants, all killed.
 - 94.G3 **Gene bank**: content-addressed store, alleles across the corpus, lineage, licence state; RevenantLib distributes genes
   from vanished authors (GD-3). The store's payloads live under `data_root()`, like `Done/`, never in this public
   repository; only manifests of the owner's own or permitted content become committed fixtures (2026-11-19).
