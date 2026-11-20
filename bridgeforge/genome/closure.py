@@ -108,6 +108,40 @@ def _core_commodities(vanilla_core: Path | None) -> tuple[dict[str, str], set[st
     return constants, set(_rows(Path(vanilla_core), "data/campaign/commodities.csv"))
 
 
+_STRING_LITERAL = re.compile(r'"((?:[^"\\\n]|\\.)*)"')
+
+
+def code_literals(root: Path, members: list[dict]) -> set[str]:
+    """The string literals of a gene's code members: loose scripts by text, jar classes by their constant pool."""
+    from bridgeforge.scan.scan_classfile import _parse_class_file
+    from bridgeforge.zipsafe import MAX_CLASS_BYTES, read_limited
+
+    literals: set[str] = set()
+    for member in members:
+        if member["what"] == "file" and member["path"].endswith(".java"):
+            literals |= set(_STRING_LITERAL.findall((Path(root) / member["path"]).read_text(encoding="utf-8-sig", errors="replace")))
+        elif member["what"] == "jar-class":
+            jar, _, entry = member["path"].partition("!")
+            try:
+                with zipfile.ZipFile(Path(root) / jar) as archive:
+                    info = _parse_class_file(read_limited(archive, entry, MAX_CLASS_BYTES))
+            except (OSError, KeyError, zipfile.BadZipFile, ValueError):
+                continue
+            literals |= set(info.string_constants) if info is not None else set()
+    return literals
+
+
+def ids_named_by_code(root: Path, members: list[dict], vanilla_core: Path | None) -> list[str]:
+    """`kind:id` for each string literal of the gene's code that is exactly an id the mod or the core defines (evidence only:
+    a plugin's `spawnShipOrWing("x_Var1", ...)` or `getHullMods().contains("x_spawner")`). Every kind that defines it is
+    named, so an id shared by a hull and a variant brings both."""
+    from bridgeforge.vendor_plan import KINDS, _Index
+
+    literals = code_literals(root, members)
+    indexes = [_Index(Path(root)), _Index(Path(vanilla_core).expanduser().resolve() if vanilla_core else None)]
+    return sorted({f"{kind}:{value}" for value in literals for kind in KINDS if any(index.defines(kind, value) for index in indexes)})
+
+
 def extend(root: Path, members: list[dict], vanilla_core: Path | None, closure_needles: list[str]) -> dict:
     """What the G2 rules add to a closure: {"members": [...], "vanilla": [...], "missing": [...], "suspects": [...],
     "settings_suspect_resolved": bool}. `members` are the gene's members so far (file and jar-class ones are read)."""
@@ -155,4 +189,4 @@ def extend(root: Path, members: list[dict], vanilla_core: Path | None, closure_n
     return {"members": added, "vanilla": sorted(set(vanilla)), "missing": missing, "suspects": suspects}
 
 
-__all__ = ["GETTERS", "SETTINGS_FILE", "extend", "keys_read_by_class", "keys_read_by_source", "pointer", "value_sha256"]
+__all__ = ["GETTERS", "SETTINGS_FILE", "code_literals", "extend", "ids_named_by_code", "keys_read_by_class", "keys_read_by_source", "pointer", "value_sha256"]

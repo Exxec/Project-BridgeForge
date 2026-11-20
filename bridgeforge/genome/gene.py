@@ -18,10 +18,11 @@ the identity.
 `licence` is the licence ledger's answer (94.G1 WP4): `mod_decision` for the whole mod, `local_only_members` for the
 members a local-only path exception covers, and `decision`, which is LOCAL_ONLY whenever that list is not empty.
 
-Schema 3 (94.G2, 2026-11-19) adds one member kind, `json-entry`: a key of a JSON file, `<file>#<JSON Pointer>` such as
+Schema 4 (94.G2, 2026-11-19) names every kind G2 needs (`GENE_KINDS`); `describe` closes the content kinds and
+`combat-plugin` and refuses the rest until their pilot. Schema 3 (the same day) added one member kind, `json-entry`: a key of a JSON file, `<file>#<JSON Pointer>` such as
 `data/config/settings.json#/sa_lobster_tanks_growth_rate`, hashed as its parsed value in canonical JSON (genome/closure.py).
 For now only object keys: a pointer ending in an array index or `-` is refused, and array membership (a hull added to a
-list) stays an unknown until a pilot needs it. Schemas 1 and 2 are withdrawn; no sister repository had pinned either.
+list) stays an unknown until a pilot needs it. Schemas 1-3 are withdrawn; no sister repository had pinned any.
 
 Identity is the SHA-256 of the kind and the normalized members, so the same feature copied into another mod or another
 folder gets the same identity (one allele): a text file's line endings are normalized, a CSV row is its non-empty cells,
@@ -42,9 +43,16 @@ from bridgeforge.vendor_plan import _TEXT_SUFFIXES, KINDS, _rows, vendor_plan
 from bridgeforge.zipsafe import MAX_CLASS_BYTES, read_limited
 
 GENE_SCHEMA = "bridgeforge-gene"
-GENE_SCHEMA_VERSION = 3
-WITHDRAWN_VERSIONS = (1, 2)  # the one list: contract.py and evidence.py import it
+GENE_SCHEMA_VERSION = 4
+WITHDRAWN_VERSIONS = (1, 2, 3)  # the one list: contract.py and evidence.py import it
 MEMBER_KINDS = ("file", "csv-row", "jar-class", "json-entry")
+# Schema 4 (94.G2, 2026-11-19): every kind G2 needs, so G2 needs no further bump (advisor review). Kinds are named by how the
+# game registers them. `describe` closes the content kinds and `combat-plugin` (a key of settings.json's `plugins` map);
+# the others are refused with a clear message until their pilot closes them.
+CAMPAIGN_KINDS = ("faction", "star-system", "market", "industry", "condition", "ability", "rule", "combat-plugin",
+                  "campaign-plugin", "custom-start")
+GENE_KINDS = (*KINDS, *CAMPAIGN_KINDS)
+CLOSABLE_KINDS = (*KINDS, "combat-plugin")
 COLLECTED_FROM = ["vendor-plan"]
 # What the player sees each kind do: the phenotype a live run must observe (S3 makes these real obligations, G6).
 PHENOTYPE = {
@@ -54,6 +62,16 @@ PHENOTYPE = {
     "wing": ["the wing launches from a carrier in combat"],
     "hullmod": ["the hull mod applies to a ship and shows its effect"],
     "shipsystem": ["the ship system activates in combat"],
+    "faction": ["the faction is listed and its fleets spawn"],
+    "star-system": ["the star system generates once in a new sector"],
+    "market": ["the market exists and opens its trade dialog"],
+    "industry": ["the industry is on its market and applies its effect"],
+    "condition": ["the market condition applies to its market"],
+    "ability": ["the ability is available and activates"],
+    "rule": ["the dialog option appears and its script runs"],
+    "combat-plugin": ["the combat plugin runs in combat and its effect is seen"],
+    "campaign-plugin": ["the campaign plugin runs and its effect is seen"],
+    "custom-start": ["the custom start is offered and starts a game"],
 }
 REQUIRED_KEYS = ("schema", "schema_version", "identity", "kind", "anchors", "provides", "members", "needs", "registrations",
                  "conditions", "persistent_state", "build", "provenance", "derived_from", "licence", "phenotype_obligations",
@@ -165,13 +183,33 @@ def identity(kind: str, members: list[dict]) -> str:
 def describe(mod: Path, anchor: str, *, vanilla_core: Path | None = None, policy_path: Path | None = None) -> dict:
     """The gene manifest for one content piece (`kind:id`) of a mod folder or workspace."""
     kind, _, ident = anchor.partition(":")
-    if kind not in KINDS or not ident:
-        raise GeneError(f"a gene anchor is kind:id with kind one of {', '.join(KINDS)}; got {anchor!r}")
-    plan = vendor_plan(mod, [anchor], vanilla_core=vanilla_core, policy_path=policy_path)
+    if kind not in GENE_KINDS or not ident:
+        raise GeneError(f"a gene anchor is kind:id with kind one of {', '.join(GENE_KINDS)}; got {anchor!r}")
+    if kind not in CLOSABLE_KINDS:
+        raise GeneError(f"{kind} genes cannot be closed yet: G2 adds each campaign kind with its pilot "
+                        f"(closable now: {', '.join(CLOSABLE_KINDS)})")
+    registration = None
+    seeds, classes = ([], [])
+    if kind == "combat-plugin":
+        plugin_class, registration = _combat_plugin(mod, ident)
+        classes = [plugin_class]
+    else:
+        seeds = [anchor]
+    plan = vendor_plan(mod, seeds, vanilla_core=vanilla_core, policy_path=policy_path, classes=classes)
     root = Path(plan["provider"])
-    if anchor not in plan["closure_ids"]:
+    # Ids the gene's code names as string literals join the closure, and vendor-plan runs again from all of them (94.G2: a
+    # combat plugin's spawned variants and checked hull mods are its gene). Repeated until nothing new is named.
+    from bridgeforge.genome.closure import ids_named_by_code
+
+    for _round in range(8):
+        named = [i for i in ids_named_by_code(root, _code_members(root, plan), vanilla_core) if i not in seeds and i != anchor]
+        if not named:
+            break
+        seeds = sorted({*seeds, *named})
+        plan = vendor_plan(mod, seeds, vanilla_core=vanilla_core, policy_path=policy_path, classes=classes)
+    if kind != "combat-plugin" and anchor not in plan["closure_ids"]:
         raise GeneError(f"{anchor} is not defined by {root} (missing: {', '.join(plan['missing']) or 'nothing'})")
-    members = []
+    members = [registration["member"]] if registration else []
     loaded = _loaded_classes(root)
     missing_classes = []
     for entry in plan["include"]:
@@ -204,10 +242,10 @@ def describe(mod: Path, anchor: str, *, vanilla_core: Path | None = None, policy
     gene = {
         "schema": GENE_SCHEMA, "schema_version": GENE_SCHEMA_VERSION,
         "identity": identity(kind, members),
-        "kind": kind, "anchors": [anchor], "provides": plan["closure_ids"],
+        "kind": kind, "anchors": [anchor], "provides": sorted({anchor, *plan["closure_ids"]}),
         "members": members,
         "needs": {"vanilla": sorted(set(plan["provided_by_vanilla"]) | set(extra["vanilla"])), "mods": dependencies},
-        "registrations": [], "conditions": [], "persistent_state": [],
+        "registrations": [registration["element"]] if registration else [], "conditions": [], "persistent_state": [],
         "build": {"game_version": info.get("gameVersion"), "mod_version": _version_text(info.get("version"))},
         "provenance": {"mod_id": info.get("id"), "mod_name": info.get("name"), "author": info.get("author")},
         "derived_from": None,
@@ -220,6 +258,36 @@ def describe(mod: Path, anchor: str, *, vanilla_core: Path | None = None, policy
     if problems:
         raise GeneError(f"the manifest does not meet schema {GENE_SCHEMA_VERSION}: " + "; ".join(problems))
     return gene
+
+
+def _code_members(root: Path, plan: dict) -> list[dict]:
+    """The code a plan names, as the members the game loads (a jar class beats its source)."""
+    loaded = _loaded_classes(root)
+    found = []
+    for entry in plan["include"]:
+        if entry["what"] == "file" and entry["path"].endswith(".java"):
+            member = _loaded_member(root, entry, loaded)
+            if member is not None:
+                found.append(member)
+        elif entry["what"] == "jar-class":
+            found.append({"what": "jar-class", "path": entry["path"]})
+    return found
+
+
+def _combat_plugin(mod: Path, key: str) -> tuple[str, dict]:
+    """(the plugin's class, its registration) for `combat-plugin:<key>`: the key of settings.json's `plugins` map."""
+    from bridgeforge.genome.closure import SETTINGS_FILE, _settings, pointer, value_sha256
+    from bridgeforge.vendor_plan import _mod_root
+
+    root = _mod_root(mod)
+    plugins = _settings(root).get("plugins")
+    plugin_class = plugins.get(key) if isinstance(plugins, dict) else None
+    if not isinstance(plugin_class, str) or not plugin_class.strip():
+        raise GeneError(f"combat-plugin:{key}: {root / SETTINGS_FILE} registers no plugin under that key in its plugins map")
+    path = f"{SETTINGS_FILE}#/plugins{pointer(key)}"
+    member = {"what": "json-entry", "path": path, "sha256": value_sha256(plugin_class),
+              "reason": "the plugin's registration in settings.json's plugins map"}
+    return plugin_class.strip(), {"member": member, "element": {"locus": path, "statement": plugin_class.strip()}}
 
 
 def _licence(mod_licence: dict, info: dict, member_paths: list[str], policy_path: Path | None) -> dict:
@@ -320,8 +388,8 @@ def validate(gene: object) -> list[str]:
     version = gene["schema_version"]
     if gene["schema"] != GENE_SCHEMA or type(version) is not int or version != GENE_SCHEMA_VERSION:
         problems.append(f"schema is {gene['schema']!r} {version!r}, not {GENE_SCHEMA!r} {GENE_SCHEMA_VERSION}")
-    if gene["kind"] not in KINDS:
-        problems.append(f"kind {gene['kind']!r} is not one of {', '.join(KINDS)}")
+    if gene["kind"] not in GENE_KINDS:
+        problems.append(f"kind {gene['kind']!r} is not one of {', '.join(GENE_KINDS)}")
     for key in ("anchors", "provides", "registrations", "conditions", "persistent_state", "phenotype_obligations", "collected_from"):
         if not isinstance(gene[key], list):
             problems.append(f"{key} is a list")
@@ -365,5 +433,5 @@ def dumps(gene: dict) -> str:
     return json.dumps(gene, indent=2, ensure_ascii=False) + "\n"
 
 
-__all__ = ["DERIVED_FIELDS", "ELEMENT_FIELDS", "GENE_SCHEMA", "GENE_SCHEMA_VERSION", "GeneError", "describe", "dumps", "identity",
+__all__ = ["CLOSABLE_KINDS", "DERIVED_FIELDS", "ELEMENT_FIELDS", "GENE_KINDS", "GENE_SCHEMA", "GENE_SCHEMA_VERSION", "GeneError", "describe", "dumps", "identity",
            "validate"]

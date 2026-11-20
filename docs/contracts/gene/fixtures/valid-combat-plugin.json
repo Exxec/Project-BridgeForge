@@ -1,0 +1,64 @@
+{
+  "schema": "bridgeforge-gene",
+  "schema_version": 4,
+  "identity": "eb12c7a7e3ca03e8bea3d612c9de2bef095796f96b3b7a4e815bb637f9398b3f",
+  "kind": "combat-plugin",
+  "anchors": [
+    "combat-plugin:example_CombatPlugin"
+  ],
+  "provides": [
+    "combat-plugin:example_CombatPlugin"
+  ],
+  "members": [
+    {
+      "what": "jar-class",
+      "path": "jars/example.jar!data/scripts/example_CombatPlugin.class",
+      "sha256": "914bede646d91ae657414fe069a5ed1481579c36e27b7be2a9ec9681305b38ac",
+      "reason": "the plugin class"
+    },
+    {
+      "what": "json-entry",
+      "path": "data/config/settings.json#/plugins/example_CombatPlugin",
+      "sha256": "29c9c30e0604515ced98b3d14fd88751a8f8e4b9bc69d483a67a257c14ab79fb",
+      "reason": "the plugin's registration in settings.json's plugins map"
+    }
+  ],
+  "needs": {
+    "vanilla": [],
+    "mods": []
+  },
+  "registrations": [
+    {
+      "locus": "data/config/settings.json#/plugins/example_CombatPlugin",
+      "statement": "data.scripts.example_CombatPlugin"
+    }
+  ],
+  "conditions": [],
+  "persistent_state": [],
+  "build": {
+    "game_version": "0.98.5a-RC7",
+    "mod_version": "1.0.0"
+  },
+  "provenance": {
+    "mod_id": "fixture_mod",
+    "mod_name": "Fixture Mod",
+    "author": "BridgeForge"
+  },
+  "derived_from": null,
+  "licence": {
+    "decision": "LOCAL_ONLY",
+    "reason": "fixture",
+    "mod_decision": "LOCAL_ONLY",
+    "local_only_members": []
+  },
+  "phenotype_obligations": [
+    "the combat plugin runs in combat and its effect is seen"
+  ],
+  "unknowns": {
+    "missing": [],
+    "suspects": []
+  },
+  "collected_from": [
+    "vendor-plan"
+  ]
+}

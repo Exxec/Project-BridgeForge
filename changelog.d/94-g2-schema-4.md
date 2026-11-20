@@ -1,0 +1,1 @@
+- `gene.json` schema 4 (ROADMAP-3 94.G2): every G2 kind named; `combat-plugin:<key>` genes closed from settings.json's plugins map; ids a gene's code names join its closure; proofs handle nested JSON Pointers and write jars fresh.

@@ -3606,7 +3606,7 @@ write the gene manifest of one content piece: its members with hashes, needs, li
 | Argument | Notes | Help |
 |---|---|---|
 | `mod` | - | mod folder or workspace (working/ is used) |
-| `anchor` | - | kind:id, kind one of hullmod, weapon, wing, hull, variant, shipsystem |
+| `anchor` | - | kind:id, kind one of hullmod, weapon, wing, hull, variant, shipsystem, combat-plugin |
 | `--vanilla-core` VANILLA_CORE | - | starsector-core, so parts vanilla provides are listed as needs, not missing |
 | `--write` WRITE | - | write the manifest to this file instead of printing it |
 
@@ -3654,7 +3654,7 @@ the static halves of a gene's subtraction and isolation proofs (94.G2), written 
 | Argument | Notes | Help |
 |---|---|---|
 | `mod` | - | mod folder or workspace (working/ is used) |
-| `anchor` | - | kind:id, kind one of hullmod, weapon, wing, hull, variant, shipsystem |
+| `anchor` | - | kind:id, kind one of hullmod, weapon, wing, hull, variant, shipsystem, combat-plugin |
 | `--out` OUT | required | a new or empty folder outside the repository (it holds copies of the mod) |
 | `--vanilla-core` VANILLA_CORE | - | starsector-core, for vanilla needs and the scans |
 
