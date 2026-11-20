@@ -1896,6 +1896,9 @@ history as the closure benchmark, a cross-repository trace check, an early Java 
     and class, because they all extend `ECE_BaseHullmod`, which imports `ECE_IDs`, a constants class naming all 13 ids.
     Every hull holds those 43 too. So the 56 genes are fewer separable pieces: taking one Eridani hull or hull mod takes
     all 13 hull mods. Telling "names an id as a constant" from "needs that content" is a later closure refinement.
+    **Correction 2026-11-20 (slice 13):** `ECE_IDs` holds three strings (the faction id and two design types), not the hull
+    mod ids. The hull mods were joined by `hasHullMod("ECE_FluxEMPHullMod")` checks. Vendor-plan's same-package rule read
+    that string as a use of the class `ECE_FluxEMPHullMod`, whose lookup table names the rest. See slice 13.
   - **Regression:** P1's and P2's carriers are unchanged, file for file (P2's jar entries are identical; only `writestr`'s
     zip dates differ, as before).
   - Tests: `tests/test_gene_set.py`:
@@ -1955,6 +1958,9 @@ history as the closure benchmark, a cross-repository trace check, an early Java 
 
     Fixing the first is a closure fix (follow loaded classes). The second is a closure-boundary decision put to the owner
     the same day.
+    **Correction 2026-11-20 (slice 13):** following the loaded classes does not fix the first. A scratch run with jar
+    classes read as bytecode only still needed the faction, because `ECE_Configs` keeps an unused constant-pool entry for
+    `ECE_IDs`. Both links are "a constant names an id", which the owner's ruling and slice 13 settle.
   - Tests: `tests/test_gene_set.py`:
     - every kind resolved or not, with its reason;
     - a weapon or a hull mod knocked out of the fixture set FAILs, naming it and the faction.
@@ -1970,6 +1976,69 @@ history as the closure benchmark, a cross-repository trace check, an early Java 
       writes, so this cannot happen in a carrier today.
 
     Mutation-checked: 15 mutants, all killed.
+  **Slice 13 Done 2026-11-20: a literal that only names an id is a suspect, not a need (owner ruling).**
+  - **Owner 2026-11-20** (asked with the numbers, chose "Mention = suspect"): a literal that only names another id, as a
+    key, a label or an "is it installed?" check, is recorded as a suspect. Only code that adds or uses the content is a
+    need.
+  - **The trace** (every closure edge of `hullmod:ECE_Dlorica` and `hull:ECE_Neptune`, by mechanism) showed three causes:
+    - every hull mod tests `hasHullMod("ECE_FluxEMPHullMod")` and `getHullMods().contains(...)`;
+    - vendor-plan's same-package rule read that string as a use of the class `ECE_FluxEMPHullMod`;
+    - that class's lookup table names the other hull mods.
+
+    `ECE_BaseHullmod`'s source imports `ECE_IDs`. That class holds the faction id as a constant, which no instruction
+    loads.
+  - **`genome/literal_sinks.py`:** in a jar class, each string `ldc` is followed on the operand stack to the instruction
+    that pops it (`owner.method#argument`). Anything it cannot follow is `unknown`: a jump target, a store, a `dup` of
+    the value, or an unmodelled opcode. A literal is a need unless every occurrence ends in a mention sink, so one use
+    among mentions keeps it. Unknown sinks stay needs, and so do `Map.put` and `Set.add`. A `static final` string its
+    class never loads is a mention. Loose `.java` scripts are unchanged.
+  - **The mention sinks** are only those the trace of Eridani's and Tania's jars showed (javap of RC7, 2026-11-20):
+    - `Collection.contains`, `LinkedHashSet.contains`, `String.contains`;
+    - `ShipVariantAPI.hasHullMod` (`HullVariantSpec`: `getHullMods().contains`) and `removeMod` (set remove);
+    - `MutableStat.modifyMult`/`modifyPercent`/`modifyFlat`/`unmodify` and `StatBonus.modifyPercent` (HashMaps keyed
+      by the source id);
+    - `CombatEngineAPI.maintainStatusForPlayerShip` (a UI status entry keyed by it);
+    - `WeaponSpecAPI.hasTag` (`Set.contains`).
+
+    `DynamicStatsAPI.getMod` stays a need: its implementation was not found.
+  - **Code changes:**
+    - `closure.code_literals` uses the classifier, for both `ids_named_by_code` and `campaign_ids`;
+    - `describe` records each mention as a suspect ("a mention, not a need");
+    - vendor-plan's same-package rule now searches code with its strings blanked.
+  - **Results:**
+    - P1 unchanged (bb64ad41). P3's identity is unchanged too (3ebc89de), and P3 still needs the faction, through its
+      generator's real use.
+    - **P2 changed as the ruling says.** Its plugin only checks `getHullMods().contains("tania_*_spawner")`, so four
+      spawner hull mod rows and two classes became suspects. Re-proved: identity 89e207d1, both static halves PASS
+      (`genes/p2-tania_CombatHandlerSpawner-20261120-s13/`).
+    - Hulls keep their built-in hull mods (Neptune: `hiressensors`, `surveying_equipment`, `ECE_FluxEMPHullMod`).
+    - **P3's set** (`genes/p3-set-20261120-s13/`): PASS. 56 genes, carrier `gene_carrier_da1d29484d73`, nothing
+      unresolved. The three knock-outs still FAIL on the new closure. The faction knock-out is now named by the system
+      alone.
+    - **The binding is gone:** 56 distinct identities (was 45), and the largest strongly connected group is 1 (was 30).
+      Only the system needs the faction. 32 genes need nothing and provide only themselves: 12 hull mods and 20 weapons.
+  - **Left for the owner:** `hullmod:ECE_FluxEMPHullMod` still provides 11 hull mods through its own `Map.put` lookup
+    table. Hulls that build it in take that table too. Whether a map key that is only looked up is a mention needs
+    data-flow evidence, so it is left as a need.
+  - Tests: `tests/test_literal_sinks.py`:
+    - a compiled probe's sinks: a check, a stat key, a use, both, a stored value, a map key, a branch, a `dup`, an
+      unloaded constant;
+    - a hull mod that only checks another does not bring it, and records the suspect;
+    - vendor-plan ignores a string equal to a same-package class but keeps a real use.
+
+    An independent review found no defect in the stack arithmetic, so no path drops a real need. Five points were fixed
+    with tests:
+    - **A truncated method crashed `describe`:** `struct.error` was not caught. Such a class now keeps every literal a
+      need.
+    - **A mentioned campaign id was lost:** an industry id, for example, left the campaign closure without becoming a
+      suspect. `mention_suspects` now also checks the campaign tables.
+    - **Suspects listed ids the gene needs elsewhere, or its own ids:** both are now left out.
+    - **A char literal `'"'` hid the rest of its line** from the same-package rule. The pattern now matches char literals
+      first.
+    - **Ten of the twelve mention sinks were untested:** a probe now calls each one and must reach exactly its table
+      entry.
+
+    Mutation-checked: 14 mutants, all killed (the `dup` case needed its own probe method).
 - 94.G3 **Gene bank**: content-addressed store, alleles across the corpus, lineage, licence state; RevenantLib distributes genes
   from vanished authors (GD-3). The store's payloads live under `data_root()`, like `Done/`, never in this public
   repository; only manifests of the owner's own or permitted content become committed fixtures (2026-11-19).

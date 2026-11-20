@@ -256,8 +256,12 @@ def describe(mod: Path, anchor: str, *, vanilla_core: Path | None = None, policy
     members += extra["members"]
     members.sort(key=lambda m: (m["what"], m["path"]))
     # The whole-file settings.json SUSPECT is replaced by key-level ones (a key no member reads), or by nothing.
+    from bridgeforge.genome.closure import mention_suspects
+
     suspects = ([s for s in plan["suspects"] if s["path"] != SETTINGS_FILE] + extra["suspects"] + campaign["suspects"]
-                + (system["suspects"] if system else []))
+                + (system["suspects"] if system else [])
+                + mention_suspects(root, _code_members(root, plan), vanilla_core,
+                                   {p.split(":", 1)[1] for p in {anchor, *plan["closure_ids"], *campaign["provides"]}}))
     info = read_mod_info(root) or {}
     licence = _licence(plan["licence"], info, [m["path"] for m in members], policy_path)
     dependencies = sorted(d["id"] for d in info.get("dependencies") or [] if isinstance(d, dict) and isinstance(d.get("id"), str))
