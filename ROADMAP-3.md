@@ -848,8 +848,14 @@ unproven).
   **Done 2026-11-19.** A file with a `mod_info.json` at or above it, inside the state folder, is read with the suite's one
   lenient reader (`scan_json._parse_json`). BridgeForge's own state files stay strict. Test:
   `tests/test_snapshot_restore.py` `test_a_mod_copy_kept_in_state_is_judged_as_the_game_reads_it`: a lenient mod copy
-  passes, while broken mod JSON and lenient own state both fail. It was red before the change. Gate R8's restore half is
-  re-judged against the restored copy without restoring again; its rig half waits for live testing.
+  passes, while broken mod JSON and lenient own state both fail. It was red before the change.
+  Re-judging the restored copy left two problems, both inside `s1-completion-20261025` and byte-identical to the source:
+  an empty `finalize.stdout.json` and a deliberately invalid test fixture. When `restore_check` knows the source root, a
+  JSON file the source holds with the same bytes is now reported under `inherited_from_source`, not as a fault. Test:
+  `test_json_the_source_holds_unreadable_too_is_inherited_not_a_fault`.
+  **Gate R8, restore half: PASS (Test1, 2026-11-19).** 460,382 files restored and hash-verified. The status check,
+  re-judged on the restored copy without restoring again, gives PASS on 330 labels with 0 problems and 2 inherited. The
+  rig half (a bounded scenario in the restored copy) is next, now that live testing has resumed.
 - 96.16 (S) **A flaky research test on Windows CI.** `tests/test_research_inputs.py`
   `test_flags_reach_the_report_and_the_cache_lands_beside_the_report` failed once on Windows shard 3/4 for PR #185 (run
   44643449898): it found 2 cached `TemCrusade.java` copies where it expects 1. It passes locally, and main's run on the
