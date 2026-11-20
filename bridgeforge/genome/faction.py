@@ -8,10 +8,13 @@ a mod's file for a core faction id is a merge fragment, not a gene, and is refus
   that key: javap 2026-11-20), the registration that makes the game load the file;
 - the mod files its scalar keys name (`logo`, `crest`, the `portraits` lists).
 
-**Needs.** Each id the content lists name (`save_doctor.FACTION_LISTS`, and the sell-frequency maps): one the mod defines is
-`needs.genes` (`hull:x`, `weapon:x`, `wing:x`, `hullmod:x`, each a gene of its own: the faction carries none of them), one the
-core defines is `needs.vanilla`, one neither defines is missing, never dropped. Tags name sets (`tritachyon`, a mod's
-blueprint tag): recorded as suspects, not expanded. Eridani's faction needs 54 of the mod's own content genes (measured).
+**Needs.** Each id the content lists (`save_doctor.FACTION_LISTS`), the weight maps (sell frequencies, `shipSellFrequency`,
+`variantOverrides`, `hullFrequency.hulls`) and `shipRoles` name: one the mod defines is `needs.genes` (`hull:x`, `weapon:x`,
+`wing:x`, `hullmod:x`, `variant:x`, each a gene of its own: the faction carries none of them), one the core defines is
+`needs.vanilla`, one neither defines is missing, never dropped. A `shipRoles` variant nothing defines is Fatal at load
+(RC8-46). Tags name sets (`tritachyon`, a mod's blueprint tag): recorded as suspects, not expanded. `illegalCommodities` are
+`commodity:` needs. Every other key that is not plain display data (`music`, `voices`, `names`, `factionDoctrine`, ...) is a
+suspect at its JSON pointer (advisor 2026-11-20). Eridani's faction needs 54 of the mod's own content genes (measured).
 
 **Registrations.** Code that passes the id as a constant to `getFaction` or `addParticipatingFaction` is an element (call site,
 hooks), not a member; `setRelationship` calls in those methods are recorded as an unknown (receiver tracking is not built).
@@ -26,9 +29,33 @@ from bridgeforge.genome.gene import (GENE_SCHEMA, GENE_SCHEMA_VERSION, PHENOTYPE
 from bridgeforge.mod_files import read_mod_info
 
 FACTIONS_CSV = "data/world/factions/factions.csv"
+COMMODITIES_CSV = "data/campaign/commodities.csv"
 LIST_FIELD = {"hull": "hulls", "weapon": "weapons", "wing": "fighters", "hullmod": "hullMods"}
-SELL_LISTS = {"weaponSellFrequency": "weapon", "fighterSellFrequency": "wing", "hullmodSellFrequency": "hullmod"}
+# Maps from an id to a weight: the sell maps, `variantOverrides`, and `hullFrequency`'s `hulls` (its `tags` are tags).
+SELL_LISTS = {"weaponSellFrequency": "weapon", "fighterSellFrequency": "wing", "hullmodSellFrequency": "hullmod",
+              "shipSellFrequency": "hull", "variantOverrides": "variant"}
+# `shipRoles` maps a role to {variant or wing id: weight}. RC7 builds it into the spec whose constructor asks each entry's
+# fleet-point cost at load (RC8_BEHAVIOUR RC8-46). From javap of `loading.V` and `V$Oo` (2026-11-20): a role named `doctrine`
+# is skipped; `includeDefault` (a boolean), `fallback` and `fallback2` (roles) are not entries; an id ending in `_wing` is a
+# wing (`V$Oo.isFighterWing` is `id.endsWith("_wing")`), any other a variant.
+ROLE_SKIPPED = frozenset({"doctrine"})
+ROLE_NOT_VARIANTS = frozenset({"includeDefault", "fallback", "fallback2"})
+# Keys that hold no ids: every key of RC7's 22 core .faction files and Eridani's was looked at (2026-11-20). Any other key
+# this module does not read is a suspect, since it may name sounds, name sets, voices or skills the faction needs. Not
+# `custom`: the core's pirates and Luddic Path name station hulls there (`pirateBaseStationTypes`, review 2026-11-20).
+PLAIN_KEYS = frozenset({
+    "id", "color", "baseUIColor", "brightUIColor", "darkUIColor", "gridUIColor", "secondaryUIColor", "secondarySegments",
+    "description", "displayName", "displayNameWithArticle", "displayNameLong", "displayNameLongWithArticle",
+    "displayNameIsOrAre", "entityNamePrefix", "personNamePrefix", "personNamePrefixAOrAn", "shipNamePrefix", "showInIntelTab",
+    "fleetTypeNames", "ranks"})
 _CALLS = {"getFaction", "addParticipatingFaction"}
+
+
+def _faction_lists() -> dict[str, str]:
+    """save_doctor's FACTION_LISTS, imported late: save_doctor imports the scanner."""
+    from bridgeforge.save.save_doctor import FACTION_LISTS
+
+    return FACTION_LISTS
 
 
 def _strings(value: object) -> list[str]:
@@ -36,20 +63,97 @@ def _strings(value: object) -> list[str]:
     return [v for v in value if isinstance(v, str)] if isinstance(value, list) else []
 
 
-def _listed(faction: dict) -> tuple[list[tuple[str, str]], list[str]]:
-    """([(kind, id)] the content lists and sell maps name, [tags])."""
-    from bridgeforge.save.save_doctor import FACTION_LISTS
+def _keys(value: object) -> list[str]:
+    """The keys of a JSON object (an id -> weight map); anything else names nothing."""
+    return [k for k in value if isinstance(k, str)] if isinstance(value, dict) else []
 
+
+def _listed(faction: dict) -> tuple[list[tuple[str, str]], list[str]]:
+    """([(kind, id)] the content lists, weight maps and ship roles name, [tags])."""
     ids, tags = [], []
-    for key, kind in FACTION_LISTS.items():
+    for key, kind in _faction_lists().items():
         block = faction.get(key)
         if isinstance(block, dict):
             ids += [(kind, i) for i in _strings(block.get(LIST_FIELD[kind]))]
             tags += _strings(block.get("tags"))
     for key, kind in SELL_LISTS.items():
-        block = faction.get(key)
-        ids += [(kind, i) for i in (block if isinstance(block, dict) else {}) if isinstance(i, str)]
+        ids += [(kind, i) for i in _keys(faction.get(key))]
+    frequency = faction.get("hullFrequency")
+    if isinstance(frequency, dict):
+        ids += [("hull", i) for i in _keys(frequency.get("hulls"))]
+        tags += _keys(frequency.get("tags"))
+    roles = faction.get("shipRoles")
+    for role, block in (roles.items() if isinstance(roles, dict) else []):
+        if role not in ROLE_SKIPPED:
+            ids += [("wing" if i.endswith("_wing") else "variant", i) for i in _keys(block) if i not in ROLE_NOT_VARIANTS]
     return sorted(set(ids)), sorted(set(tags))
+
+
+# The keys this module reads besides the content lists (`_faction_lists()`).
+READ_KEYS = frozenset({*SELL_LISTS, "hullFrequency", "shipRoles", "illegalCommodities", "logo", "crest", "portraits"})
+
+
+def _shape_read(key: str, value: object) -> bool:
+    """Whether a key this module reads holds the shape it reads. Another shape is a suspect, not a silent skip (review
+    2026-11-20): `"shipRoles": [...]` or a `hullFrequency` key besides `hulls` and `tags` would otherwise name nothing."""
+    lists = _faction_lists()
+    if key in lists:
+        allowed = (LIST_FIELD[lists[key]], "tags")
+        return isinstance(value, dict) and all(k in allowed and isinstance(v, list) for k, v in value.items())
+    if key == "hullFrequency":
+        return isinstance(value, dict) and all(k in ("hulls", "tags") and isinstance(v, dict) for k, v in value.items())
+    if key in ("shipRoles", "portraits"):
+        inner = dict if key == "shipRoles" else list
+        return isinstance(value, dict) and all(isinstance(v, inner) for v in value.values())
+    expected = {"illegalCommodities": list, "logo": str, "crest": str}.get(key, dict)  # the sell maps are objects
+    return isinstance(value, expected)
+
+
+def _leaves(value: object) -> set[str]:
+    """The strings a value may name: string leaves, and the keys of id -> weight maps (all values numbers)."""
+    if isinstance(value, str):
+        return {value}
+    if isinstance(value, list):
+        return set().union(*(_leaves(v) for v in value)) if value else set()
+    if isinstance(value, dict):
+        weights = bool(value) and all(isinstance(v, (int, float)) and not isinstance(v, bool) for v in value.values())
+        found = {k for k in value if isinstance(k, str)} if weights else set()
+        return found.union(*(_leaves(v) for v in value.values()))
+    return set()
+
+
+def _unread(path: str, faction: dict) -> list[dict]:
+    """One suspect per key that is neither read nor plain, or is read but in another shape (advisor 2026-11-20: never
+    dropped). A key whose value holds no string names no id, so it is no suspect (review 2026-11-20)."""
+    from bridgeforge.genome.closure import pointer
+
+    read = READ_KEYS | set(_faction_lists())
+    suspects = []
+    for key in sorted(faction):
+        if key in PLAIN_KEYS or (key in read and _shape_read(key, faction[key])):
+            continue
+        mentions = sorted(_leaves(faction[key]))
+        if mentions:
+            what = "is not in the shape this describe reads" if key in read else \
+                "may name ids (sounds, name sets, voices, skills, station hulls) this describe does not type"
+            suspects.append({"path": f"{path}#{pointer(key)}", "mentions": mentions, "reason": f"the faction's `{key}` {what}"})
+    return suspects
+
+
+def _commodities(root: Path, core_root: Path, faction: dict, path: str) -> tuple[list[str], list[str], list[dict]]:
+    """(vanilla needs, missing, suspects) for `illegalCommodities`: the core's are `commodity:` needs; a commodity the mod
+    defines is a suspect (a commodity is not a gene kind yet); one neither defines is missing."""
+    from bridgeforge.genome.gene import _rows
+
+    listed = sorted(set(_strings(faction.get("illegalCommodities"))))
+    core, own = set(_rows(core_root, COMMODITIES_CSV)), set(_rows(root, COMMODITIES_CSV))
+    vanilla = [f"commodity:{c}" for c in listed if c in core]
+    mine = [c for c in listed if c not in core and c in own]
+    missing = [f"commodity:{c} (an illegal commodity of the faction; neither the mod nor the core defines it)" for c in listed
+               if c not in core and c not in own]
+    suspects = ([{"path": f"{path}#/illegalCommodities", "mentions": mine,
+                  "reason": "commodities the mod defines: a commodity is not a gene kind yet"}] if mine else [])
+    return vanilla, missing, suspects
 
 
 def _files_named(root: Path, core_root: Path, faction: dict) -> tuple[list[str], list[str], list[str]]:
@@ -155,10 +259,13 @@ def describe_faction(mod: Path, ident: str, vanilla_core: Path | None, policy_pa
             missing.append(f"{kind}:{item} (listed by the faction; neither the mod nor the core defines it)")
     vanilla += [f"file:{f}" for f in core_files]
     missing += [f"file:{f} (named by the faction; in neither the mod nor the core)" for f in absent]
+    commodity_needs, commodity_missing, commodity_suspects = _commodities(root, core_root, faction, path)
+    vanilla += commodity_needs
+    missing += commodity_missing
     registrations, notes = _registrations(root, ident)
     suspects = ([{"path": path, "mentions": tags, "reason": "the faction's lists name tags: sets of hulls, weapons or wings, "
                   "recorded and not expanded"}] if tags else [])
-    suspects += notes
+    suspects += commodity_suspects + _unread(path, faction) + notes
     members.sort(key=lambda m: (m["what"], m["path"]))
     info = read_mod_info(root) or {}
     licence = _licence(revival_licence(info.get("id"), info.get("name"), policy_path), info, [m["path"] for m in members], policy_path)

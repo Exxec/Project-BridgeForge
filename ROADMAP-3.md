@@ -1831,6 +1831,40 @@ history as the closure benchmark, a cross-repository trace check, an early Java 
 
     Mutation-checked: 13 mutants, all killed (the any-constant mutant needed the second faction's call; the note mutant
     needed a registering method that sets no relations).
+  **Slice 10 follow-up Done 2026-11-20 (advisor): every key of a `.faction` file is read or flagged.**
+  - **Why:** the slice-10 javap of SpecStore also showed, per faction, `shipRoles` built into the same spec as
+    `default_ship_roles.json`, which looks each entry up at load (RC8-46, extended). The faction never read that key.
+  - **Every key of the 22 core faction files and Eridani's was listed.** Now read as needs:
+    - `shipRoles`: an id ending in `_wing` is a wing (`V$Oo.isFighterWing`), any other a variant. `includeDefault`,
+      `fallback` and `fallback2` are not entries, and a `doctrine` role is skipped, all per javap of `V`;
+    - `variantOverrides`, `hullFrequency.hulls` and `shipSellFrequency`;
+    - `illegalCommodities`, as `commodity:` vanilla needs. A commodity only the mod defines is a suspect.
+  - **Suspects:** any other key that is not plain display data is a suspect at its JSON pointer, with the strings it may
+    name. So is a read key in a shape describe does not read (`"shipRoles": [...]`, a `hullFrequency` key besides `hulls`
+    and `tags`). A key naming no string is none.
+  - **`custom` is not plain:** the core's pirates and Luddic Path name station hulls in it.
+  - **Eridani:** identity unchanged, gene needs still 54, vanilla needs 66 -> 69 (three commodities). The new suspects
+    are `music` (its own `music_ECE_*` tracks, which the faction does not carry), `voices`, `names`,
+    `shipNameSources`, `internalComms` and `factionDoctrine` (six commander skills).
+  - **P3's whole closure, measured** (every `needs.genes` described in turn from `star-system:Pantheon`):
+    - 56 genes: the system, the faction, 17 hulls, 12 hull mods, 20 weapons and 5 wings;
+    - no refused kind and nothing missing; 107 suspects;
+    - 154 distinct vanilla needs; mods BoxUtil, MagicLib and LazyLib;
+    - 183 of Eridani's 471 shipped files and 26 of its jar's 36 classes.
+
+    So P3 separates without taking the whole mod, and a gene-set carrier (the closure in one carrier, with its static
+    isolation proof) is next.
+  - **Also:** P1 was re-proved on Test1 with 93.65's carrier (identity bb64ad41, both static halves PASS) and staged in
+    `_genes-boot-queue\P1-carrier`. The old carrier is kept as `P1-carrier-pre9365`. The group plan must be re-made from
+    the queue before that boot runs.
+  - Tests: `tests/test_gene_faction.py`:
+    - exact needs from roles (a variant, a wing, the non-entries), the weight maps and commodities;
+    - unread keys with their mentions (`custom`'s station, `voices`, a boolean-only key giving none);
+    - misshapen read keys, and pointer escaping.
+
+    An independent review found two defects, both fixed: role wings typed as variants, and misshapen read keys dropped
+    silently. It also raised `custom` holding ids and suspects naming nothing, both changed. Mutation-checked: 19 mutants,
+    all killed.
 - 94.G3 **Gene bank**: content-addressed store, alleles across the corpus, lineage, licence state; RevenantLib distributes genes
   from vanished authors (GD-3). The store's payloads live under `data_root()`, like `Done/`, never in this public
   repository; only manifests of the owner's own or permitted content become committed fixtures (2026-11-19).
