@@ -1,0 +1,1 @@
+- `merge_when_clean.sh` reads a not-CLEAN merge state again (up to four polls) when no check failed, since GitHub's state can lag the last check.

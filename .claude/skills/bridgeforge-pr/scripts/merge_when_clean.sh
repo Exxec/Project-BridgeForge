@@ -34,7 +34,13 @@ while [ "$waited" -lt "$TIMEOUT" ]; do
     total="$(printf '%s\n' "$checks" | grep -c . || true)"
     pending="$(printf '%s\n' "$checks" | grep -c -E $'\t(pending|queued|in_progress)\t' || true)"
     if [ "$total" -gt 0 ] && [ "$pending" -eq 0 ] && [ "$status" != "UNKNOWN" ] && [ "$status" != "BLOCKED" ]; then
-        printf '%s\n' "$checks" | grep -v -E $'\t(pass|skipping)\t' || true
+        failing="$(printf '%s\n' "$checks" | grep -v -E $'\t(pass|skipping)\t' || true)"
+        # GitHub's merge state can lag the last check: #195 read UNSTABLE with every check green, then CLEAN a minute
+        # later (2026-11-20). Not CLEAN with nothing failing is read again before it is believed.
+        if [ "$status" != "CLEAN" ] && [ -z "$failing" ] && [ "${relooks:-0}" -lt 4 ]; then
+            relooks=$(( ${relooks:-0} + 1 )); sleep "$POLL"; waited=$((waited + POLL)); continue
+        fi
+        [ -n "$failing" ] && printf '%s\n' "$failing"
         echo "STATUS $status $head"
         if [ "$status" != "CLEAN" ]; then echo "not CLEAN: not merging" >&2; exit 1; fi
         [ "$MERGE" -eq 0 ] && exit 0
