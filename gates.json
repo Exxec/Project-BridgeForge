@@ -379,8 +379,10 @@
     {
       "id": "bf-0b-15",
       "title": "SEEKER Betelgeuse modules survive save and reload (SK-6c): hull and armor fractions match, no SEEKER.twig.* class error",
-      "state": "LIVE_PENDING",
-      "evidence": [],
+      "state": "SUPERSEDED",
+      "evidence": [
+        "Done/SEEKER-0.6 (SEEKER 0.6.6: no ART_dimention, no TWIG code)"
+      ],
       "needs": {
         "rig": true,
         "mods": [
@@ -401,7 +403,7 @@
         "path": "docs/LOCAL_HANDOFF.md",
         "anchor": "**SEEKER Betelgeuse modules survive save and reload"
       },
-      "updated": "2026-10-21"
+      "updated": "2026-11-19"
     },
     {
       "id": "bf-75-r3",
@@ -674,8 +676,10 @@
     {
       "id": "bf-strag-station-augments",
       "title": "Station Augments 2.4.3+bf.1: bring the hand-placed Done/ copy into the standard archive (workspace from Downloads/Station.Augments.7z, live run with save reload, record --archive --refresh)",
-      "state": "LIVE_PENDING",
-      "evidence": [],
+      "state": "PASS",
+      "evidence": [
+        "Done/Station.Augments-2.4.3+bf.1"
+      ],
       "needs": {
         "rig": true,
         "mods": [
@@ -700,7 +704,7 @@
         "path": "docs/LOCAL_HANDOFF.md",
         "anchor": "**Straggler archives (owner 2026-10-22, queued).**"
       },
-      "updated": "2026-10-22"
+      "updated": "2026-11-19"
     },
     {
       "id": "bf-strag-clearcommands",

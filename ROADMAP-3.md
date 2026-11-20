@@ -2083,6 +2083,14 @@ fixes of 93.28. 93.26-93.35 are that day's findings.
   `systems` is the only differing section it points at RC8-41. The other mentions now say `run-manifest check`. Tests:
   `tests/test_probe_group.py` `ReloadNextStepTests`: the hinted command parses with the real CLI parser (`check`, the reload
   run id, `--json`), and only a lone `systems` diff names RC8-41.
+- 93.64 (S) **A gate whose subject left Done/ had no state to close it.** bf-0b-15 (SEEKER Betelgeuse modules survive save
+  and reload) tests SEEKER 0.3.0+bf.5's Betelgeuse and TWIG code. That archive moved to `Done/_replaced-2026-11-17/` when
+  SEEKER 0.6.6 replaced it, and 0.6.6 has neither. The owner ruled 2026-11-19: "Close as superseded". `gates.json` allowed
+  only PASS, FAIL, NOT_TESTED, LIVE_PENDING and BLOCKED.
+  **Done 2026-11-19.** New state SUPERSEDED: recordable with `gates record --state SUPERSEDED`, needs evidence like PASS,
+  and is left out of the live-pending plan. bf-0b-15 is SUPERSEDED with the two archives as evidence;
+  bf-strag-station-augments is PASS (SA-SR3-20261119 and its reload, item 93.62). Tests: `tests/test_gates.py`
+  (a SUPERSEDED record needs evidence and validates; a superseded gate is not planned).
 - 93.52 (S) **save-doctor reported equal versions as changed.** Found testing Salvor's provider on real saves (owner
   2026-11-17: "improve/test Salvor" between CI waits). `save_doctor.installed_mods`, the provider contract Salvor imports,
   stored mod_info's `{"major", "minor", "patch"}` version as its Python repr. A save made with 1.20.0 then read as

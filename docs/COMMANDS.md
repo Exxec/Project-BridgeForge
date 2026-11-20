@@ -3551,7 +3551,7 @@ write a result back into gates.json (that file only)
 |---|---|---|
 | `gate_id` | - | - |
 | `--repo` REPO | required | - |
-| `--state` STATE | required; one of PASS, FAIL, NOT_TESTED | - |
+| `--state` STATE | required; one of PASS, FAIL, NOT_TESTED, SUPERSEDED | - |
 | `--evidence` EVIDENCE | nargs * | paths or run ids |
 
 ## research

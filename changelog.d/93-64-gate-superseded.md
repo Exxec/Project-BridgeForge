@@ -1,0 +1,1 @@
+- `gates.json` has a SUPERSEDED state for a gate whose subject left Done/ for a newer archive; it needs evidence and leaves the live-pending plan (ROADMAP-3 93.64).
