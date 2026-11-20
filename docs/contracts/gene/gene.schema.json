@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://github.com/Exxec/Project-BridgeForge/docs/contracts/gene/gene.schema.json#3",
-  "title": "bridgeforge-gene schema 3",
+  "$id": "https://github.com/Exxec/Project-BridgeForge/docs/contracts/gene/gene.schema.json#4",
+  "title": "bridgeforge-gene schema 4",
   "type": "object",
   "required": [
     "schema",
@@ -28,7 +28,7 @@
       "const": "bridgeforge-gene"
     },
     "schema_version": {
-      "const": 3
+      "const": 4
     },
     "identity": {
       "type": "string",
@@ -41,7 +41,17 @@
         "wing",
         "hull",
         "variant",
-        "shipsystem"
+        "shipsystem",
+        "faction",
+        "star-system",
+        "market",
+        "industry",
+        "condition",
+        "ability",
+        "rule",
+        "combat-plugin",
+        "campaign-plugin",
+        "custom-start"
       ]
     },
     "anchors": {

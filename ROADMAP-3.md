@@ -1422,11 +1422,51 @@ history as the closure benchmark, a cross-repository trace check, an early Java 
     - a source only under `src/` with no jar is missing.
 
     Mutation-checked: 3 mutants killed. vendor-plan's and vendor-copy's own tests still pass.
-  - Next: schema 4, the last bump G2 needs. It adds every G2 kind, among them `combat-plugin`, anchored on its
-    `settings.json` `plugins` key, and refuses kinds it cannot close yet. `proof.py` learns nested JSON Pointers. Then P2
-    as the whole `tania_CombatHandlerSpawner` plugin: its three spawner modes share one jar class, so a junkyard-only gene
-    is a recorded refusal, not a hand-built one. Then P3 (Eridani's Pantheon system, the first registration slice). The
-    boot halves of P1's proofs run when live testing resumes.
+  **Slice 4 Done 2026-11-19: gene.json schema 4, combat plugins, and P2's first proofs (static FAIL, causes known).**
+  - Schema 4 is meant to be the last bump G2 needs (advisor review). `GENE_KINDS` names every kind G2 will use, each with
+    a phenotype obligation: the six content kinds plus faction, star-system, market, industry, condition, ability, rule,
+    combat-plugin, campaign-plugin and custom-start. `describe` closes the content kinds and `combat-plugin`. The others
+    are refused ("cannot be closed yet") until their pilot closes them. Schemas 1-3 are withdrawn; `gene sisters` showed no
+    sister had pinned any. The new pin is `0878a8ed…`.
+  - A `combat-plugin:<key>` gene is anchored on a key of `settings.json`'s `plugins` map:
+    - that registration is a `json-entry` member, `data/config/settings.json#/plugins/<key>`;
+    - it is also the gene's first `registrations` element;
+    - vendor-plan gains a `classes=` seed, so the closure starts from the plugin class.
+  - **Ids named by code:** a string literal in a gene's code that is exactly an id the mod or the core defines joins the
+    closure, and vendor-plan runs again until no new id is named. A plugin's `spawnShipOrWing("x_Var1", …)` and
+    `getHullMods().contains("x_spawner")` are its gene. P1's identity is unchanged.
+  - **`proof.py`:**
+    - nested JSON Pointers: a nested key is removed by re-writing the file, and the proof records it;
+    - a jar that loses classes is written fresh from the donor's jar, never copied and then rewritten. A just-copied jar
+      was locked on Windows during P2's first run;
+    - the donor's users are found from the gene's content ids and registered classes.
+  - **P2 = the whole `tania_CombatHandlerSpawner`:** 52 members (9 jar classes, the registration, 21 rows, 21 files) and
+    28 provided ids. Those are all three spawner hull mods, the four amalgam hulls and their variants, and
+    `tania_no_dp_cost`. The three spawner modes share one jar class, so a junkyard-only gene would need bytecode edits.
+    That is a correct refusal, recorded here, not a hand-built narrower gene.
+  - **P2's static proofs: both FAIL. The causes are known, and they are the proof tool's, not leaks in the gene:**
+    - Subtraction removed the plugin's 9 classes from the jar copy but left their build sources in `src/`, so the scanner
+      reports `bundled-source-stale` and `jar-source-not-rebuilt`. The fix: also remove a removed class's build source.
+    - Some "unexplained" lines are the scanner's own aggregates (`differ:0`, `source-only:9`, `common prefix: tania_ (3
+      ids)`) and name nothing. The fix: classify by the ids a line names and ignore pure counts, with a test.
+    - Isolation: the carrier declares every donor dependency, but the plugin's code never touches MagicLib, giving
+      `declared-library-unreferenced`. The fix: `needs.mods` lists only the libraries the gene's code references.
+    - Subtraction did find three real dependents: `tania_invictus_Standard` (church revenge spawner and
+      `tania_addsmods_norefit_luddic`) and `tania_redemption_Holy_Boss` (asteroid spawner).
+
+    The evidence is in `In operation/Navarchy-of-Tania/genes/p2-tania_CombatHandlerSpawner-20261119/`.
+  - Tests: `tests/test_gene_schema4.py`:
+    - every G2 kind has a phenotype, and unclosable kinds are refused;
+    - a plugin gene holds its registration, class and the ids its code names, and not an unrelated row;
+    - an unregistered key is refused;
+    - pointer tokens unescape;
+    - the proofs remove and carry a nested registration;
+    - a jar that loses classes is never copied and is written fresh without them.
+
+    Mutation-checked: 8 mutants. Two survived and were handled: one is equivalent (the nested-key guard, which the cut
+    regex already covers), and one exposed a test that patched the wrong function and is now fixed.
+  - Next: the three proof fixes above, then P2's proofs again, then P3 (Eridani's Pantheon system, the first
+    registration slice). The boot halves wait for live testing.
 - 94.G3 **Gene bank**: content-addressed store, alleles across the corpus, lineage, licence state; RevenantLib distributes genes
   from vanished authors (GD-3). The store's payloads live under `data_root()`, like `Done/`, never in this public
   repository; only manifests of the owner's own or permitted content become committed fixtures (2026-11-19).

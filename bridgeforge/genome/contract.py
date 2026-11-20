@@ -20,10 +20,9 @@ import copy
 import hashlib
 from pathlib import Path
 
-from bridgeforge.genome.gene import (ELEMENT_FIELDS, GENE_SCHEMA, GENE_SCHEMA_VERSION, MEMBER_KINDS, PHENOTYPE, REQUIRED_KEYS,
+from bridgeforge.genome.gene import (ELEMENT_FIELDS, GENE_KINDS, GENE_SCHEMA, GENE_SCHEMA_VERSION, MEMBER_KINDS, PHENOTYPE, REQUIRED_KEYS,
                                      WITHDRAWN_VERSIONS, dumps, identity, validate)
 from bridgeforge.genome import evidence as evidence_header
-from bridgeforge.vendor_plan import KINDS
 
 CONTRACT_RELATIVE = Path("docs") / "contracts" / "gene"
 IDENTITY_RULE = ("identity = SHA-256 (lowercase hex) of the UTF-8 text: the kind and a line feed, then one line per member "
@@ -53,7 +52,7 @@ def json_schema() -> dict:
             "schema": {"const": GENE_SCHEMA},
             "schema_version": {"const": GENE_SCHEMA_VERSION},
             "identity": _HASH,
-            "kind": {"enum": list(KINDS)},
+            "kind": {"enum": list(GENE_KINDS)},
             "anchors": {**_STRINGS, "minItems": 1},
             "provides": _STRINGS,
             "members": {"type": "array", "minItems": 1, "items": member},
@@ -122,8 +121,19 @@ def fixtures() -> dict[str, dict]:
         {"what": "json-entry", "path": "data/config/settings.json#/example_mod_sfx", "sha256": hashlib.sha256(b"true").hexdigest(),
          "reason": "settings key a member script reads"}], key=lambda m: (m["what"], m["path"]))
     settings["identity"] = identity(settings["kind"], settings["members"])
+    plugin = copy.deepcopy(base)  # a combat plugin: its registration is a nested settings.json key (P2's shape)
+    registration = "data/config/settings.json#/plugins/example_CombatPlugin"
+    plugin["members"] = sorted([
+        {"what": "jar-class", "path": "jars/example.jar!data/scripts/example_CombatPlugin.class",
+         "sha256": hashlib.sha256(b"fixture class").hexdigest(), "reason": "the plugin class"},
+        {"what": "json-entry", "path": registration, "sha256": hashlib.sha256(b"registration").hexdigest(),
+         "reason": "the plugin's registration in settings.json's plugins map"}], key=lambda m: (m["what"], m["path"]))
+    plugin.update(kind="combat-plugin", anchors=["combat-plugin:example_CombatPlugin"], provides=["combat-plugin:example_CombatPlugin"],
+                  registrations=[{"locus": registration, "statement": "data.scripts.example_CombatPlugin"}],
+                  phenotype_obligations=list(PHENOTYPE["combat-plugin"]))
+    plugin["identity"] = identity(plugin["kind"], plugin["members"])
     out = {"valid-hullmod.json": base, "valid-same-gene-other-mod.json": moved, "valid-adapted-gene.json": adapted,
-           "valid-settings-entries.json": settings}
+           "valid-settings-entries.json": settings, "valid-combat-plugin.json": plugin}
 
     def broken(name: str, change) -> None:
         gene = copy.deepcopy(base)

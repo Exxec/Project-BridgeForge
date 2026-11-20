@@ -36,7 +36,6 @@ import shutil
 import zipfile
 from pathlib import Path
 
-from bridgeforge.genome.closure import pointer
 from bridgeforge.genome.evidence import header
 from bridgeforge.genome.gene import describe, dumps
 from bridgeforge.licence_ledger import member_file
@@ -89,10 +88,49 @@ def cut_json_key(text: str, key: str) -> str | None:
     return text[:match.start()] + text[end:]
 
 
+def pointer_tokens(ptr: str) -> list[str]:
+    """The keys a JSON Pointer walks (RFC 6901: `~1` is `/`, `~0` is `~`)."""
+    return [token.replace("~1", "/").replace("~0", "~") for token in ptr[1:].split("/")]
+
+
+def _nested_get(data: dict, tokens: list[str]) -> object:
+    for token in tokens:
+        data = data[token]
+    return data
+
+
+def _nested_pop(data: dict, tokens: list[str]) -> None:
+    for token in tokens[:-1]:
+        data = data.get(token, {}) if isinstance(data, dict) else {}
+    if isinstance(data, dict):
+        data.pop(tokens[-1], None)
+
+
+def _nested_set(data: dict, tokens: list[str], value: object) -> None:
+    for token in tokens[:-1]:
+        data = data.setdefault(token, {})
+    data[tokens[-1]] = value
+
+
 def subtract(root: Path, gene: dict, dest: Path) -> list[str]:
-    """Copy the donor to `dest` without the gene's members; the notes say which files were re-written whole."""
-    shutil.copytree(root, dest, ignore=shutil.ignore_patterns("reports"))
+    """Copy the donor to `dest` without the gene's members; the notes say which files were re-written whole. A jar that
+    loses classes is not copied and then rewritten (a just-copied jar can be held open by a scanner on Windows: P2,
+    2026-11-19): it is written once, fresh, from the donor's jar without those entries."""
+    dropped: dict[str, set[str]] = {}
+    for member in gene["members"]:
+        if member["what"] == "jar-class":
+            jar, _, entry = member["path"].partition("!")
+            dropped.setdefault(jar, set()).add(entry)
+    skip = {(Path(root) / jar).resolve() for jar in dropped}
+
+    def ignore(folder: str, names: list[str]) -> set[str]:
+        return {n for n in names if n == "reports" or (Path(folder) / n).resolve() in skip}
+
+    shutil.copytree(root, dest, ignore=ignore)
     notes = []
+    for jar, entries in sorted(dropped.items()):
+        _write_jar_without(Path(root) / jar, dest / jar, entries)
+        notes.append(f"{jar} written without {len(entries)} class(es) of the gene by zipfile (static scan only)")
     for member in gene["members"]:
         path = member["path"]
         if member["what"] == "file":
@@ -104,31 +142,27 @@ def subtract(root: Path, gene: dict, dest: Path) -> list[str]:
             atomic_write_text(target, text, newline="")
         elif member["what"] == "json-entry":
             file, _, ptr = path.partition("#")
-            target, key = dest / file, ptr[1:].replace("~1", "/").replace("~0", "~")
+            target, tokens = dest / file, pointer_tokens(ptr)
             text = target.read_text(encoding="utf-8-sig")
-            cut = cut_json_key(text, key)
+            cut = cut_json_key(text, tokens[0]) if len(tokens) == 1 else None  # a nested key's line is not cut by text
             if cut is None:
                 data, _ = _parse_json(text)
-                data.pop(key, None)
+                _nested_pop(data, tokens)
                 cut = json.dumps(data, indent=2) + "\n"
-                notes.append(f"{file} re-written whole to remove {pointer(key)} (its value spans lines)")
+                why = "a nested key" if len(tokens) > 1 else "its value spans lines"
+                notes.append(f"{file} re-written whole to remove {ptr} ({why})")
             atomic_write_text(target, cut, newline="")
-        elif member["what"] == "jar-class":
-            jar, _, entry = path.partition("!")
-            _drop_jar_entry(dest / jar, entry)
-            notes.append(f"{jar} copied without {entry} by zipfile (static scan only)")
     return notes
 
 
-def _drop_jar_entry(jar: Path, entry: str) -> None:
+def _write_jar_without(source_jar: Path, target: Path, entries: set[str]) -> None:
     from bridgeforge.zipsafe import read_limited
 
-    kept = jar.with_name(jar.name + ".tmp")
-    with zipfile.ZipFile(jar) as source, zipfile.ZipFile(kept, "w", zipfile.ZIP_DEFLATED) as out:
+    target.parent.mkdir(parents=True, exist_ok=True)
+    with zipfile.ZipFile(source_jar) as source, zipfile.ZipFile(target, "w", zipfile.ZIP_DEFLATED) as out:
         for item in source.infolist():
-            if item.filename != entry:
+            if item.filename not in entries:
                 out.writestr(item, read_limited(source, item.filename))
-    kept.replace(jar)
 
 
 def build_carrier(root: Path, gene: dict, dest: Path) -> None:
@@ -157,8 +191,8 @@ def build_carrier(root: Path, gene: dict, dest: Path) -> None:
         elif member["what"] == "json-entry":
             file, _, ptr = path.partition("#")
             data, _ = _parse_json((root / file).read_text(encoding="utf-8-sig"))
-            key = ptr[1:].replace("~1", "/").replace("~0", "~")
-            settings.setdefault(file, {})[key] = data[key]
+            tokens = pointer_tokens(ptr)
+            _nested_set(settings.setdefault(file, {}), tokens, _nested_get(data, tokens))
         elif member["what"] == "jar-class":
             jar, _, entry = path.partition("!")
             from bridgeforge.zipsafe import read_limited
@@ -249,7 +283,12 @@ def prove(mod: Path, anchor: str, out: Path, *, vanilla_core: Path | None = None
     if out.exists() and any(out.iterdir()):
         raise ProofError(f"{out} is not empty: proofs go into a fresh folder")
     gene = describe(mod, anchor, vanilla_core=vanilla_core)
-    plan = vendor_plan(mod, [anchor], vanilla_core=vanilla_core)
+    # Who in the donor uses the gene: vendor-plan from the gene's content ids and the classes it registers (a combat
+    # plugin's anchor is not a vendor-plan id).
+    from bridgeforge.vendor_plan import KINDS
+
+    plan = vendor_plan(mod, [p for p in gene["provides"] if p.split(":", 1)[0] in KINDS], vanilla_core=vanilla_core,
+                       classes=[element["statement"] for element in gene["registrations"]])
     root = Path(plan["provider"])
     work = out / "work"
     notes = subtract(root, gene, work / "subtraction")
@@ -268,4 +307,4 @@ def prove(mod: Path, anchor: str, out: Path, *, vanilla_core: Path | None = None
     return {"gene": gene["identity"], "root": str(root), "verdicts": written, "out": str(out)}
 
 
-__all__ = ["ProofError", "build_carrier", "classify_isolation", "classify_subtraction", "cut_csv_row", "cut_json_key", "prove", "subtract"]
+__all__ = ["ProofError", "build_carrier", "classify_isolation", "classify_subtraction", "cut_csv_row", "cut_json_key", "pointer_tokens", "prove", "subtract"]

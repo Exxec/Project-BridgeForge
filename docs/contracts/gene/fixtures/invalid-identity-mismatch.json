@@ -1,6 +1,6 @@
 {
   "schema": "bridgeforge-gene",
-  "schema_version": 3,
+  "schema_version": 4,
   "identity": "0000000000000000000000000000000000000000000000000000000000000000",
   "kind": "hullmod",
   "anchors": [

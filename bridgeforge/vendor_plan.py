@@ -136,7 +136,8 @@ class _Index:
 
 
 def vendor_plan(provider: Path, ids: list[str], *, target: Path | None = None, vanilla_core: Path | None = None,
-                policy_path: Path | None = None) -> dict:
+                policy_path: Path | None = None, classes: list[str] | None = None) -> dict:
+    """`classes` (dotted names) also seed the closure: a combat-plugin gene starts from its class (ROADMAP-3 94.G2 schema 4)."""
     root = _mod_root(provider)
     requested = []
     for item in ids:
@@ -157,6 +158,7 @@ def vendor_plan(provider: Path, ids: list[str], *, target: Path | None = None, v
     already: list[str] = []
     closure_ids: set[tuple[str, str]] = set()
     queue: list[tuple[str, str, str]] = [("id", f"{kind}:{ident}", "requested") for kind, ident in requested]
+    queue += [("class", name, "requested") for name in classes or []]
     seen: set[tuple[str, str]] = set()
 
     def add(what: str, path: str, reason: str) -> None:

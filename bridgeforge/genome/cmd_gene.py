@@ -5,9 +5,9 @@ import argparse
 import sys
 from pathlib import Path
 
-from bridgeforge.vendor_plan import KINDS, VendorPlanError
+from bridgeforge.vendor_plan import VendorPlanError
 
-from .gene import GeneError, describe, dumps
+from .gene import CLOSABLE_KINDS, GeneError, describe, dumps
 
 
 def add_parser(subcommands) -> None:
@@ -16,7 +16,7 @@ def add_parser(subcommands) -> None:
     describe_cmd = gene_sub.add_parser("describe", help="write the gene manifest of one content piece: its members with hashes, needs, licence, "
                                                         "phenotype obligations and a content-hash identity")
     describe_cmd.add_argument("mod", type=Path, help="mod folder or workspace (working/ is used)")
-    describe_cmd.add_argument("anchor", help=f"kind:id, kind one of {', '.join(KINDS)}")
+    describe_cmd.add_argument("anchor", help=f"kind:id, kind one of {', '.join(CLOSABLE_KINDS)}")
     describe_cmd.add_argument("--vanilla-core", type=Path, help="starsector-core, so parts vanilla provides are listed as needs, not missing")
     describe_cmd.add_argument("--write", type=Path, help="write the manifest to this file instead of printing it")
     contract_cmd = gene_sub.add_parser("contract", help="the gene.json contract sister repositories pin (GR-1): check the committed "
@@ -42,7 +42,7 @@ def add_parser(subcommands) -> None:
     prove_cmd = gene_sub.add_parser("prove", help="the static halves of a gene's subtraction and isolation proofs (94.G2), written with "
                                                   "gene.json as evidence files into a fresh folder; the boot halves need the test rig")
     prove_cmd.add_argument("mod", type=Path, help="mod folder or workspace (working/ is used)")
-    prove_cmd.add_argument("anchor", help=f"kind:id, kind one of {', '.join(KINDS)}")
+    prove_cmd.add_argument("anchor", help=f"kind:id, kind one of {', '.join(CLOSABLE_KINDS)}")
     prove_cmd.add_argument("--out", type=Path, required=True, help="a new or empty folder outside the repository (it holds copies of the mod)")
     prove_cmd.add_argument("--vanilla-core", type=Path, help="starsector-core, for vanilla needs and the scans")
     evidence_cmd = gene_sub.add_parser("evidence", help="evidence files about a gene (WP5): check that one carries the common header and is "

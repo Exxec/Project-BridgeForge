@@ -50,7 +50,8 @@ class GeneManifestTests(unittest.TestCase):
     def test_a_bad_anchor_or_an_id_the_mod_lacks_is_refused(self) -> None:
         with resolved_temp_dir() as root:
             mod = _rebal(root)
-            for anchor, message in (("faction:x", "kind one of"), ("weapon", "kind one of"), ("weapon:nope", "not defined")):
+            for anchor, message in (("planet:x", "kind one of"), ("faction:x", "cannot be closed yet"), ("weapon", "kind one of"),
+                                    ("weapon:nope", "not defined")):
                 with self.subTest(anchor=anchor), self.assertRaisesRegex(GeneError, message):
                     describe(mod, anchor)
 
