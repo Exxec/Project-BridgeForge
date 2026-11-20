@@ -39,6 +39,12 @@ def add_parser(subcommands) -> None:
     census_cmd.add_argument("--write", type=Path, required=True, help="the per-mod result (JSON); keep it outside the repository, it "
                                                                      "names third-party mods. A checkpoint sits beside it while running")
     census_cmd.add_argument("--quiet", action="store_true", help="no per-mod progress lines on stderr")
+    prove_cmd = gene_sub.add_parser("prove", help="the static halves of a gene's subtraction and isolation proofs (94.G2), written with "
+                                                  "gene.json as evidence files into a fresh folder; the boot halves need the test rig")
+    prove_cmd.add_argument("mod", type=Path, help="mod folder or workspace (working/ is used)")
+    prove_cmd.add_argument("anchor", help=f"kind:id, kind one of {', '.join(KINDS)}")
+    prove_cmd.add_argument("--out", type=Path, required=True, help="a new or empty folder outside the repository (it holds copies of the mod)")
+    prove_cmd.add_argument("--vanilla-core", type=Path, help="starsector-core, for vanilla needs and the scans")
     evidence_cmd = gene_sub.add_parser("evidence", help="evidence files about a gene (WP5): check that one carries the common header and is "
                                                         "about this gene as it stands")
     evidence_sub = evidence_cmd.add_subparsers(dest="evidence_command", required=True)
@@ -82,9 +88,25 @@ def _run_census(args: argparse.Namespace) -> int:
     return 0
 
 
+def _run_prove(args: argparse.Namespace) -> int:
+    from .proof import ProofError, prove
+
+    try:
+        result = prove(args.mod, args.anchor, args.out, vanilla_core=args.vanilla_core)
+    except (ProofError, GeneError, VendorPlanError, OSError) as exc:
+        print(f"bridgeforge: {exc}", file=sys.stderr)
+        return 2
+    for kind, verdict in result["verdicts"].items():
+        print(f"{kind}: {verdict} (static half; boot half NOT_RUN)")
+    print(f"gene {result['gene'][:16]}; evidence in {result['out']}")
+    return 0 if all(v == "PASS" for v in result["verdicts"].values()) else 1
+
+
 def run_cli(args: argparse.Namespace) -> int:
     if args.command != "gene":
         return 2
+    if args.gene_command == "prove":
+        return _run_prove(args)
     if args.gene_command == "census":
         return _run_census(args)
     if args.gene_command == "evidence":

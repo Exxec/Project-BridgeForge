@@ -54,6 +54,8 @@ class PathExceptionTests(unittest.TestCase):
         self.assertEqual(found, ["graphics/other_author/a.png", "graphics/other_author", "jars/bundled.jar!a/B.class",
                                  "data/hullmods/hull_mods.csv [x_radar]"])
         self.assertEqual(member_file("jars/x.jar!a/B.class"), "jars/x.jar")
+        self.assertEqual(member_file("data/config/settings.json#/sa_key"), "data/config/settings.json")  # schema 3 json-entry
+        self.assertEqual(member_file("graphics/a#b.png"), "graphics/a#b.png")
 
     def test_a_prefix_that_leaves_the_mod_is_refused(self) -> None:
         with resolved_temp_dir() as base:

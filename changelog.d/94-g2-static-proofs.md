@@ -1,0 +1,1 @@
+- `gene prove MOD KIND:ID --out DIR` (ROADMAP-3 94.G2): the static halves of a gene's subtraction and isolation proofs as evidence files; references left dangling are sorted into dependents, leaks and unexplained. P1 passes both.

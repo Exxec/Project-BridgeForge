@@ -52,12 +52,14 @@ def release_gate(mod_id: str | None, name: str | None, policy_path: Path | None 
 
 _JAR_CLASS = re.compile(r"^(?P<file>.+?\.jar)!.")
 _CSV_ROW = re.compile(r"^(?P<file>.+?\.csv) \[.*\]$", re.IGNORECASE)
+_JSON_ENTRY = re.compile(r"^(?P<file>.+?\.json)#/", re.IGNORECASE)  # gene.json schema 3 (94.G2)
 
 
 def member_file(path: str) -> str:
-    """The file a member path names: `jars/x.jar!a/B.class` -> `jars/x.jar`, `t.csv [id]` -> `t.csv`. Other paths are files,
-    whatever they contain: `foo [v2].png` and `boom!.ogg` are names, not members of something."""
-    match = _JAR_CLASS.match(path) or _CSV_ROW.match(path)
+    """The file a member path names: `jars/x.jar!a/B.class` -> `jars/x.jar`, `t.csv [id]` -> `t.csv`,
+    `data/config/settings.json#/key` -> `data/config/settings.json`. Other paths are files, whatever they contain:
+    `foo [v2].png` and `boom!.ogg` are names, not members of something."""
+    match = _JAR_CLASS.match(path) or _CSV_ROW.match(path) or _JSON_ENTRY.match(path)
     return match["file"] if match else path
 
 
