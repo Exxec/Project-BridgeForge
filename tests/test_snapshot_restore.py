@@ -125,6 +125,24 @@ class RestoreTests(unittest.TestCase):
             result = restore_check(snap, base / "restored", source_root=root, quiet=True)
             self.assertEqual((result["verdict"], result["status_check"]["status"]), ("FAIL", "FAIL"))
 
+    def test_a_mod_copy_kept_in_state_is_judged_as_the_game_reads_it(self) -> None:
+        # Test1 2026-11-19: 460,382 files restored and verified, yet the status check failed on mod copies kept under
+        # bridgeforge-state (a mod_info.json with a trailing comma, a sounds.json with comments), legal for the game.
+        from bridgeforge.snapshot_restore import _status_check
+        with resolved_temp_dir() as base:
+            state = base / "dest" / "bridgeforge-state"
+            mod = state / "closure" / "P2" / "original-reference"
+            (mod / "data" / "config").mkdir(parents=True)
+            (mod / "mod_info.json").write_text('{"id": "p2", "name": "P2",}\n', encoding="utf-8")
+            (mod / "data" / "config" / "sounds.json").write_text('{\n  # a comment\n  music: {},\n}\n', encoding="utf-8")
+            (state / "own.json").write_text('{"ok": true}', encoding="utf-8")
+            self.assertEqual(_status_check(base / "dest", ["bridgeforge-state"])["problems"], [])
+            (mod / "data" / "config" / "sounds.json").write_text("{ not even lenient", encoding="utf-8")
+            (state / "own.json").write_text('{"ok": true,}', encoding="utf-8")  # BridgeForge's own state stays strict
+            problems = _status_check(base / "dest", ["bridgeforge-state"])["problems"]
+        self.assertEqual(len(problems), 2)
+        self.assertTrue(any("own.json" in p for p in problems) and any("sounds.json" in p for p in problems))
+
     def test_cli_reports_exit_codes_and_progress(self) -> None:
         with resolved_temp_dir() as base:
             root, snap = _snapshot(base)
