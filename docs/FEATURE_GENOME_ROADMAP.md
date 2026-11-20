@@ -126,7 +126,10 @@ several features, so the gene records the exact statements it needs and the tool
 proofs per gene: *subtraction* (donor minus gene: no dangling references, still boots) and *isolation* (gene plus its needs in
 an empty carrier: scans clean, boots).
 *Accept:* both proofs pass for the G-pilots; every SUSPECT resolved by a person or listed as an unknown; every proof file
-carries the evidence header (WP5) and passes `gene evidence check` against its gene.
+carries the evidence header (WP5) and passes `gene evidence check` against its gene. Subtraction passes when every reference
+left dangling names an id the gene provides: another feature of the donor depending on the gene (P1's Ebirah hull has the
+lobster tanks built in) is recorded as a dependent, not a failure; a reference to anything else of the gene is a leak
+(2026-11-19).
 
 **G3. Gene bank.** A content-addressed store of manifests and payloads, indexed by kind, anchor, build, licence and allele;
 duplicates across the 300+ mod corpus found; lineage (which mod copied which feature) recorded. RevenantLib is the

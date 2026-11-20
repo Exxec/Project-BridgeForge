@@ -1360,8 +1360,46 @@ history as the closure benchmark, a cross-repository trace check, an early Java 
     Also new contract fixtures: `valid-settings-entries.json`, plus three invalid `json-entry` paths, each breaking
     one rule. Mutation-checked: 8 mutants killed. Two survived at first and showed real holes, now fixed: a commodity
     id the core lacks was dropped silently, and the bytecode owner filter was untested.
-  - Next: P1's proof files (subtraction and isolation, static halves PASS/FAIL, boot halves NOT_RUN until live testing
-    resumes), the first producer of the WP5 header.
+  **Slice 2 Done 2026-11-19: the static halves of the proofs, and P1 passes both.**
+  - `bridgeforge gene prove MOD KIND:ID --out DIR` (`bridgeforge/genome/proof.py`) writes `gene.json` and two WP5
+    evidence files into a fresh folder outside the repository, the first producer of the header. Each file carries
+    `half: static`, and `boot: NOT_RUN` until live testing runs the boot halves.
+  - **Subtraction:** a copy of the donor without the gene's members is scanned and compared with the donor's scan. The
+    comparison is by the references each finding names, not by finding keys: `content-reference-unresolved` gathers all
+    of a mod's unresolved references, so a key diff would hide a new one inside an old finding. Each new reference is
+    one of:
+    - a **dependent**, which names an id the gene provides: another feature uses the gene, an edge recorded in the proof;
+    - a **leak**, which names another part of the gene (its class, a settings key, a sprite): the closure took something
+      shared;
+    - **unexplained**.
+
+    PASS when every new reference is a dependent (advisor review 2026-11-19, which also set this acceptance).
+  - **Isolation:** a carrier mod holding only the gene's members is scanned. A finding the donor has for the same file is
+    inherited, and one about the carrier's own `mod_info.json` is the carrier's. Anything else fails it, as does a
+    reference left unresolved outside the gene's provides and needs. The rule was chosen against P1's real carrier scan.
+  - The copies leave what the gene does not own untouched. A CSV row is cut from the table's text, with the id column
+    found from the header. A settings key's line is cut from `settings.json`. A value that spans lines means re-writing
+    the file, and the proof says so. Jar members are zip-copied for these static scans only; the boot halves will use the
+    JDK `jar` tool.
+  - **P1 (`hullmod:sa_lobster_tanks`, gene `bb64ad41…`): subtraction PASS with one dependent, `data/hulls/sa_lobster.ship`
+    (the Ebirah's built-in hull mod), no leak and nothing unexplained. Isolation PASS: an inherited Janino risk and the
+    carrier's `mod_info` version.** Both files pass `gene evidence check --root` with 4 inputs re-hashed. The record is in
+    `In operation/Scrapyard-Armories/genes/p1-sa_lobster_tanks-20261119/`.
+  - The licence ledger's `member_file` now knows schema 3's `json-entry` form. Without that, a local-only path
+    exception on `settings.json` would have missed the gene's settings keys.
+  - Tests: `tests/test_gene_proof.py`:
+    - CSV and settings-key cuts byte for byte, including a multi-line cell, the id column found from the header, and a
+      refused multi-line value;
+    - dependent, leak and unexplained;
+    - a new reference inside a finding the donor already had;
+    - isolation's inherited, carrier and failing cases;
+    - `prove` end to end, leaving the donor untouched and refusing a used folder;
+    - the CLI.
+
+    Two bugs were caught before merge: a multi-line array's first line was cut, and a dotted class name hid a leak.
+    Mutation-checked: 8 mutants killed.
+  - Next: P2 (Navarchy of Tania's jar-backed junkyard spawner: jar-class members, the combat plugin), then P3 (Eridani's
+    Pantheon system, the first registration slice). The boot halves of P1's proofs run when live testing resumes.
 - 94.G3 **Gene bank**: content-addressed store, alleles across the corpus, lineage, licence state; RevenantLib distributes genes
   from vanished authors (GD-3). The store's payloads live under `data_root()`, like `Done/`, never in this public
   repository; only manifests of the owner's own or permitted content become committed fixtures (2026-11-19).
