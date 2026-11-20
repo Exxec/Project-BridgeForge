@@ -17,6 +17,10 @@ A carrier holding only the system cannot boot, so this builds one carrier from t
 - **Isolation.** What the carrier's scan finds unresolved may name only the set's `provides` and its vanilla needs. The
   single-gene allowance for `needs.genes` is dropped. An unresolved reference naming a set id means a gene's closure misses
   a member: that is a finding, not something to tune away.
+- **Resolution (slice 12).** The scan alone was blind: P3's set still passed with a weapon, a hull or the faction knocked
+  out, since the scanner checks neither faction lists nor a faction's presence. So every anchor a carried gene provides or
+  needs must also be defined in the built carrier (a table row or spec, a listed .faction, a star system's generator, a
+  registered combat plugin's class, a campaign row or key); one that is not FAILs the set.
 - **Suspects** are bucketed by file. The ids they mention that the set does not provide and no carried gene lists as a
   vanilla need are listed as `not_carried`, so a boot Fatal can be explained later.
 
@@ -155,6 +159,65 @@ def carried_order(anchor: str, genes: dict[str, dict]) -> list[str]:
     return [anchor] + sorted(a for a in genes if a != anchor)
 
 
+def _class_present(index, dotted: str) -> bool:
+    return dotted in index.jar_classes or dotted in index.sources
+
+
+def _anchor_missing(carrier: Path, anchor: str, index, campaign) -> str | None:
+    """Why the built carrier does not define `anchor`, or None when it does."""
+    from bridgeforge.genome.campaign import CAMPAIGN_CSV, CAMPAIGN_JSON, resolve_star_system
+    from bridgeforge.genome.closure import _settings
+    from bridgeforge.genome.faction import FACTIONS_CSV
+    from bridgeforge.genome.gene import keyed_rows
+    from bridgeforge.vendor_plan import KINDS
+
+    kind, _, ident = anchor.partition(":")
+    if kind in KINDS:
+        return None if index.defines(kind, ident) else f"no {kind} definition of {ident} in the carrier"
+    if kind == "faction":
+        path = campaign.factions.get(ident)
+        if path is None:
+            return "no .faction file with that id in the carrier"
+        return None if path in keyed_rows(carrier, FACTIONS_CSV) else f"the carrier's {FACTIONS_CSV} does not list {path}"
+    if kind == "star-system":
+        try:
+            resolve_star_system(carrier, ident)
+        except GeneError as exc:
+            return str(exc)
+        return None
+    if kind == "combat-plugin":
+        plugins = _settings(carrier).get("plugins")
+        plugin_class = plugins.get(ident) if isinstance(plugins, dict) else None
+        if not isinstance(plugin_class, str):
+            return "the carrier's settings.json registers no plugin under that key"
+        return None if _class_present(index, plugin_class.strip()) else f"the carrier holds no class {plugin_class.strip()}"
+    if kind in CAMPAIGN_CSV:
+        return None if ident in campaign.rows.get(kind, {}) else f"no {CAMPAIGN_CSV[kind]} row {ident} in the carrier"
+    if kind in CAMPAIGN_JSON:
+        return None if ident in campaign.keys.get(kind, {}) else f"no {CAMPAIGN_JSON[kind]} key {ident} in the carrier"
+    return f"kind {kind} is not checked in a carrier"
+
+
+def unresolved_in_carrier(carrier: Path, genes: dict[str, dict]) -> list[dict]:
+    """Each anchor a carried gene provides or needs (`needs.genes`) that the built carrier does not define, with the genes
+    naming it. A knock-out of P3's closure (2026-11-20) passed the scan-based isolation with a weapon, a hull or even the
+    faction removed: the scanner checks neither faction lists nor a faction's presence. This check sees each of them."""
+    from bridgeforge.genome.campaign import _CampaignIndex
+    from bridgeforge.vendor_plan import _Index
+
+    named: dict[str, set[str]] = {}
+    for anchor, gene in genes.items():
+        for wanted in [*gene["provides"], *(gene["needs"].get("genes") or [])]:
+            named.setdefault(wanted, set()).add(anchor)
+    index, campaign = _Index(Path(carrier)), _CampaignIndex(Path(carrier))
+    result = []
+    for wanted in sorted(named):
+        why = _anchor_missing(Path(carrier), wanted, index, campaign)
+        if why:
+            result.append({"anchor": wanted, "named_by": sorted(named[wanted]), "why": why})
+    return result
+
+
 def _manifest_name(number: int, anchor: str) -> str:
     kind, _, ident = anchor.partition(":")
     return f"{number:03d}-{kind}-{re.sub(r'[^A-Za-z0-9_.-]', '_', ident)[:80]}.json"
@@ -199,7 +262,8 @@ def prove_set(mod: Path, anchor: str, out: Path, *, vanilla_core: Path | None, q
                "needs": {"vanilla": sorted({v for g in genes.values() for v in g["needs"]["vanilla"]}), "genes": []}}
     isolation = classify_isolation(scan_mod(root, TargetProfile(), vanilla_core),
                                    scan_mod(work / "carrier", TargetProfile(), vanilla_core), allowed)
-    verdict = "FAIL" if isolation["failures"] or refused else "PASS"
+    unresolved = unresolved_in_carrier(work / "carrier", genes)
+    verdict = "FAIL" if isolation["failures"] or refused or unresolved else "PASS"
     buckets, not_carried = suspect_buckets(genes)
     anchor_gene = genes[anchor]
     atomic_write_text(out / "gene.json", dumps(anchor_gene), newline="")
@@ -212,6 +276,7 @@ def prove_set(mod: Path, anchor: str, out: Path, *, vanilla_core: Path | None, q
                          **({"plugin": plugin} if plugin else {})},
              "carried": [{"anchor": a, "identity": genes[a]["identity"]} for a in order],
              "refused": [{"anchor": a, "reason": refused[a]} for a in sorted(refused)],
+             "unresolved_in_carrier": unresolved,
              "registrations_not_made": registrations_not_made(genes, made_by),
              **{k: v for k, v in isolation.items() if k != "verdict"}, "verdict": verdict,
              "suspects": buckets, "not_carried": not_carried,
@@ -220,7 +285,8 @@ def prove_set(mod: Path, anchor: str, out: Path, *, vanilla_core: Path | None, q
     if checkpoint_path.is_file():
         checkpoint_path.unlink()  # the checkpoint goes only once the full result is on disk
     return {"gene": anchor_gene["identity"], "carried": len(genes), "refused": len(refused), "failures": len(isolation["failures"]),
-            "verdict": verdict, "out": str(out)}
+            "unresolved": len(unresolved), "verdict": verdict, "out": str(out)}
 
 
-__all__ = ["SET_PROOF", "merge_members", "prove_set", "registrations_not_made", "set_identity", "suspect_buckets", "walk"]
+__all__ = ["SET_PROOF", "merge_members", "prove_set", "registrations_not_made", "set_identity", "suspect_buckets",
+           "unresolved_in_carrier", "walk"]
