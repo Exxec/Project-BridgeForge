@@ -1,0 +1,1 @@
+- The live harness waits for a probe battle's END for the last SPACE retry plus a whole round (255 s, was a flat 240 s), so a round started by the last retry is no longer cut off (ROADMAP-3 93.62).
