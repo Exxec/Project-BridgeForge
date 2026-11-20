@@ -7,8 +7,9 @@ A gate is one claim that stays open until a person or a rig run settles it. `gat
 GATE keys (all required unless marked optional):
   id          unique within the file, `[A-Za-z0-9][A-Za-z0-9._-]*`
   title       one line saying what the gate closes
-  state       PASS | FAIL | NOT_TESTED | LIVE_PENDING | BLOCKED
-  evidence    list of paths or run ids; must be non-empty when state is PASS
+  state       PASS | FAIL | NOT_TESTED | LIVE_PENDING | BLOCKED | SUPERSEDED (its subject left Done/ for a newer archive, on the
+              owner's word; closed like PASS)
+  evidence    list of paths or run ids; must be non-empty when state is PASS or SUPERSEDED
   needs       {"rig": bool (required); "mods": [mod ids]; "save": bool; "java": str|null; "launcher": str|null;
                "lunalib": bool|null; "scenario": str|null}  (absent keys mean [], false, null)
   commands    list of exact command lines, in order
@@ -32,8 +33,9 @@ from .safeio import atomic_write_json
 
 SCHEMA = 1
 GATES_FILE = "gates.json"
-STATES = ("PASS", "FAIL", "NOT_TESTED", "LIVE_PENDING", "BLOCKED")
-RECORDABLE = ("PASS", "FAIL", "NOT_TESTED")
+STATES = ("PASS", "FAIL", "NOT_TESTED", "LIVE_PENDING", "BLOCKED", "SUPERSEDED")
+RECORDABLE = ("PASS", "FAIL", "NOT_TESTED", "SUPERSEDED")
+CLOSED = ("PASS", "SUPERSEDED")  # states that need evidence and leave the live-pending plan
 _ID = re.compile(r"[A-Za-z0-9][A-Za-z0-9._-]*\Z")
 _DATE = re.compile(r"\d{4}-\d{2}-\d{2}\Z")
 _NEEDS_TYPES = {"rig": bool, "save": bool, "mods": list, "java": str, "launcher": str, "lunalib": bool, "scenario": str}
@@ -87,8 +89,8 @@ def _gate_problems(gate: dict) -> list[str]:
         problems.append(f"state must be one of {'|'.join(STATES)}")
     if not _is_str_list(gate.get("evidence")):
         problems.append("evidence must be a list of non-empty strings")
-    elif gate.get("state") == "PASS" and not gate["evidence"]:
-        problems.append("a PASS gate needs evidence")
+    elif gate.get("state") in CLOSED and not gate["evidence"]:
+        problems.append(f"a {gate['state']} gate needs evidence")
     if not _is_str_list(gate.get("commands")):
         problems.append("commands must be a list of non-empty strings")
     if not isinstance(gate.get("updated"), str) or not _DATE.match(gate["updated"]):
@@ -184,8 +186,8 @@ def record_gate(repo: Path, gate_id: str, state: str, evidence: list[str], today
     data = load_gates(repo)
     if not any(gate["id"] == gate_id for gate in data["gates"]):
         raise ValueError(f"no gate {gate_id} in {gates_path(repo)}")
-    if state == "PASS" and not evidence:
-        raise ValueError("a PASS needs --evidence")
+    if state in CLOSED and not evidence:
+        raise ValueError(f"a {state} needs --evidence")
     stamp = today or date.today().isoformat()
     updated = [{**gate, "state": state, "evidence": list(evidence) or list(gate["evidence"]), "updated": stamp}
                if gate["id"] == gate_id else gate for gate in data["gates"]]
@@ -219,12 +221,13 @@ def _compatible(host: Block, group: Block) -> bool:
 
 
 def collect_open_gates(repos: list[Path]) -> tuple[list[tuple[str, dict]], list[tuple[str, dict]]]:
-    """(rig gates to plan, blocked rig gates) over every repo, as (repo name, gate); PASS and no-rig gates are left out."""
+    """(rig gates to plan, blocked rig gates) over every repo, as (repo name, gate); closed (PASS, SUPERSEDED) and no-rig gates are
+    left out."""
     planned, blocked = [], []
     for repo in repos:
         data = load_gates(repo)
         for gate in data["gates"]:
-            if gate["state"] == "PASS" or not gate["needs"]["rig"]:
+            if gate["state"] in CLOSED or not gate["needs"]["rig"]:
                 continue
             (blocked if gate["state"] == "BLOCKED" else planned).append((data["repo"], gate))
     return planned, blocked

@@ -183,6 +183,10 @@ Built and unit-tested offline; nothing below has been run. Order matters: R1 fir
     the probe; New Game with the Betelgeuse (`ART_dimention`) in the player fleet; destroy one module and damage another's hull
     and armor; log hull and armor fractions; 10 campaign days; save, reload, compare. Pass: values match and no
     `SEEKER.twig.*` class error. Needs the small `BF-SKRTWIG|...` logging hook from `In operation/SEEKER/working/reports/TWIG_RECREATION_PLAN.md`.
+    **Superseded 2026-11-19 (owner: "Close as superseded").** The Betelgeuse and TWIG code belong to SEEKER 0.3.0+bf.5, whose
+    archive moved to `Done/_replaced-2026-11-17/` when SEEKER 0.6.6 replaced it; 0.6.6 has no `ART_dimention` and no TWIG code.
+    Gate bf-0b-15 is SUPERSEDED; no hook was built. (RC7's `FleetMemberStatusAPI` can set and read per-module hull, detached
+    flags and armor cells campaign-side, should the old build ever need the check.)
 16. **Ironclads launcher matrix (owner 2026-10-22).** Owner reports a start-up crash on the archived v.11+bf.1 (no crash log
     found on this machine; the rig copy matches the release except `data/missions/mission_list.csv`). Run Ironclads alone with the
     probe on six launches: FR (Java 25), FR + Java 28 and Java 28 direct, each without and with the pre-patcher
@@ -207,6 +211,10 @@ Built and unit-tested offline; nothing below has been run. Order matters: R1 fir
     [BF r1] 1.0.e+bf.1 and (c) RevenantLib 1.2.0+bf.1 were archived before any live run. BF-Legacy-Fleets has no original/ by
     design (BridgeForge's own mod). No LIVE_VALIDATED workspace lacks an archive; no prepared revision is unfinished. Gates
     bf-strag-*.
+    **(a) done 2026-11-19:** Station Augments 2.4.3+bf.1, the 96.2 port, ran SA-SR3-20261119 on Test1's 0.98.5a rig (`--save-reload
+    --direct`): LIVE_DONE, report PASS, FATAL 0; the reload LIVE_DONE with `reload_after_save` true. Its fingerprint differed only in
+    `systems` (galatia 285 to 243 entities), the RC8-41 shape that all 20 save-reload compares on Test1 show. Recorded and
+    archived with `--refresh`; gate bf-strag-station-augments PASS.
 
 Rewritten 2026-09-27 after the local and cloud histories merged. Closed and removed: the MOVES.log
 shadowing audit (P14 item 27, done locally in `0183ab3`) and the Maelstrom dependency-jar check

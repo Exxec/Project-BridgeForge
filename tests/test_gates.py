@@ -131,6 +131,18 @@ class GatesRecordTests(unittest.TestCase):
                 record_gate(repo, "a", "BLOCKED", ["x"])
             self.assertEqual(load_gates(repo)["gates"][0]["state"], "LIVE_PENDING")
 
+    def test_superseded_is_recorded_with_evidence_only(self):
+        # bf-0b-15 (2026-11-19): SEEKER 0.3.0+bf.5's Betelgeuse gate, closed when SEEKER 0.6.6 replaced that archive.
+        with tempfile.TemporaryDirectory() as tmp:
+            repo = make_repo(Path(tmp), "r", [make_gate("a")])
+            with self.assertRaises(ValueError):
+                record_gate(repo, "a", "SUPERSEDED", [])
+            gate = record_gate(repo, "a", "SUPERSEDED", ["Done/_replaced-2026-11-17/SEEKER"], today="2026-11-19")
+            self.assertEqual(gate["state"], "SUPERSEDED")
+            self.assertEqual(validate_gates(load_gates(repo)), [])
+            self.assertIn("gate a: a SUPERSEDED gate needs evidence",
+                          validate_gates({**load_gates(repo), "gates": [{**gate, "evidence": []}]}))
+
     def test_record_command(self):
         with tempfile.TemporaryDirectory() as tmp:
             repo = make_repo(Path(tmp), "r", [make_gate("a")])
@@ -151,6 +163,7 @@ class LivePendingPlanTests(unittest.TestCase):
             make_gate("other-java", mods=["lazy"], java="17"),
             make_gate("no-rig", rig=False) | {"needs": {"rig": False}},
             make_gate("done", state="PASS") | {"evidence": ["e"]},
+            make_gate("gone", state="SUPERSEDED", mods=["lazy"]) | {"evidence": ["e"]},
             make_gate("blocked", state="BLOCKED", mods=["x"]),
         ])
         self.two = make_repo(root, "two", [make_gate("also", mods=["nex"], save=True), make_gate("fail", state="FAIL", mods=["lazy"], java="25")])
@@ -177,6 +190,7 @@ class LivePendingPlanTests(unittest.TestCase):
         self.assertIn("one:big", plan)
         self.assertNotIn("no-rig", plan)
         self.assertNotIn("one:done", plan)
+        self.assertNotIn("one:gone", plan)  # a superseded gate is closed, like PASS
         self.assertIn("## Blocked (not scheduled)", plan)
 
     def test_board_live_pending_writes_file(self):
