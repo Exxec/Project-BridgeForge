@@ -98,9 +98,18 @@ Write the body to a file and pass it with `gh pr create --body-file <file>`, whi
 
 ## 8. CI and merge
 
+Run `bash .claude/skills/bridgeforge-pr/scripts/merge_when_clean.sh <N>` in the background right after the push. It waits for the checks to settle, then
+merges by the head commit CI saw, and only when `mergeStateStatus` is CLEAN. UNSTABLE means a red check and is never merged
+(#185 was, by mistake, 2026-11-19); `--match-head-commit` does not stop that. It re-reads the head on every poll, so a push
+during the wait restarts the wait for the new head. `--no-merge` only waits and reports. Exit codes: 0 merged, 1 settled but
+not CLEAN (the failing checks are printed), 124 timeout.
+
+By hand, the same steps:
+
 ```bash
 gh pr checks <N>                                   # can show a stale "pending"; confirm with:
 gh run list --branch <branch> --limit 3
+gh pr view <N> --json mergeStateStatus,headRefOid  # merge only when CLEAN
 H=$(gh pr view <N> --json headRefOid -q .headRefOid)
 gh pr merge <N> --merge --match-head-commit "$H"   # merges exactly what CI saw
 ```

@@ -1,0 +1,1 @@
+- `bridgeforge-pr` skill: `scripts/merge_when_clean.sh <N>` waits for CI and merges only when the pull request is CLEAN, by the head commit CI saw, re-reading the head on every poll.
