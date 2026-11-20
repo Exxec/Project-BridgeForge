@@ -118,6 +118,12 @@
           "items": {
             "type": "string"
           }
+        },
+        "genes": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
         }
       }
     },

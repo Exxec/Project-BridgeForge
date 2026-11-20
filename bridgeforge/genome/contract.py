@@ -56,7 +56,8 @@ def json_schema() -> dict:
             "anchors": {**_STRINGS, "minItems": 1},
             "provides": _STRINGS,
             "members": {"type": "array", "minItems": 1, "items": member},
-            "needs": {"type": "object", "required": ["vanilla", "mods"], "properties": {"vanilla": _STRINGS, "mods": _STRINGS}},
+            "needs": {"type": "object", "required": ["vanilla", "mods"],
+                      "properties": {"vanilla": _STRINGS, "mods": _STRINGS, "genes": _STRINGS}},
             **{key: {"type": "array", "items": {"type": "object", "required": list(fields), "additionalProperties": True,
                                                 "properties": {f: {"type": "string", "minLength": 1} for f in fields}}}
                for key, fields in ELEMENT_FIELDS.items()},

@@ -80,14 +80,27 @@ def keys_read_by_source(text: str) -> set[str]:
 
 
 def keys_read_by_class(data: bytes) -> set[str]:
-    """Settings keys a compiled class passes, as its string argument, to a SettingsAPI getter."""
-    from bridgeforge.atlas.atlas_classfile import ClassFormatError, parse_class
+    """Settings keys a compiled class passes to a one-String SettingsAPI getter: a constant, directly or through a local.
+    `getString(category, id)` reads the string tables, not settings.json, and is not a key (P3, 2026-11-20: Eridani's
+    `getString("scripts", id)` read as a missing settings key `scripts`)."""
+    import struct
+
+    from bridgeforge.atlas.atlas_classfile import ClassFormatError, iter_method_code, last_argument_constants
+
+    def getter(owner: str, name: str, descriptor: str) -> bool:
+        return owner.endswith("SettingsAPI") and name in GETTERS and descriptor.startswith("(Ljava/lang/String;)")
 
     try:
-        info = parse_class(data, frozenset(GETTERS))
+        methods = iter_method_code(data)
     except ClassFormatError:
         return set()
-    return {arg[1] for call in info.calls if call.owner.endswith("SettingsAPI") for arg in call.args[:1] if arg[0] == "str"}
+    keys: set[str] = set()
+    for _owner, _method, code, pool, params in methods:
+        try:
+            keys |= {constant for *_call, constant in last_argument_constants(code, pool, getter, params) if constant}
+        except (ClassFormatError, struct.error, IndexError, KeyError):
+            continue  # an unreadable method names no key; the others still do
+    return keys
 
 
 def _core_commodities(vanilla_core: Path | None) -> tuple[dict[str, str], set[str]]:

@@ -1521,9 +1521,80 @@ history as the closure benchmark, a cross-repository trace check, an early Java 
     - a known library stays only when referenced, and an unknown one stays.
 
     Mutation-checked: 5 mutants killed.
-  - Next: P3 (Eridani's Pantheon system, the first registration slice). Its `onNewGame` builds `ECE_StarSystem` and
-    sets faction relations and a bounty entry in one helper, three features in one hook. The boot halves of P1's and
-    P2's proofs wait for live testing.
+  **Slice 6 Done 2026-11-20: `star-system` genes are described; P3 is Eridani's Pantheon (proofs are slice 7).**
+  - **The anchor.** `star-system:<name>` is the constant name a loaded mod class passes to `SectorAPI.createStarSystem`,
+    as a combat plugin is a key of `plugins`. Eridani passes it through a local (`String systemName = "Pantheon"`), which
+    the shared class scanner drops, so `atlas_classfile` gains two read-only helpers. `iter_method_code` gives each
+    method's bytecode. `last_argument_constants` gives a call's last argument when the instruction before the call is a
+    constant, or a load of a local whose every store is that constant. A call or a store a jump reaches takes no
+    constant (`c ? "A" : "B"` puts `ldc "B"` right before the call), and a parameter slot counts as a store of the
+    caller's value. A computed name, no class, or several classes are refused, each with its own message. Loose-script
+    generators are not closed yet.
+  - **The registration is an element, not a member.** Eridani's `onNewGame` reaches `generate`, which calls
+    `ECE_StarSystem` and also sets faction relations and a bounty entry: three features in one hook (GR-2's common case).
+    So the plugin class is not a member. Each call site into the generator is a `registrations` element naming the hooks
+    that reach it through the mod's own classes (a helper class between the hook and the generator is followed; lambdas
+    and reflection are not), and a generator no hook reaches, or that is the plugin itself, is refused. Identity (kind and members) therefore does not cover where
+    a star system is registered: a recorded choice, unlike `combat-plugin`.
+  - **Campaign ids named by code (`genome/campaign.py`, every kind).** Measured first: the generator's 97 literals
+    include its own industry, its faction, four `intel` graphics keys and about 60 vanilla ids. A literal that is exactly
+    an id a campaign table defines is typed by that table: industries, market conditions, submarkets, special items,
+    commodities, planet, custom-entity and terrain types, factions. A `settings.json` graphics key is typed only when its
+    category is also a literal: without that, `nav_buoy` read as a core graphics key in two categories the code never names.
+    - The mod's definitions are members: a CSV row with the class and files its cells name (the industry's plugin class
+      joins the closure, and vendor-plan runs again from it), a JSON key as a json-entry, a graphics key with its file.
+    - The core's are `needs.vanilla` (`industry:farming`, `planet-type:desert`, `graphics:misc/rings_ice0`). An id
+      several tables define names every kind, as `ids_named_by_code` does. When one of them is the mod's, it is also a
+      suspect.
+    - A faction is `needs.genes`: a new optional key, additive within schema 4, so earlier manifests stay valid. The
+      faction carries ship lists that are not this gene, and the plugin's relations statements must stay separable. The
+      contract pin moves to `1345f51a…`; `gene sisters` shows no sister pins it yet.
+  - **Saved state, checked against a save.** A Test1 rig save that ran Eridani (LeonardCallisto, G1R-LIVE-0985a-20261117)
+    holds `<cL cl="Sstm" ... bN="Pantheon">`, markets with computed ids (`ECE_planet3_market`), and the industry as
+    `<data.scripts.campaign.ECE__PlanetaryCommandCenter>` inside each market's industries (XStream writes `_` as `__`).
+    `persistent_state` names all three. The markets' ids are computed, so no `market:` id is claimed; that is a suspect.
+    "Pantheon" also appears in saves without Eridani, as a vanilla constellation name.
+  - **Two bugs found on the way, both older than P3:**
+    - The settings-key rule read `getString("scripts", id)`, the string-table lookup, as a missing settings key
+      `scripts`. It now counts only one-String getters, through `last_argument_constants`.
+    - A jar class with no source under `src/` was named `x.jar!a/B.class` by vendor-plan and silently skipped by
+      `code_literals`, so its literals named nothing. `_code_members` now resolves the jar's path in the mod.
+    - P1 and P2 are unchanged: same identity, needs, suspects and missing, re-described and compared with their records.
+  - **P3, `star-system:Pantheon` (gene `3ebc89de…`):**
+    - 12 members: the generator class; the `ECE_PlanetaryCommandCenter` industry row, its icon and its plugin class; four
+      `intel` graphics keys and their illustrations.
+    - Provides `industry:ECE_PlanetaryCommandCenter`.
+    - 66 vanilla needs; `needs.genes` `faction:EridaniCombine`; `needs.mods` BoxUtil and MagicLib (the industry class).
+    - One registration (`ECEModPlugin.generate`, reached from `onNewGame`) and three saved-state elements; no missing.
+    - The manifest is in `In operation/Eridani-Combine/genes/p3-Pantheon-20261120/`. `gene prove` refuses star systems
+      until slice 7.
+  - Tests: `tests/test_gene_star_system.py` (a compiled fixture mod: plugin, generator through a local, industry with
+    plugin and icon, faction, graphics keys, duplicates, a computed name, an unreachable generator):
+    - the gene holds the generator, the industry row with its class and icon, and the graphics key with its file, but not
+      the plugin;
+    - needs are typed by table, the faction is a gene need, and an unnamed graphics category is not a need;
+    - the registration names its call site and hook; saved state is listed;
+    - several generators, none, or an unreachable one are refused;
+    - `getString(category, id)` is not a settings key;
+    - an id two mod tables define is named both ways and suspected, and a mod row hides only the core's definition of
+      the same kind;
+    - a conditional name (directly or through a local) and a parameter reassigned with a constant are computed;
+    - a generator reached through a helper class is registered there;
+    - a `graphics` value that is not an object names nothing;
+    - `gene prove` refuses until slice 7; `needs.genes` is optional but checked; parameter slots count `this`, and two
+      for long and double.
+
+    An independent review (one agent, the diff only) found the jump-target and parameter cases, a mod row hiding a
+    different core kind, a crash on a non-object `graphics`, unreadable path cells, helper-class call sites refused, and
+    an unrecorded 8-round cap. All are fixed with tests; the cap now leaves a suspect. Campaign typing runs for every
+    kind, as intended: P1 and P2 are unchanged, and later genes gain vanilla needs their code names. Mutation-checked:
+    10 mutants, all killed.
+  - Next, slice 7: the proofs. Subtraction removes the generator and classifies only the recorded call sites as
+    `registration`; the subtracted donor cannot boot, so its boot half is NOT_RUN. Isolation builds a carrier whose own
+    small plugin makes the recorded call, compiled with `--release 17 -proc:none -encoding UTF-8` and hashed as a proof
+    input. The faction need decides whether isolation is possible. Slice 8 (optional) cuts the statement from
+    `ECEModPlugin`, only if compiling `src/ECEModPlugin.java` reproduces the jar class. The boot halves of P1's and P2's
+    proofs still wait for the rig.
 - 94.G3 **Gene bank**: content-addressed store, alleles across the corpus, lineage, licence state; RevenantLib distributes genes
   from vanished authors (GD-3). The store's payloads live under `data_root()`, like `Done/`, never in this public
   repository; only manifests of the owner's own or permitted content become committed fixtures (2026-11-19).
