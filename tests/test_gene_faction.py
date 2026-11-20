@@ -121,7 +121,9 @@ class FactionGeneTests(unittest.TestCase):
             gene = describe(_mod(root, faction=faction), "faction:demo_faction", vanilla_core=_core(root))
         named = gene["needs"]["genes"] + gene["needs"]["vanilla"] + gene["unknowns"]["missing"]
         self.assertFalse([n for n in named if n.startswith(("hull:", "weapon:demo"))], named)  # not hull:w, hull:o, ...
-        self.assertEqual(gene["unknowns"]["suspects"], [])  # nor tags d, e, m, o
+        # Nor tags d, e, m, o: the two blocks are suspects in their own words, never dropped (review 2026-11-20).
+        self.assertEqual([(s["path"].split("#", 1)[1], s["mentions"]) for s in gene["unknowns"]["suspects"]],
+                         [("/knownShips", ["demo_bp", "wolf"]), ("/knownWeapons", ["demo_gun"])])
 
     def test_a_named_file_outside_the_mod_is_no_member(self) -> None:
         faction = {**FACTION, "logo": "../outside/logo.png", "crest": "graphics\\factions\\demo.png"}
@@ -131,6 +133,59 @@ class FactionGeneTests(unittest.TestCase):
         self.assertNotIn("../outside/logo.png", [m["path"] for m in gene["members"]])
         self.assertIn("file:../outside/logo.png (named by the faction; in neither the mod nor the core)", gene["unknowns"]["missing"])
         self.assertTrue(any(m.startswith("file:graphics\\factions\\demo.png") for m in gene["unknowns"]["missing"]))
+
+    def test_ship_roles_weight_maps_and_commodities_are_needs_and_other_keys_are_suspects(self) -> None:
+        # Advisor 2026-11-20: shipRoles feeds the spec that looks each variant up at load (RC8-46); unread keys are suspects.
+        faction = {**FACTION, "displayName": "Demo", "ranks": {"ranks": {"spaceCaptain": {"name": "Captain"}}},
+                   "shipRoles": {"combatSmall": {"includeDefault": True, "fallback": {"combatMedium": 1}, "demo_v": 5,
+                                                 "core_v": 2, "gone_v": 1},
+                                 "interceptor": {"demo_wing": 1},  # `_wing`: a wing (V$Oo.isFighterWing)
+                                 "doctrine": {"skipped_v": 1}},
+                   "custom": {"baseStationTypes": {"demo_station": 10}, "offersCommissions": True},
+                   "variantOverrides": {"core_v2": 30}, "hullFrequency": {"tags": {"freq_bp": 1}, "hulls": {"freq_hull": 0.5}},
+                   "shipSellFrequency": {"lasher": 1}, "illegalCommodities": ["drugs", "demo_goods", "nothing_goods"],
+                   "music": {"theme": "music_demo"}, "voices": {"LOW": {"soldier": 3}}, "flags": {"hidden": True},
+                   "factionDoctrine": {"warships": 3, "commanderSkills": ["demo_skill"]}}
+        with resolved_temp_dir() as root:
+            mod, core = _mod(root, faction=faction), _core(root)
+            _write(mod / "data" / "hulls" / "ship_data.csv", "name,id\nDemo,demo_hull\nFreq,freq_hull\n")
+            _write(mod / "data" / "hulls" / "wing_data.csv", "id,variant\ndemo_wing,demo_v\n")
+            _write(core / "data" / "hulls" / "ship_data.csv", "name,id\nWolf,wolf\nLasher,lasher\n")
+            _write(mod / "data" / "variants" / "demo_v.variant", json.dumps({"variantId": "demo_v", "hullId": "demo_hull"}))
+            for variant in ("core_v", "core_v2"):
+                _write(core / "data" / "variants" / f"{variant}.variant", json.dumps({"variantId": variant, "hullId": "wolf"}))
+            _write(mod / "data" / "campaign" / "commodities.csv", "name,id\nDemo goods,demo_goods\n")
+            _write(core / "data" / "campaign" / "commodities.csv", "name,id\nDrugs,drugs\n")
+            gene = describe(mod, "faction:demo_faction", vanilla_core=core)
+        self.assertEqual(gene["needs"]["genes"], ["hull:demo_hull", "hull:freq_hull", "variant:demo_v", "weapon:demo_gun",
+                                                  "wing:demo_wing"])
+        self.assertEqual(gene["needs"]["vanilla"], ["commodity:drugs", "file:graphics/factions/core_crest.png",
+                                                    "file:graphics/portraits/core_p.png", "hull:lasher", "hull:wolf",
+                                                    "variant:core_v", "variant:core_v2", "weapon:lightmg"])
+        named = " ".join(gene["needs"]["genes"] + gene["needs"]["vanilla"] + gene["unknowns"]["missing"])
+        for not_a_variant in ("includeDefault", "fallback", "combatMedium", "skipped_v"):
+            self.assertNotIn(not_a_variant, named)
+        self.assertIn("variant:gone_v (listed by the faction; neither the mod nor the core defines it)", gene["unknowns"]["missing"])
+        self.assertTrue(any(m.startswith("commodity:nothing_goods") for m in gene["unknowns"]["missing"]))
+        suspects = {s["path"]: s["mentions"] for s in gene["unknowns"]["suspects"]}
+        base = "data/world/factions/demo.faction"
+        self.assertEqual(suspects[base], ["demo_bp", "freq_bp"])  # tags, from the lists and hullFrequency
+        self.assertEqual(suspects[f"{base}#/illegalCommodities"], ["demo_goods"])
+        self.assertEqual(suspects[f"{base}#/music"], ["music_demo"])
+        self.assertEqual(suspects[f"{base}#/voices"], ["soldier"])
+        self.assertEqual(suspects[f"{base}#/factionDoctrine"], ["demo_skill"])
+        self.assertEqual(suspects[f"{base}#/custom"], ["demo_station"])  # the core's pirates name station hulls there
+        self.assertNotIn(f"{base}#/flags", suspects)  # a map of booleans names nothing (a boolean is not a weight)
+        self.assertFalse([p for p in suspects if p.endswith(("#/displayName", "#/ranks", "#/shipRoles", "#/hullFrequency"))])
+
+    def test_a_read_key_in_another_shape_is_a_suspect(self) -> None:
+        faction = {**FACTION, "shipRoles": ["demo_v"], "hullFrequency": {"hulls": {"wolf": 1}, "weights": {"x_hull": 2}},
+                   "illegalCommodities": "drugs", "a/b~c": ["odd_id"]}
+        with resolved_temp_dir() as root:
+            gene = describe(_mod(root, faction=faction), "faction:demo_faction", vanilla_core=_core(root))
+        shaped = {s["path"].split("#", 1)[1]: s["mentions"] for s in gene["unknowns"]["suspects"] if "shape" in s["reason"]}
+        self.assertEqual(shaped, {"/shipRoles": ["demo_v"], "/hullFrequency": ["wolf", "x_hull"], "/illegalCommodities": ["drugs"]})
+        self.assertIn("data/world/factions/demo.faction#/a~1b~0c", [s["path"] for s in gene["unknowns"]["suspects"]])
 
     def test_without_the_core_a_faction_is_refused(self) -> None:
         # Without the core, a mod's merge fragment for a core faction would pass for a gene.
