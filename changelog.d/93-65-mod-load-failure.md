@@ -1,0 +1,1 @@
+- `probe-group report` fails a member the game could not load (`Error loading mod from [...]`) instead of passing it vacuously, and a gene carrier's mod_info carries the `description` RC7 requires (ROADMAP-3 93.65).

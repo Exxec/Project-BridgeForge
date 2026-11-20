@@ -84,6 +84,39 @@ class PlanTests(unittest.TestCase):
 
 
 class MergeAndReportTests(unittest.TestCase):
+    def test_a_member_the_game_could_not_load_fails_and_another_mods_failure_is_the_groups(self) -> None:
+        # P1B-CAR-20261120: the gene carrier's mod_info lacked `description`, RC7 skipped the mod, and the run read PASS.
+        with resolved_temp_dir() as root:
+            queue = root / "q"
+            a = build_probe_config(_workspace(queue, "A", "mod_a", "hull_a"))
+            b = build_probe_config(_workspace(queue, "B", "mod_b", "hull_b"))
+            merged = merge_configs([a, b])
+            mods = root / "mods"
+            (mods / "A-folder").mkdir(parents=True)
+            (mods / "A-folder" / "mod_info.json").write_text(json.dumps({"id": "mod_a"}), encoding="utf-8")
+            (mods / "SomeLib").mkdir()
+            (mods / "SomeLib" / "mod_info.json").write_text(json.dumps({"id": "some_lib"}), encoding="utf-8")
+            log = root / "run.stdout.log"
+            log.write_text(
+                "607  [main] INFO  com.fs.starfarer.launcher.ModManager  - Error loading mod from [..\\mods\\A-folder]\n"
+                '607  [main] INFO  com.fs.starfarer.launcher.ModManager  - JSONObject["description"] not found.\n'
+                "9 [Thread-2] INFO  com.bridgeforge.probe.ProbeLog  - BF-PROBE|0.2.5|content-ids|PASS|all-content|checked=2 failed=0\n",
+                encoding="utf-8")
+            report = group_report(log, merged, mods_dir=mods)
+            self.assertEqual(report["members"]["mod_a"]["verdict"], "FAIL")
+            self.assertEqual(report["members"]["mod_a"]["failures"],
+                             ['mod-load|A-folder|JSONObject["description"] not found.'])
+            self.assertEqual(report["members"]["mod_b"]["verdict"], "PASS")
+            log.write_text(log.read_text(encoding="utf-8").replace("A-folder", "SomeLib"), encoding="utf-8")
+            report = group_report(log, merged, mods_dir=mods)
+            self.assertIn('mod-load|SomeLib|JSONObject["description"] not found.', report["unattributed"])
+            self.assertEqual(report["members"]["mod_a"]["verdict"], "UNCLEAR")  # a library that did not load: rerun to clear
+            # A broken folder the game was not asked to enable (LOBSTER-SUB-20261120: the old carrier left in mods/) is no one's.
+            (mods / "enabled_mods.json").write_text(json.dumps({"enabledMods": ["mod_a", "mod_b"]}), encoding="utf-8")
+            report = group_report(log, merged, mods_dir=mods)
+            self.assertEqual(report["unattributed"], [])
+            self.assertEqual(report["members"]["mod_a"]["verdict"], "PASS")
+
     def test_merged_config_keeps_every_members_content_and_the_report_blames_the_right_mod(self) -> None:
         with resolved_temp_dir() as root:
             queue = root / "q"
