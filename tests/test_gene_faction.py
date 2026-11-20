@@ -193,7 +193,7 @@ class FactionGeneTests(unittest.TestCase):
             describe(_mod(root), "faction:demo_faction")
 
     def test_prove_refuses_a_faction_until_its_slice(self) -> None:
-        with resolved_temp_dir() as root, self.assertRaisesRegex(ProofError, "faction gene come with its own slice"):
+        with resolved_temp_dir() as root, self.assertRaisesRegex(ProofError, "a faction gene's own proofs are not built"):
             prove(_mod(root), "faction:demo_faction", root / "proof", vanilla_core=_core(root))
 
 

@@ -47,7 +47,7 @@ from pathlib import Path
 from bridgeforge.genome import carrier_plugin
 from bridgeforge.genome.carrier_plugin import CarrierPluginRefused
 from bridgeforge.genome.evidence import header
-from bridgeforge.genome.gene import describe, dumps
+from bridgeforge.genome.gene import TABLE_KEYS, describe, dumps
 from bridgeforge.licence_ledger import member_file
 from bridgeforge.mod_files import read_mod_info
 from bridgeforge.safeio import atomic_write_text
@@ -71,16 +71,17 @@ def _rows_with_lines(text: str):
         start = reader.line_num
 
 
-def cut_csv_row(text: str, ident: str) -> tuple[str, str]:
-    """(table without the row, the row's own text). The id column is found from the header."""
+def cut_csv_row(text: str, ident: str, key: str = "id") -> tuple[str, str]:
+    """(table without the row, the row's own text). The key column (`gene.TABLE_KEYS`, else `id`) is found from the header:
+    factions.csv rows are keyed by `faction` (slice 11)."""
     lines = text.splitlines(keepends=True)
     records = list(_rows_with_lines(text))
     if not records:
         raise ProofError("an empty table")
     header_row = [cell.strip() for cell in records[0][0]]
-    if "id" not in header_row:
-        raise ProofError("the table has no id column")
-    column = header_row.index("id")
+    if key not in header_row:
+        raise ProofError(f"the table has no {key} column")
+    column = header_row.index(key)
     for row, first, end in records[1:]:
         if len(row) > column and row[column].strip() == ident:
             return "".join(lines[:first] + lines[end:]), "".join(lines[first:end])
@@ -219,7 +220,7 @@ def build_carrier(root: Path, gene: dict, dest: Path, *, vanilla_core: Path | No
         elif member["what"] == "csv-row":
             table, _, ident = path.partition(" [")
             text = (root / table).read_text(encoding="utf-8-sig")
-            _rest, row = cut_csv_row(text, ident.rstrip("]"))
+            _rest, row = cut_csv_row(text, ident.rstrip("]"), TABLE_KEYS.get(table, "id"))
             target = dest / table
             target.parent.mkdir(parents=True, exist_ok=True)
             if not target.exists():
@@ -388,8 +389,8 @@ def prove(mod: Path, anchor: str, out: Path, *, vanilla_core: Path | None = None
     if out.exists() and any(out.iterdir()):
         raise ProofError(f"{out} is not empty: proofs go into a fresh folder")
     if anchor.startswith("faction:"):
-        raise ProofError("the proofs of a faction gene come with its own slice (a factions.csv row keyed by its `faction` column "
-                         "to cut, a carrier that needs every listed gene): `gene describe` closes it now")
+        raise ProofError("a faction gene's own proofs are not built (its subtraction cuts a factions.csv row keyed by its "
+                         "`faction` column): `gene describe` closes it, and `gene prove-set` carries it with every gene it needs")
     gene = describe(mod, anchor, vanilla_core=vanilla_core)
     # Who in the donor uses the gene: vendor-plan from the gene's content ids and the classes it registers (a combat
     # plugin's anchor is not a vendor-plan id).
