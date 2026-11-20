@@ -1,0 +1,1 @@
+- Gene proofs (ROADMAP-3 94.G2): subtraction also removes a removed class's build source and keeps `reports/`; scanner totals are summaries; `needs.mods` lists only libraries the gene's code references. P2 passes both static proofs.

@@ -229,7 +229,7 @@ def describe(mod: Path, anchor: str, *, vanilla_core: Path | None = None, policy
             raise GeneError(f"vendor-plan named a part of an unknown kind: {entry['what']!r}")
         members.append({**member, "reason": member.pop("reason", None) or entry["reason"]})
     members = list({(m["what"], m["path"]): m for m in members}.values())  # a jar class reached twice is one member
-    from bridgeforge.genome.closure import SETTINGS_FILE, extend
+    from bridgeforge.genome.closure import SETTINGS_FILE, extend, mods_needed
 
     extra = extend(root, members, vanilla_core, [closure_id.split(":", 1)[1] for closure_id in plan["closure_ids"]])
     members += extra["members"]
@@ -244,7 +244,8 @@ def describe(mod: Path, anchor: str, *, vanilla_core: Path | None = None, policy
         "identity": identity(kind, members),
         "kind": kind, "anchors": [anchor], "provides": sorted({anchor, *plan["closure_ids"]}),
         "members": members,
-        "needs": {"vanilla": sorted(set(plan["provided_by_vanilla"]) | set(extra["vanilla"])), "mods": dependencies},
+        "needs": {"vanilla": sorted(set(plan["provided_by_vanilla"]) | set(extra["vanilla"])),
+                  "mods": mods_needed(root, members, dependencies)},
         "registrations": [registration["element"]] if registration else [], "conditions": [], "persistent_state": [],
         "build": {"game_version": info.get("gameVersion"), "mod_version": _version_text(info.get("version"))},
         "provenance": {"mod_id": info.get("id"), "mod_name": info.get("name"), "author": info.get("author")},

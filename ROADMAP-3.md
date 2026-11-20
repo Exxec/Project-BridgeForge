@@ -859,9 +859,15 @@ unproven).
 - 96.16 (S) **A flaky research test on Windows CI.** `tests/test_research_inputs.py`
   `test_flags_reach_the_report_and_the_cache_lands_beside_the_report` failed once on Windows shard 3/4 for PR #185 (run
   44643449898): it found 2 cached `TemCrusade.java` copies where it expects 1. It passes locally, and main's run on the
-  same merge commit passed (44644028462). Likely cause, not yet confirmed: the decompile cache directory is keyed in a way
-  that can yield two folders within one run, such as a time or path component. To do: find the key, make it
-  deterministic, and assert on it. Recorded 2026-11-19, after the PR was merged on an UNSTABLE status by mistake.
+  same merge commit passed (44644028462). Recorded 2026-11-19, after the PR was merged on an UNSTABLE status by mistake.
+  **Done 2026-11-19, the same day.** It failed again in slice 5's local full suite and passed five times run alone. The
+  cause is in the test, not the product:
+  - The decompile cache is keyed by the jar's SHA-256, which is right.
+  - The fixture's `make_jar` used `writestr(name, data)`, which stamps each entry with the current time. The working
+    and original `Tem.jar` were built moments apart, so under load they could fall on either side of a zip timestamp's
+    two-second boundary. They then hashed apart and made two cache folders.
+  - Reproduced: two jars built 2.1 s apart hashed `1938697e…` and `38aaa31d…`.
+  - The fix is a fixed `ZipInfo` time in `make_jar`. The same reproduction now gives one hash.
 - 95.1 (M) **Owner rulings as standing policy.** The owner ruled the same way many times: CSV rows with no file that nothing uses
   (Musashi, Bultach, UAF: "keep them and ignore warning if it doesn't affect anything"), findings the reference build shares in a
   mod that works there (UAF: "Your clear to proceed"), and behaviour as authored with evidence (Sunrider: "yes"). Encode them as
@@ -1481,8 +1487,33 @@ history as the closure benchmark, a cross-repository trace check, an early Java 
 
     Mutation-checked: 8 mutants. Two survived and were handled: one is equivalent (the nested-key guard, which the cut
     regex already covers), and one exposed a test that patched the wrong function and is now fixed.
-  - Next: the three proof fixes above, then P2's proofs again, then P3 (Eridani's Pantheon system, the first
-    registration slice). The boot halves wait for live testing.
+  **Slice 5 Done 2026-11-19: the three causes fixed; P2 passes both static proofs.**
+  - **Build sources:** subtraction also removes the build source of each class it takes out of a jar, found by package
+    and name, and the proof lists each one. The donor is untouched.
+  - **`reports/` copied:** the subtraction copy keeps `reports/`. The scanner reads `src-to-jar`'s build record there,
+    and leaving it out made every edited source read as "not rebuilt". This was a fourth cause, found while fixing the
+    first.
+  - **Summaries:** a scanner's own totals inside a finding (`differ:0`, `source-only:9`, `common prefix: x_ (3 ids)`)
+    are set aside as `summaries` when they name nothing the gene provides. A count line that names a provided id is
+    still judged.
+  - **`needs.mods`:** only the declared dependencies the gene's code references, by library package (the atlas
+    census table; loose-script imports and qualified names, jar class references). A dependency with no known package
+    stays, since it cannot be shown unused. P2's needs are now `lw_lazylib`, without MagicLib.
+  - **P2 (`combat-plugin:tania_CombatHandlerSpawner`, gene `30b25f83…`): subtraction PASS with three dependents (the
+    `tania_invictus_Standard` and `tania_redemption_Holy_Boss` variants) and one summary. Isolation PASS.** Both pass
+    `gene evidence check --root` with 26 inputs re-hashed. The record is in
+    `In operation/Navarchy-of-Tania/genes/p2-tania_CombatHandlerSpawner-20261119-v2/`; the first FAIL run stays beside
+    it. P1 still passes both.
+  - Tests: `tests/test_gene_proof_fixes.py`:
+    - a removed class takes its build source and keeps the other sources and `reports/`;
+    - scanner totals are summaries while a real reference is still judged;
+    - a count line naming the gene is not set aside;
+    - a known library stays only when referenced, and an unknown one stays.
+
+    Mutation-checked: 5 mutants killed.
+  - Next: P3 (Eridani's Pantheon system, the first registration slice). Its `onNewGame` builds `ECE_StarSystem` and
+    sets faction relations and a bounty entry in one helper, three features in one hook. The boot halves of P1's and
+    P2's proofs wait for live testing.
 - 94.G3 **Gene bank**: content-addressed store, alleles across the corpus, lineage, licence state; RevenantLib distributes genes
   from vanished authors (GD-3). The store's payloads live under `data_root()`, like `Done/`, never in this public
   repository; only manifests of the owner's own or permitted content become committed fixtures (2026-11-19).

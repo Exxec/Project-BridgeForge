@@ -124,13 +124,21 @@ def subtract(root: Path, gene: dict, dest: Path) -> list[str]:
     skip = {(Path(root) / jar).resolve() for jar in dropped}
 
     def ignore(folder: str, names: list[str]) -> set[str]:
-        return {n for n in names if n == "reports" or (Path(folder) / n).resolve() in skip}
+        # reports/ is copied too: the scanner reads it (src-to-jar's build record), and leaving it out made every edited
+        # source read as "not rebuilt" in P2's subtraction copy (2026-11-19).
+        return {n for n in names if (Path(folder) / n).resolve() in skip}
 
     shutil.copytree(root, dest, ignore=ignore)
     notes = []
     for jar, entries in sorted(dropped.items()):
         _write_jar_without(Path(root) / jar, dest / jar, entries)
         notes.append(f"{jar} written without {len(entries)} class(es) of the gene by zipfile (static scan only)")
+    # The build source of a removed class is the same code (P2, 2026-11-19: left in src/, the scanner reported the jar and its
+    # sources out of step). It goes too, and the proof says which files.
+    outer = {entry.split("$", 1)[0].removesuffix(".class") for entries in dropped.values() for entry in entries}
+    for source in sorted(_build_sources(dest, outer)):
+        source.unlink()
+        notes.append(f"{source.relative_to(dest).as_posix()} removed with its class (build source)")
     for member in gene["members"]:
         path = member["path"]
         if member["what"] == "file":
@@ -153,6 +161,20 @@ def subtract(root: Path, gene: dict, dest: Path) -> list[str]:
                 notes.append(f"{file} re-written whole to remove {ptr} ({why})")
             atomic_write_text(target, cut, newline="")
     return notes
+
+
+_PACKAGE = re.compile(r"^\s*package\s+([\w.]+)\s*;", re.MULTILINE)
+
+
+def _build_sources(root: Path, classes: set[str]) -> list[Path]:
+    """The `.java` files under `root` whose package and name are one of `classes` (internal names, `a/b/C`)."""
+    found = []
+    for source in Path(root).rglob("*.java"):
+        package = _PACKAGE.search(source.read_text(encoding="utf-8-sig", errors="replace"))
+        name = (package.group(1).replace(".", "/") + "/" if package else "") + source.stem
+        if name in classes:
+            found.append(source)
+    return found
 
 
 def _write_jar_without(source_jar: Path, target: Path, entries: set[str]) -> None:
@@ -239,10 +261,18 @@ def _gene_names(gene: dict) -> list[str]:
     return sorted(names - {p.split(":", 1)[1] for p in gene["provides"]})
 
 
+# A scanner's own totals inside a finding's evidence ("differ:0", "source-only:9", "common prefix: x_ (3 ids)"): counts, not
+# references to anything (P2, 2026-11-19). Set aside as summaries when they name nothing of the gene.
+_SUMMARY_LINE = re.compile(r"^(?:[\w -]+:\s*\d+|.*\(\d+ ids?\)|common prefix: .*)$")
+
+
 def classify_subtraction(before, after, gene: dict, used_by: list[dict]) -> dict:
-    dependents, leaks, unexplained = [], [], []
+    dependents, leaks, unexplained, summaries = [], [], [], []
     others = _gene_names(gene)
     for key, line in _new_references(before, after):
+        if _SUMMARY_LINE.match(line.strip()) and not any(_id_named(line, p.split(":", 1)[1]) for p in gene["provides"]):
+            summaries.append({"finding": key[0], "file": key[1], "line": line})
+            continue
         provided = [p for p in gene["provides"] if _id_named(line, p) or _id_named(line, p.split(":", 1)[1])]
         if provided:
             sources = sorted(u["path"] for u in used_by if any(p.split(":", 1)[1] in u["mentions"] for p in provided))
@@ -252,7 +282,8 @@ def classify_subtraction(before, after, gene: dict, used_by: list[dict]) -> dict
         else:
             unexplained.append({"finding": key[0], "file": key[1], "reference": line})
     dependents = [dict(t) for t in sorted({tuple(sorted(d.items())) for d in dependents})]
-    return {"verdict": "FAIL" if leaks or unexplained else "PASS", "dependents": dependents, "leaks": leaks, "unexplained": unexplained}
+    return {"verdict": "FAIL" if leaks or unexplained else "PASS", "dependents": dependents, "leaks": leaks, "unexplained": unexplained,
+            "summaries": summaries}
 
 
 def classify_isolation(donor, carrier, gene: dict) -> dict:

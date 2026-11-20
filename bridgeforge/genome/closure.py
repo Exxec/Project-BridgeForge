@@ -142,6 +142,45 @@ def ids_named_by_code(root: Path, members: list[dict], vanilla_core: Path | None
     return sorted({f"{kind}:{value}" for value in literals for kind in KINDS if any(index.defines(kind, value) for index in indexes)})
 
 
+def libraries_used(root: Path, members: list[dict]) -> set[str]:
+    """Library names (atlas_census_libs) the gene's code references: imports and qualified names of loose scripts, the
+    class references of jar classes."""
+    from bridgeforge.atlas.atlas_census_libs import library_of
+    from bridgeforge.scan.scan_classfile import _parse_class_file
+    from bridgeforge.zipsafe import MAX_CLASS_BYTES, read_limited
+
+    used: set[str] = set()
+    for member in members:
+        if member["what"] == "file" and member["path"].endswith(".java"):
+            text = (Path(root) / member["path"]).read_text(encoding="utf-8-sig", errors="replace")
+            for name in re.findall(r"\b((?:[a-z_][\w]*\.)+[A-Z]\w*)", text):
+                library = library_of(name.replace(".", "/"))
+                if library and not library.startswith("pkg:"):
+                    used.add(library)
+        elif member["what"] == "jar-class":
+            jar, _, entry = member["path"].partition("!")
+            try:
+                with zipfile.ZipFile(Path(root) / jar) as archive:
+                    info = _parse_class_file(read_limited(archive, entry, MAX_CLASS_BYTES))
+            except (OSError, KeyError, zipfile.BadZipFile, ValueError):
+                continue
+            for name in (info.referenced_classes if info is not None else ()):
+                library = library_of(name)
+                if library and not library.startswith("pkg:"):
+                    used.add(library)
+    return used
+
+
+def mods_needed(root: Path, members: list[dict], declared: list[str]) -> list[str]:
+    """The declared dependencies a gene needs: a known library only when the gene's code references it (P2, 2026-11-19: a
+    carrier declaring MagicLib for a plugin that never calls it was a finding); an unknown one is kept, as it cannot be
+    shown unused."""
+    from bridgeforge.atlas.atlas_census_libs import DECLARED_ID_LIBRARY
+
+    used = libraries_used(root, members)
+    return sorted(mod for mod in declared if DECLARED_ID_LIBRARY.get(mod.lower()) is None or DECLARED_ID_LIBRARY[mod.lower()] in used)
+
+
 def extend(root: Path, members: list[dict], vanilla_core: Path | None, closure_needles: list[str]) -> dict:
     """What the G2 rules add to a closure: {"members": [...], "vanilla": [...], "missing": [...], "suspects": [...],
     "settings_suspect_resolved": bool}. `members` are the gene's members so far (file and jar-class ones are read)."""
