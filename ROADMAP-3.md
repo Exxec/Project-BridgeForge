@@ -2061,6 +2061,19 @@ fixes of 93.28. 93.26-93.35 are that day's findings.
   not part of the row the game reads, the rule `gene.py` already follows for CSV members. Tests:
   `tests/test_descriptions_draft.py` (a row with extra cells and a short row are read, trimmed). Without the fix the test
   errors as above.
+- 93.62 (S) **The combat wait was shorter than its own retries plus a round.** SA-SR2-20261119 (Station Augments' 96.2
+  save-reload gate) ended LIVE_STUCK at combat-round-1, "no 'combat END' probe line after the probe mission started"; the
+  screenshot `SA-SR2-20261119.round1-no-end.png` showed the mission list. `wait_for_combat_end` presses SPACE again after
+  each silent 90 s (`COMBAT_UNPAUSE_RETRY`), but `drive` waited a flat 240 s. The press after deploying and the 90 s retry
+  were lost; the 180 s retry started the round; its running time, about 62 s (SA-SR-20261119's round took 168 s wall for
+  about 62 s of running combat), ended near 242 s, after the wait. Combat START was at 329.2 s and no END was logged
+  before the harness gave up.
+  **Done 2026-11-19.** `drive`'s combat wait defaults to `combat_wait()`: `(COMBAT_UNPAUSE_TRIES - 1) *
+  COMBAT_UNPAUSE_RETRY + COMBAT_ROUND_SECONDS`, which is 2 x 90 + 75 = 255 s (a round is about 60 s once unpaused, 3,596
+  frames, plus margin). It is read at call time, so the constants decide it. Tests: `tests/test_live_run.py`: `FakeGame`
+  loses SPACE presses (`lost_spaces`) and runs a round for a time (`round_seconds`). With the default wait a run whose
+  third press starts the round is LIVE_DONE, with three presses. A wait shorter than the retries plus a round is
+  LIVE_STUCK at combat-round-1, as SA-SR2 was. `combat_wait()` is 255 s and exceeds 180 + 62 s.
 - 93.52 (S) **save-doctor reported equal versions as changed.** Found testing Salvor's provider on real saves (owner
   2026-11-17: "improve/test Salvor" between CI waits). `save_doctor.installed_mods`, the provider contract Salvor imports,
   stored mod_info's `{"major", "minor", "patch"}` version as its Python repr. A save made with 1.20.0 then read as

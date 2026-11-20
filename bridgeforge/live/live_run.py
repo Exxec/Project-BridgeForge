@@ -473,6 +473,16 @@ def play_probe_combat(hands: Hands, rows_below: int = 0, total: int | None = Non
 # after deployment, and the owner (2026-10-26) had been unpausing combat by hand. Between slices of this length with no
 # 'combat END', SPACE is pressed again: a second press un-pauses a wrongly paused mission; a running one would have ended.
 COMBAT_UNPAUSE_RETRY = 90.0
+# The combat wait must hold the last retry plus a whole round (93.62). It was a flat 240 s: SA-SR2-20261119 lost the press
+# after deploying and the 90 s retry, the 180 s retry started the round, and its about 62 s of running ended 2 s past the
+# wait (combat START at 329 s, the harness gave up near 569 s). The press after deploying and two retries, then a round.
+COMBAT_ROUND_SECONDS = 75.0  # about 60 s once unpaused (3,596 frames at 17 ms), plus margin
+COMBAT_UNPAUSE_TRIES = 3
+
+
+def combat_wait() -> float:
+    """How long to wait for 'combat END': the last unpause retry plus a whole round."""
+    return (COMBAT_UNPAUSE_TRIES - 1) * COMBAT_UNPAUSE_RETRY + COMBAT_ROUND_SECONDS
 
 
 def wait_for_combat_end(log: Path, hands: Hands, timeout: float, since: int) -> bool:
@@ -532,10 +542,12 @@ def continue_after_battle(log: Path, hands: Hands, round_from: int, timeout: flo
     hands.sleep(4)
 
 
-def drive(log: Path, hands: Hands, menu_timeout: float = 240, campaign_timeout: float = 600, combat_timeout: float = 240,
+def drive(log: Path, hands: Hands, menu_timeout: float = 240, campaign_timeout: float = 600, combat_timeout: float | None = None,
           generic_fallback: bool = True, new_game_grace: float = NEW_GAME_GRACE,
           vanilla_rows: int = VANILLA_MISSION_ROWS, save_reload: bool = False, probe_saves: bool = False) -> LiveResult:
-    """Run the whole live sequence against a started game whose stdout is `log`."""
+    """Run the whole live sequence against a started game whose stdout is `log`. `combat_timeout` defaults to combat_wait()."""
+    if combat_timeout is None:
+        combat_timeout = combat_wait()  # read at call time, so the retry and round constants decide it (93.62)
     result = LiveResult("LIVE_STUCK", log=str(log))
     hands = recording(hands, log, result.actions)
 

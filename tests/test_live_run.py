@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import json
+import threading
 import unittest
 from pathlib import Path
 
@@ -19,8 +20,13 @@ class FakeGame:
 
     def __init__(self, log: Path, rounds: int = 1, stall_at: str | None = None, lost_starts: tuple[int, ...] = (),
                  late_redefinition: bool = False, dies_at_deploy: int | None = None, dies_in_battle: bool = False,
-                 saves_after_end: bool = False, menu_after_exits: int | None = None) -> None:
+                 saves_after_end: bool = False, menu_after_exits: int | None = None, lost_spaces: int = 0,
+                 round_seconds: float = 0.0) -> None:
         self.log, self.rounds, self.stall_at = log, rounds, stall_at
+        # lost_spaces: that many SPACE presses in battle land before the mission takes input (SA-SR2-20261119 lost the press
+        # after deploying and the first retry). round_seconds: the battle runs that long after the press that takes, then
+        # logs END (93.62); 0 ends it at once.
+        self.lost_spaces, self.round_seconds, self.timers = lost_spaces, round_seconds, []
         self.dies_at_deploy, self.dies_in_battle, self.alive = dies_at_deploy, dies_in_battle, True
         self.lost_starts, self.late_redefinition = set(lost_starts), late_redefinition
         self.actions: list[tuple] = []
@@ -93,13 +99,25 @@ class FakeGame:
         if self.stall_at == "first-space":
             self.stall_at = None  # the first press landed before the mission took input; the next one starts it
             return
+        if self.lost_spaces:
+            self.lost_spaces -= 1
+            return
         if self.stall_at != "combat":
             self.running = False
-            self._append("BF-PROBE|0.3.3|probe|INFO|combat|END")
-            if self.late_redefinition:
-                self.pending_redefinition = self._round_line(1)
+            if self.round_seconds:
+                timer = threading.Timer(self.round_seconds, self._end_round)
+                timer.daemon = True
+                self.timers.append(timer)
+                timer.start()
             else:
-                self._append(self._round_line(1))
+                self._end_round()
+
+    def _end_round(self) -> None:
+        self._append("BF-PROBE|0.3.3|probe|INFO|combat|END")
+        if self.late_redefinition:
+            self.pending_redefinition = self._round_line(1)
+        else:
+            self._append(self._round_line(1))
 
     def sleep(self, _seconds: float) -> None:
         if self.saving and self.saves_after_end != "never":
@@ -223,6 +241,39 @@ class DriveTests(unittest.TestCase):
             live_run.COMBAT_UNPAUSE_RETRY = retry
         self.assertEqual(result.verdict, "LIVE_DONE", result)
         self.assertEqual(sum(1 for action in game.actions if action == ("key", live_run.SPACE_KEY)), 2)
+
+    def _drive_slow_round(self, combat_timeout: float | None) -> tuple[live_run.LiveResult, FakeGame]:
+        # SA-SR2-20261119 (93.62), scaled: the press after deploying and the first retry are lost, the second retry starts the
+        # round and the round runs most of COMBAT_ROUND_SECONDS before its END. As in the game, a round is shorter than the retry
+        # period (about 62 s against 90 s), so no retry lands in a running round and pauses it: three presses in all.
+        saved = live_run.COMBAT_UNPAUSE_RETRY, live_run.COMBAT_ROUND_SECONDS
+        live_run.COMBAT_UNPAUSE_RETRY, live_run.COMBAT_ROUND_SECONDS = 0.6, 0.55
+        try:
+            with resolved_temp_dir() as base:
+                log = base / "run.stdout.log"
+                game = FakeGame(log, lost_spaces=2, round_seconds=0.4)
+                result = live_run.drive(log, game.hands(), menu_timeout=0.2, campaign_timeout=0.2, combat_timeout=combat_timeout)
+                for timer in game.timers:
+                    timer.join()
+        finally:
+            live_run.COMBAT_UNPAUSE_RETRY, live_run.COMBAT_ROUND_SECONDS = saved
+        return result, game
+
+    def test_the_default_combat_wait_holds_the_last_retry_and_a_whole_round(self) -> None:
+        result, game = self._drive_slow_round(None)
+        self.assertEqual(result.verdict, "LIVE_DONE", result)
+        self.assertEqual(sum(1 for action in game.actions if action == ("key", live_run.SPACE_KEY)), 3)
+
+    def test_a_wait_shorter_than_the_retries_and_a_round_gives_up_mid_round(self) -> None:
+        # The flat 240 s of before, scaled: the round that the last retry started ends after the wait.
+        result, _game = self._drive_slow_round(1.4)
+        self.assertEqual(result.verdict, "LIVE_STUCK", result)
+        self.assertEqual(result.stage, "combat-round-1")
+
+    def test_the_real_combat_wait_covers_sa_sr2(self) -> None:
+        # SA-SR2-20261119: the round began with the 180 s retry and its END came about 62 s later.
+        self.assertEqual(live_run.combat_wait(), 255.0)
+        self.assertGreater(live_run.combat_wait(), 2 * live_run.COMBAT_UNPAUSE_RETRY + 62)
 
     def test_a_probe_save_is_waited_for_before_leaving_the_campaign(self) -> None:
         # 93.59: P962BS4 (27.8 s save) and P962YC2 (20.3 s) lost the Escape and the Exit clicks to the probe's save.
