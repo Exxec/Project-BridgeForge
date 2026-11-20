@@ -109,7 +109,8 @@ def combat_rounds(log_text: str) -> dict:
     return {"planned": planned, "started": started, "missing": missing, "missing_hulls": [hulls.get(number, "?") for number in missing]}
 
 
-_MOD_LOAD_ERROR = re.compile(r"ModManager\s+-\s+Error loading mod from \[(?P<path>[^\]]+)\]")
+# Greedy to the line's last `]`: a folder name may hold one (review of 93.65, 2026-11-20).
+_MOD_LOAD_ERROR = re.compile(r"ModManager\s+-\s+Error loading mod from \[(?P<path>.+)\]\s*$")
 
 
 def mod_load_failures(log_text: str, mods_dir: Path | None) -> list[dict]:
@@ -132,7 +133,9 @@ def mod_load_failures(log_text: str, mods_dir: Path | None) -> list[dict]:
         mod_id = info.get("id") if isinstance(info, dict) and isinstance(info.get("id"), str) else None
         if mod_id is not None and enabled is not None and mod_id not in enabled:
             continue  # the game reads every folder's mod_info; a broken one it was not asked to enable changes nothing
-        found.append({"folder": folder, "mod_id": mod_id, "reason": reason[:200]})
+        entry = {"folder": folder, "mod_id": mod_id, "reason": reason[:200]}
+        if entry not in found:  # the launcher and the game may log the same failure twice
+            found.append(entry)
     return found
 
 

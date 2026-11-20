@@ -111,6 +111,14 @@ class MergeAndReportTests(unittest.TestCase):
             report = group_report(log, merged, mods_dir=mods)
             self.assertIn('mod-load|SomeLib|JSONObject["description"] not found.', report["unattributed"])
             self.assertEqual(report["members"]["mod_a"]["verdict"], "UNCLEAR")  # a library that did not load: rerun to clear
+            # A folder name holding `]` is read whole, and the same failure logged twice is one entry.
+            from bridgeforge.probe.probe_record import mod_load_failures
+
+            (mods / "Odd]Name").mkdir()
+            (mods / "Odd]Name" / "mod_info.json").write_text(json.dumps({"id": "mod_b"}), encoding="utf-8")
+            twice = ("1 [main] INFO  com.fs.starfarer.launcher.ModManager  - Error loading mod from [..\\mods\\Odd]Name]\n"
+                     "1 [main] INFO  com.fs.starfarer.launcher.ModManager  - bad\n") * 2
+            self.assertEqual(mod_load_failures(twice, mods), [{"folder": "Odd]Name", "mod_id": "mod_b", "reason": "bad"}])
             # A broken folder the game was not asked to enable (LOBSTER-SUB-20261120: the old carrier left in mods/) is no one's.
             (mods / "enabled_mods.json").write_text(json.dumps({"enabledMods": ["mod_a", "mod_b"]}), encoding="utf-8")
             report = group_report(log, merged, mods_dir=mods)
