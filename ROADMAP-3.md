@@ -840,6 +840,22 @@ unproven).
   checkpoint was moved aside (kept as `snapshot.partial.jsonl.stale-20261119`) and a fresh snapshot started. Gate R8 stays
   open until that snapshot ends with no errors and `snapshot-restore-check` passes. That snapshot ended the same day with 0
   errors, and its checkpoint cleared.
+- 96.17 (S) **The restore check judged mod copies by strict JSON.** On Test1, 2026-11-19, `snapshot-restore-check`
+  restored and verified all 460,382 files of the fresh snapshot into `C:\Users\exxec\BridgeForge-restore-check-20261119`,
+  then failed its status check. Every failure was "not readable JSON" in a mod copy kept under `bridgeforge-state`
+  (closure checkpoints and original references, such as a `mod_info.json` with a trailing comma or a `sounds.json` with `#`
+  comments), all legal for the game. `_status_check` ran strict `json.loads` on every `.json` there.
+  **Done 2026-11-19.** A file with a `mod_info.json` at or above it, inside the state folder, is read with the suite's one
+  lenient reader (`scan_json._parse_json`). BridgeForge's own state files stay strict. Test:
+  `tests/test_snapshot_restore.py` `test_a_mod_copy_kept_in_state_is_judged_as_the_game_reads_it`: a lenient mod copy
+  passes, while broken mod JSON and lenient own state both fail. It was red before the change.
+  Re-judging the restored copy left two problems, both inside `s1-completion-20261025` and byte-identical to the source:
+  an empty `finalize.stdout.json` and a deliberately invalid test fixture. When `restore_check` knows the source root, a
+  JSON file the source holds with the same bytes is now reported under `inherited_from_source`, not as a fault. Test:
+  `test_json_the_source_holds_unreadable_too_is_inherited_not_a_fault`.
+  **Gate R8, restore half: PASS (Test1, 2026-11-19).** 460,382 files restored and hash-verified. The status check,
+  re-judged on the restored copy without restoring again, gives PASS on 330 labels with 0 problems and 2 inherited. The
+  rig half (a bounded scenario in the restored copy) is next, now that live testing has resumed.
 - 96.16 (S) **A flaky research test on Windows CI.** `tests/test_research_inputs.py`
   `test_flags_reach_the_report_and_the_cache_lands_beside_the_report` failed once on Windows shard 3/4 for PR #185 (run
   44643449898): it found 2 cached `TemCrusade.java` copies where it expects 1. It passes locally, and main's run on the

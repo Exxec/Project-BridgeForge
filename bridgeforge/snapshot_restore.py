@@ -138,17 +138,47 @@ def _verify(destination: Path, label: str, hashes: dict[str, str]) -> list[str]:
     return problems
 
 
-def _status_check(destination: Path, labels: list[str]) -> dict:
+def _in_mod_tree(path: Path, stop: Path) -> bool:
+    """True when `path` sits in a mod copy kept under the state folder (a mod_info.json at or above it, below `stop`)."""
+    for folder in path.parents:
+        if folder == stop:
+            return False
+        if (folder / "mod_info.json").is_file():
+            return True
+    return False
+
+
+def _status_check(destination: Path, labels: list[str], source_root: Path | None = None) -> dict:
+    """With `source_root`, a JSON file the source holds with the same bytes is inherited, not a restore fault: a stdout
+    capture named .json or a deliberately invalid test fixture kept in state is as unreadable at the source (Test1
+    2026-11-19, 96.17)."""
+    from bridgeforge.scan.scan_json import _parse_json
+
     problems = [f"required state missing: {label}" for label in labels if not (destination / label).is_dir()]
-    for state_file in sorted((destination / "bridgeforge-state").rglob("*.json")) if (destination / "bridgeforge-state").is_dir() else []:
+    inherited = []
+    state = destination / "bridgeforge-state"
+    for state_file in sorted(state.rglob("*.json")) if state.is_dir() else []:
+        # BridgeForge's own state is written strictly and read strictly. A mod copy kept under the state folder (closure
+        # checkpoints, original references) is read the way the game reads it: Test1 2026-11-19 restored and verified
+        # 460,382 files, and the check failed only on such copies' trailing commas and comments (ROADMAP-3 96.17).
         try:
-            json.loads(state_file.read_text(encoding="utf-8"))
+            text = state_file.read_text(encoding="utf-8-sig")
+            if _in_mod_tree(state_file, state):
+                _parse_json(text)
+            else:
+                json.loads(text)
         except (OSError, ValueError) as exc:
-            problems.append(f"bridgeforge-state/{state_file.relative_to(destination / 'bridgeforge-state').as_posix()}: not readable JSON ({exc})")
+            relative = state_file.relative_to(state).as_posix()
+            source = Path(source_root) / "bridgeforge-state" / relative if source_root else None
+            if source is not None and source.is_file() and source.read_bytes() == state_file.read_bytes():
+                inherited.append(f"bridgeforge-state/{relative}: not readable JSON at the source either ({exc})")
+            else:
+                problems.append(f"bridgeforge-state/{relative}: not readable JSON ({exc})")
     for label in labels:
         if label.endswith("/working") and not (destination / label / "mod_info.json").is_file():
             problems.append(f"{label}: no mod_info.json at its top")
-    return {"status": "FAIL" if problems else "PASS", "labels_checked": len(labels), "problems": problems}
+    return {"status": "FAIL" if problems else "PASS", "labels_checked": len(labels), "problems": problems,
+            "inherited_from_source": inherited}
 
 
 def _earlier_differences(files: dict[str, dict], earlier_path: Path | None) -> list[str]:
@@ -209,7 +239,7 @@ def restore_check(snapshot: Path, destination: Path, *, source_root: Path | None
         raise RestoreRefused(f"copy failed, nothing was left at the destination: {exc}") from exc
     Checkpoint(target.parent / f"{target.name}.restore.partial.jsonl", {}).finish()
     problems = [problem for label in labels for problem in _verify(target, label, files[label])] + _earlier_differences(files, compare_to)
-    status = _status_check(target, labels)
+    status = _status_check(target, labels, root)
     count = sum(len(h) for h in files.values())
     verdict = "FAIL" if problems or status["status"] != "PASS" else "RESTORED_OFFLINE"
     manifest = {

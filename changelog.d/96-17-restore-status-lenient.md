@@ -1,0 +1,1 @@
+- `snapshot-restore-check` reads mod copies kept under `bridgeforge-state` the way the game does, so a trailing comma or comment there no longer fails the status check (ROADMAP-3 96.17).
