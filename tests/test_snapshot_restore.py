@@ -143,6 +143,20 @@ class RestoreTests(unittest.TestCase):
         self.assertEqual(len(problems), 2)
         self.assertTrue(any("own.json" in p for p in problems) and any("sounds.json" in p for p in problems))
 
+    def test_json_the_source_holds_unreadable_too_is_inherited_not_a_fault(self) -> None:
+        from bridgeforge.snapshot_restore import _status_check
+        with resolved_temp_dir() as base:
+            for side in ("dest", "source"):
+                fixture = base / side / "bridgeforge-state" / "s1" / "tests" / "fixtures" / "bad" / "mod_info.json"
+                fixture.parent.mkdir(parents=True)
+                fixture.write_text('{"id" "missing colon"}', encoding="utf-8")  # a deliberately invalid fixture
+                (base / side / "bridgeforge-state" / "s1" / "finalize.stdout.json").write_text("", encoding="utf-8")
+            (base / "dest" / "bridgeforge-state" / "changed.json").write_text("{broken", encoding="utf-8")
+            (base / "source" / "bridgeforge-state" / "changed.json").write_text("{}", encoding="utf-8")
+            result = _status_check(base / "dest", ["bridgeforge-state"], base / "source")
+        self.assertEqual(len(result["inherited_from_source"]), 2)
+        self.assertEqual([p.split(":")[0] for p in result["problems"]], ["bridgeforge-state/changed.json"])  # differs: a fault
+
     def test_cli_reports_exit_codes_and_progress(self) -> None:
         with resolved_temp_dir() as base:
             root, snap = _snapshot(base)
