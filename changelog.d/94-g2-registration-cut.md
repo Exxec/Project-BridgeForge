@@ -1,0 +1,1 @@
+- `gene prove` cuts a star system's registration (the import and the `new Gen().method(...)` statement) from the subtraction copy's plugin when the source provably compiles to the shipped class and the cut only removes lines, so the subtracted donor can boot; `--provider-root` names library folders (ROADMAP-3 94.G2 slice 8).

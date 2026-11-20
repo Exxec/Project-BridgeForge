@@ -1640,8 +1640,57 @@ history as the closure benchmark, a cross-repository trace check, an early Java 
     subtraction boot will be that evidence. A boot run is never `probe-group record`ed: the subtraction workspace carries
     the donor's mod id, and an archive step could put a subtracted donor into Done/.
   - Next: P1's two boot runs once Test1 is logged on; then a `gene boot` command, shaped by P1's real log, that stages
-    the copies and writes the boot-half evidence beside the static files; then P2. Slice 8 (optional) cuts the statement
-    from `ECEModPlugin`, only if compiling `src/ECEModPlugin.java` reproduces the jar class.
+    the copies and writes the boot-half evidence beside the static files; then P2.
+  **Slice 8 Done 2026-11-20: the registration is cut from the subtraction copy, so P3's subtracted donor can boot.**
+  - **Precondition measured first.** Eridani's own `src/data/scripts/ECEModPlugin.java`, compiled for Java 8 (the jar's
+    class version) with LazyLib, MagicLib, GraphicsLib and BoxUtil from the RC8 install's `mods/`, gives the shipped class
+    instruction for instruction (javap, pool numbers aside).
+  - **`genome/registration_cut.py`** cuts each site only when every step is shown; otherwise the proof keeps its "needs
+    the call cut" boot note with the reason:
+    1. the donor's build source of the call site compiles to the shipped class (javap);
+    2. a line naming the generator may only be its `import` or `new <Generator>().<method>(...);` with the recorded method,
+       and the line before such a call must end a statement or open or close a block. So `Gen g = new Gen();`, a guarded
+       call, or a call that is the whole body of a bare `if (c)` or `else` refuses it;
+    3. the cut source compiles against the copy, which no longer has the generator;
+    4. against step 1's class, the cut class only loses lines (a strict alignment) and nothing left names the generator.
+
+    Every site is planned in a temp folder first, writing nothing in the copy. Only when all pass are the jars (written
+    fresh by copying each entry's ZipInfo) and then the sources written. A failure puts back what was written, from bytes
+    held in memory. A write retries while an indexer holds the file, as `patch-jar-class` does: VS Code's Java extension
+    held P3's subtracted `ECE.jar` (WinError 5). `gene prove` takes `--provider-root` (repeatable) for the libraries the
+    source imports.
+  - **javap comparison by meaning.** Removing a call shortens its method, so later jump targets move (`ifnull 110`); and
+    javap pads its comment column after the pool index, so `#99` and `#100` pad differently (Eridani's `RepLevel`
+    getstatic). `normalise` reads a jump target as a label and any run of spaces as one; both were found on the real class
+    before the first cut passed.
+  - **P3 (gene `3ebc89de…`):**
+    - **Cut:** `import data.scripts.world.systems.ECE_StarSystem;` and `new ECE_StarSystem().generate(sector);` from
+      `ECEModPlugin.generate`, release 8, all four checks.
+    - **Proofs:** subtraction PASS with no registration left, the site marked cut, and a boot note that needs only the rig;
+      isolation PASS.
+    - **Evidence:** both pass `gene evidence check --root`. The record is in
+      `In operation/Eridani-Combine/genes/p3-Pantheon-20261120-proofs-v3/`.
+  - Tests: `tests/test_gene_star_system.py` (30 in all; the fixture now ships its call site's build source):
+    - prove cuts the call: the copy's source and class no longer name the generator, and the boot note needs only the rig;
+    - a source that is not the shipped class refuses the cut and leaves the copy as subtraction made it;
+    - a cut that changes more than the call (a stub that also adds a statement) is refused and the copy is untouched;
+    - an unexpected error while planning is a recorded refusal; a failed write puts back the jar already written;
+    - only the import and whole call statements are cut; a call that is a bare `if` or `else` body is refused, and so is
+      any other mention, and two sites in one class;
+    - the cut class may only lose lines; a branch after the cut call still compares equal;
+    - a javap line is compared by meaning: Eridani's two padded `getstatic` lines, and a switch table keeping its values.
+
+    An independent review (one agent, the diff only) found the bare-`if` case, which the javap check cannot see because jump
+    targets are compared as labels. It also found:
+    - a restore by delete-and-copy that a locked jar or a non-`CutRefused` error could break, losing the backup; replaced
+      by plan-then-commit;
+    - switch-table offset stripping that hid case values;
+    - an unguarded missing JDK.
+
+    All are fixed with tests. Mutation-checked: 13 mutants, all killed (the whitespace rule needed its own test: the small
+    fixture class never crosses pool index 99).
+  - Next: P1's two boot runs once Test1 is logged on, then `gene boot`, then P2's and P3's boot runs (P3's carrier waits for
+    the faction gene).
 - 94.G3 **Gene bank**: content-addressed store, alleles across the corpus, lineage, licence state; RevenantLib distributes genes
   from vanished authors (GD-3). The store's payloads live under `data_root()`, like `Done/`, never in this public
   repository; only manifests of the owner's own or permitted content become committed fixtures (2026-11-19).

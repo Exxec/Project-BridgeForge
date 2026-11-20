@@ -45,6 +45,9 @@ def add_parser(subcommands) -> None:
     prove_cmd.add_argument("anchor", help=f"kind:id, kind one of {', '.join(CLOSABLE_KINDS)}")
     prove_cmd.add_argument("--out", type=Path, required=True, help="a new or empty folder outside the repository (it holds copies of the mod)")
     prove_cmd.add_argument("--vanilla-core", type=Path, help="starsector-core, for vanilla needs and the scans")
+    prove_cmd.add_argument("--provider-root", type=Path, action="append", default=[],
+                           help="a mods/ folder holding the libraries the donor's sources import, for cutting a star system's "
+                                "registration from its plugin (repeatable)")
     evidence_cmd = gene_sub.add_parser("evidence", help="evidence files about a gene (WP5): check that one carries the common header and is "
                                                         "about this gene as it stands")
     evidence_sub = evidence_cmd.add_subparsers(dest="evidence_command", required=True)
@@ -92,7 +95,7 @@ def _run_prove(args: argparse.Namespace) -> int:
     from .proof import ProofError, prove
 
     try:
-        result = prove(args.mod, args.anchor, args.out, vanilla_core=args.vanilla_core)
+        result = prove(args.mod, args.anchor, args.out, vanilla_core=args.vanilla_core, provider_roots=args.provider_root)
     except (ProofError, GeneError, VendorPlanError, OSError) as exc:
         print(f"bridgeforge: {exc}", file=sys.stderr)
         return 2

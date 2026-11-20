@@ -257,11 +257,13 @@ def registered_classes(gene: dict) -> list[str]:
     return sorted({element["statement"].split(":", 1)[0].strip() for element in gene["registrations"]})
 
 
-def boot_note(kind: str, gene: dict) -> str:
-    """What the boot half of one proof needs, said honestly before the rig runs it."""
-    if kind == "subtraction-proof" and gene["kind"] == "star-system":
+def boot_note(kind: str, gene: dict, cut: dict | None = None) -> str:
+    """What the boot half of one proof needs, said honestly before the rig runs it. `cut` is the subtraction copy's
+    registration cut (slice 8): when it was made, the subtracted donor can boot."""
+    if kind == "subtraction-proof" and gene["kind"] == "star-system" and not (cut and cut.get("cut")):
+        why = f" (the cut was refused: {cut['refused']})" if cut and cut.get("refused") else ""
         return ("NOT_RUN: the donor's plugin still calls the removed generator (the recorded registrations); booting the "
-                "donor without the gene needs that call cut (94.G2 slice 8)")
+                f"donor without the gene needs that call cut (94.G2 slice 8){why}")
     genes = gene["needs"].get("genes") or []
     if kind == "isolation-proof" and genes:
         return (f"NOT_RUN: the carrier needs {', '.join(genes)}, a gene not closable yet; it cannot take the donor instead "
@@ -356,8 +358,10 @@ def classify_isolation(donor, carrier, gene: dict) -> dict:
     return {"verdict": "FAIL" if failures else "PASS", "inherited": inherited, "carrier_own": carrier_own, "failures": failures}
 
 
-def prove(mod: Path, anchor: str, out: Path, *, vanilla_core: Path | None = None) -> dict:
-    """Write gene.json and the static subtraction and isolation proofs of one gene into `out` (outside the repository)."""
+def prove(mod: Path, anchor: str, out: Path, *, vanilla_core: Path | None = None, provider_roots: list[Path] | None = None) -> dict:
+    """Write gene.json and the static subtraction and isolation proofs of one gene into `out` (outside the repository). For a
+    star system the registration is cut from the subtraction copy when every step can be shown (slice 8,
+    genome/registration_cut.py; `provider_roots` hold the libraries its source imports)."""
     from bridgeforge.models import TargetProfile
     from bridgeforge.scan.scanner import scan_mod
     from bridgeforge.vendor_plan import vendor_plan
@@ -376,21 +380,29 @@ def prove(mod: Path, anchor: str, out: Path, *, vanilla_core: Path | None = None
     root = Path(plan["provider"])
     work = out / "work"
     notes = subtract(root, gene, work / "subtraction")
+    cut = None
+    if gene["kind"] == "star-system":
+        from bridgeforge.genome.registration_cut import cut_registrations
+
+        cut = cut_registrations(root, work / "subtraction", gene, vanilla_core, [Path(p) for p in provider_roots or []])
     try:
         plugin = build_carrier(root, gene, work / "carrier", vanilla_core=vanilla_core, work=work)
     except CarrierPluginRefused as refused:
         raise ProofError(f"the carrier cannot make the gene's registered call: {refused}") from refused
     donor_scan = scan_mod(root, TargetProfile(), vanilla_core)
     subtraction = classify_subtraction(donor_scan, scan_mod(work / "subtraction", TargetProfile(), vanilla_core), gene, plan["used_by"])
+    if cut and cut.get("cut"):
+        for site in subtraction["registration_sites"]:
+            site["status"] = "cut from the copy's build source and class (registration_cut)"
     isolation = classify_isolation(donor_scan, scan_mod(work / "carrier", TargetProfile(), vanilla_core), gene)
     inputs = [("member", path) for path in sorted({member_file(m["path"]) for m in gene["members"]})]
     atomic_write_text(out / "gene.json", dumps(gene), newline="")
     written = {}
-    halves = (("subtraction-proof", subtraction, {"rewritten": notes}),
+    halves = (("subtraction-proof", subtraction, {"rewritten": notes, **({"registration_cut": cut} if cut else {})}),
               ("isolation-proof", isolation, {"carrier_plugin": plugin} if plugin else {}))
     for kind, body, extra in halves:
         made = {**header(kind, gene, root=root, inputs=inputs, verdict=body["verdict"]), "half": "static", **body, **extra,
-                "boot": boot_note(kind, gene)}
+                "boot": boot_note(kind, gene, cut)}
         atomic_write_text(out / f"{kind}.json", json.dumps(made, indent=2, ensure_ascii=False) + "\n", newline="")
         written[kind] = body["verdict"]
     return {"gene": gene["identity"], "root": str(root), "verdicts": written, "out": str(out)}

@@ -3657,6 +3657,7 @@ the static halves of a gene's subtraction and isolation proofs (94.G2), written 
 | `anchor` | - | kind:id, kind one of hullmod, weapon, wing, hull, variant, shipsystem, combat-plugin, star-system |
 | `--out` OUT | required | a new or empty folder outside the repository (it holds copies of the mod) |
 | `--vanilla-core` VANILLA_CORE | - | starsector-core, for vanilla needs and the scans |
+| `--provider-root` PROVIDER_ROOT | repeatable | a mods/ folder holding the libraries the donor's sources import, for cutting a star system's registration from its plugin (repeatable) |
 
 ## gene evidence
 
