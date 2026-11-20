@@ -1691,6 +1691,33 @@ history as the closure benchmark, a cross-repository trace check, an early Java 
     fixture class never crosses pool index 99).
   - Next: P1's two boot runs once Test1 is logged on, then `gene boot`, then P2's and P3's boot runs (P3's carrier waits for
     the faction gene).
+  **P1's boot halves, first runs (Test1, `_rig-genes`, 2026-11-20).**
+  - **P1B-SUB-20261120: environmental.** It stalled before either Java agent started (the stdout log held only the JVM's
+    flag line). That was the first Java start after Test1's overnight restart and logon; the same command then ran.
+  - **P1B-SUB2-20261120, the subtracted donor: blocked by a dependent.** Content loaded, then the title screen showed
+    "Fatal: Hullmod sa_lobster_tanks not found!" while building the codex. The fatal names the dependent the static half
+    recorded (`data/hulls/sa_lobster.ship` builds the hull mod in). RC8_BEHAVIOUR RC8-44 records the fact. **Owner
+    2026-11-20 ("Expected outcome"):** a subtraction boot whose Fatal names only dependents the static half recorded is
+    BLOCKED_BY_DEPENDENT and the gene still passes subtraction; anything else in the log still fails it.
+  - **P1B-CAR-20261120, the carrier: not valid.** The carrier never loaded (no `description`, 93.65), so the run's PASS
+    proves nothing. To be re-run with a re-proved carrier after 93.65.
+  - **LOBSTER-SUB-20261120, a diagnostic the owner asked for: the whole lobster ship removed.** The cut was
+    `variant:sa_lobster_royal`'s subtraction copy, whose 18 members take in the hull mod gene, the hull and the variant. Its
+    static proof listed only the testbed mission as a dependent ("not located"). The boot was Fatal at load: "Ship hull
+    variant [sa_lobster_royal] not found!", from a spec asking the variant's fleet-point cost
+    (`SpecStore.init_vanilla` -> `getFPCost`). Five files still name the variant:
+    - `data/world/factions/default_ship_roles.json` and `data/config/title_screen_variants.csv`, always loaded;
+    - `data/config/modFiles/magicBounty_data.json`, with MagicLib;
+    - `data/config/exerelinFactionConfig/sindrian_diktat.json`, with Nexerelin;
+    - the testbed `MissionDefinition.java`, when that mission starts.
+
+    So the static subtraction proof does not read references from ship roles, title-screen variants or integration
+    configs. That is the next G2 slice; this run is its regression check, and it should reach the menu once those
+    references are dependents too.
+  - **Also found:** the rig's `fast_rendering/fr.rig.vmparams` names the primary rig's
+    `_rig-0985a/fast_rendering/fr.jar` as its Java agent and classpath entry. So `_rig-genes` and R8's `_rig-r8` loaded
+    Fast Rendering from the primary rig. The earlier relocatability check looked only for backslash paths and missed it,
+    and R8's "primary untouched" reading did not cover that folder. A rig builder must rewrite it (candidate).
 - 94.G3 **Gene bank**: content-addressed store, alleles across the corpus, lineage, licence state; RevenantLib distributes genes
   from vanished authors (GD-3). The store's payloads live under `data_root()`, like `Done/`, never in this public
   repository; only manifests of the owner's own or permitted content become committed fixtures (2026-11-19).
@@ -2260,6 +2287,21 @@ fixes of 93.28. 93.26-93.35 are that day's findings.
   `systems` is the only differing section it points at RC8-41. The other mentions now say `run-manifest check`. Tests:
   `tests/test_probe_group.py` `ReloadNextStepTests`: the hinted command parses with the real CLI parser (`check`, the reload
   run id, `--json`), and only a lone `systems` diff names RC8-41.
+- 93.65 (S) **The probe report passed a member the game never loaded.** P1B-CAR-20261120 booted P1's gene carrier on Test1:
+  LIVE_DONE, report PASS, `run-manifest check` ACCEPTABLE. But at 607 ms the game had logged `ModManager - Error loading mod
+  from [..\mods\P1-carrier]` and `JSONObject["description"] not found.` RC7 skipped the mod and ran vanilla plus the probe,
+  and the carrier's probe config had no content ids to miss, so the PASS was vacuous. The carrier's mod_info lacked
+  `description`, which RC7's `ModManager.loadModSpec` reads with `getString` (javap; RC8_BEHAVIOUR RC8-45).
+  **Done 2026-11-20.**
+  - `probe_record.mod_load_failures` reads each `Error loading mod from [...]` and its reason. `group_report` fails a member
+    whose rig folder it names (`mod-load|<folder>|<reason>`); another enabled mod that did not load is the group's, which
+    makes the members UNCLEAR. A folder that is not enabled is left out: RC7 reads every folder's mod_info, and
+    LOBSTER-SUB-20261120 logged the disabled old carrier's failure too.
+  - `proof.build_carrier` writes `description` and `author`.
+  - A sweep of all 573 rig logs on Test1 found no other load failure, so no earlier validation passed a mod that never loaded.
+  - Tests: `tests/test_probe_group.py` (a member that did not load fails, a library that did not load is the group's);
+    `tests/test_gene_star_system.py` (the carrier's mod_info has `id`, `name` and `description`). Mutation-checked: 2
+    mutants, both killed.
 - 93.64 (S) **A gate whose subject left Done/ had no state to close it.** bf-0b-15 (SEEKER Betelgeuse modules survive save
   and reload) tests SEEKER 0.3.0+bf.5's Betelgeuse and TWIG code. That archive moved to `Done/_replaced-2026-11-17/` when
   SEEKER 0.6.6 replaced it, and 0.6.6 has neither. The owner ruled 2026-11-19: "Close as superseded". `gates.json` allowed

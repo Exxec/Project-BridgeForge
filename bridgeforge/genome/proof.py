@@ -205,7 +205,10 @@ def build_carrier(root: Path, gene: dict, dest: Path, *, vanilla_core: Path | No
     generated plugin making the recorded call (`genome/carrier_plugin.py`); its record is returned, else None."""
     info = read_mod_info(root) or {}
     dest.mkdir(parents=True)
+    # RC7's ModManager.loadModSpec reads `id`, `name` and `description` with JSONObject.getString (javap 2026-11-20): without
+    # `description` the carrier never loaded (P1B-CAR-20261120: "JSONObject["description"] not found"). RC8_BEHAVIOUR RC8-45.
     carrier_info = {"id": f"gene_carrier_{gene['identity'][:12]}", "name": f"Gene carrier {gene['anchors'][0]}", "version": "0.0.1",
+                    "author": "BridgeForge gene proof", "description": f"Isolation carrier for {gene['anchors'][0]} (94.G2).",
                     "gameVersion": info.get("gameVersion"), "dependencies": [{"id": mod} for mod in gene["needs"]["mods"]]}
     settings: dict[str, dict] = {}
     for member in gene["members"]:

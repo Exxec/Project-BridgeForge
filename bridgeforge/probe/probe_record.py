@@ -109,6 +109,33 @@ def combat_rounds(log_text: str) -> dict:
     return {"planned": planned, "started": started, "missing": missing, "missing_hulls": [hulls.get(number, "?") for number in missing]}
 
 
+_MOD_LOAD_ERROR = re.compile(r"ModManager\s+-\s+Error loading mod from \[(?P<path>[^\]]+)\]")
+
+
+def mod_load_failures(log_text: str, mods_dir: Path | None) -> list[dict]:
+    """[{folder, mod_id (None when unknown), reason}] for each mod the game could not load. RC7 logs
+    `ModManager - Error loading mod from [..\\mods\\<folder>]` and the reason on the next line, then plays on without it:
+    P1B-CAR-20261120's gene carrier lacked `description` and the run, vanilla plus the probe, read PASS (2026-11-20). A mod
+    that is not enabled is left out: RC7 reads every folder's mod_info, and LOBSTER-SUB-20261120 logged the disabled old
+    carrier's failure too."""
+    from bridgeforge.mod_files import read_mod_info
+
+    lines, found = log_text.splitlines(), []
+    enabled = _enabled_mod_ids(mods_dir)
+    for i, line in enumerate(lines):
+        match = _MOD_LOAD_ERROR.search(line)
+        if not match:
+            continue
+        folder = re.split(r"[\\/]", match["path"].rstrip("\\/"))[-1]
+        reason = lines[i + 1].split(" - ", 1)[-1].strip() if i + 1 < len(lines) else ""
+        info = read_mod_info(Path(mods_dir) / folder) if mods_dir is not None and (Path(mods_dir) / folder).is_dir() else None
+        mod_id = info.get("id") if isinstance(info, dict) and isinstance(info.get("id"), str) else None
+        if mod_id is not None and enabled is not None and mod_id not in enabled:
+            continue  # the game reads every folder's mod_info; a broken one it was not asked to enable changes nothing
+        found.append({"folder": folder, "mod_id": mod_id, "reason": reason[:200]})
+    return found
+
+
 def group_report(log: Path, config: dict, mods_dir: Path | None = None, accepted: dict[str, list[dict]] | None = None) -> dict:
     """One verdict per member: probe FAIL lines matched by the content id or faction they name, and crashes
     by the mod whose jar threw (log-triage attribution). Unmatched FAILs are reported for the group. `accepted` moves the
@@ -163,6 +190,10 @@ def group_report(log: Path, config: dict, mods_dir: Path | None = None, accepted
             verdicts[mod_id].setdefault("accepted", []).append(entry)
             continue
         (verdicts[mod_id]["failures"] if mod_id else unattributed).append(entry)
+    # A member the game could not load fails, whatever else passed; another mod that did not load is the group's problem.
+    for failure in mod_load_failures(log_text, mods_dir):
+        entry = f"mod-load|{failure['folder']}|{failure['reason']}"
+        (verdicts[failure["mod_id"]]["failures"] if failure["mod_id"] in verdicts else unattributed).append(entry)
     # 77.17: a shortfall between what the working copy defines and what the game loaded fails that member (excess is information).
     parity = parity_findings(log, config)
     for mod_id, lines in apply_parity_acceptances(parity, accepted).items():  # owner-accepted "<kind>:<id>" entries (2026-11-17)

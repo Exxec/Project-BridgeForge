@@ -215,6 +215,8 @@ class StarSystemGeneTests(unittest.TestCase):
             carrier = out / "proof" / "work" / "carrier"
             info = json.loads((carrier / "mod_info.json").read_text(encoding="utf-8"))
             self.assertEqual(info["modPlugin"], "bfgene.CarrierPlugin")
+            for key in ("id", "name", "description"):  # RC7's loadModSpec getString()s these; without one the mod is skipped
+                self.assertTrue(info.get(key), key)
             self.assertEqual(info["jars"], ["jars/bfgene_carrier.jar", "jars/demo.jar"])  # the game loads only listed jars
             with zipfile.ZipFile(carrier / "jars" / "bfgene_carrier.jar") as jar:
                 self.assertEqual(jar.namelist(), ["bfgene/CarrierPlugin.class"])
