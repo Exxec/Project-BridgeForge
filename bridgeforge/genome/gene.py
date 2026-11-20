@@ -32,6 +32,7 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import re
 import zipfile
 from pathlib import Path
 
@@ -125,6 +126,36 @@ def _jar_member(root: Path, member: str) -> dict:
     raise GeneError(f"{member}: the jar entry the closure names was not found in a readable jar of the mod")
 
 
+_PACKAGE_DECL = re.compile(r"^\s*package\s+([\w.]+)\s*;", re.MULTILINE)
+
+
+def _loaded_classes(root: Path) -> dict[str, str]:
+    """{entry `a/B.class`: the loaded jar's path in the mod} for the jars the game loads (a jar class beats a loose script)."""
+    from bridgeforge.scan.scan_classfile import _loaded_mod_jars, iter_class_files_in_jars
+
+    found: dict[str, str] = {}
+    for jar, member, _data in iter_class_files_in_jars(_loaded_mod_jars(root)):  # the canonical walk (WP6)
+        found.setdefault(member, Path(jar).relative_to(root).as_posix())
+    return found
+
+
+def _loaded_member(root: Path, entry: dict, loaded: dict[str, str]) -> dict | None:
+    """What the game loads for a `.java` vendor-plan names (94.G2, P2 2026-11-19): the class from a loaded jar when one has
+    it; else the file, only when it sits at its package path (the loose-script loader resolves `a.b.C` to `a/b/C.java`);
+    else nothing. vendor-plan prefers the source on purpose (RevenantLib rebuilds from it); a gene names what runs."""
+    path = entry["path"]
+    text = (root / path).read_text(encoding="utf-8-sig", errors="replace")
+    package = _PACKAGE_DECL.search(text)
+    stem = Path(path).stem
+    expected = (package.group(1).replace(".", "/") + "/" if package else "") + stem
+    if f"{expected}.class" in loaded:
+        member = _jar_member(root, f"{Path(loaded[expected + '.class']).name}!{expected}.class")
+        return {**member, "reason": f"{entry['reason']}; the game loads the jar class (source {path} is not a member)"}
+    if path == f"{expected}.java":
+        return _file_member(root, path)
+    return None
+
+
 def identity(kind: str, members: list[dict]) -> str:
     """The gene's identity: the kind and its members (what, path, content hash), in a fixed order."""
     lines = [f"{kind}\n"] + [f"{m['what']}\t{m['path']}\t{m['sha256']}\n" for m in sorted(members, key=lambda m: (m["what"], m["path"]))]
@@ -141,8 +172,16 @@ def describe(mod: Path, anchor: str, *, vanilla_core: Path | None = None, policy
     if anchor not in plan["closure_ids"]:
         raise GeneError(f"{anchor} is not defined by {root} (missing: {', '.join(plan['missing']) or 'nothing'})")
     members = []
+    loaded = _loaded_classes(root)
+    missing_classes = []
     for entry in plan["include"]:
-        if entry["what"] == "file":
+        if entry["what"] == "file" and entry["path"].endswith(".java"):
+            member = _loaded_member(root, entry, loaded)
+            if member is None:
+                missing_classes.append(f"class source {entry['path']} ({entry['reason']}): not at its package path and in no "
+                                       "loaded jar, so the game never loads it")
+                continue
+        elif entry["what"] == "file":
             member = _file_member(root, entry["path"])
         elif entry["what"] == "csv-row":
             member = _row_member(root, entry["path"])
@@ -150,7 +189,8 @@ def describe(mod: Path, anchor: str, *, vanilla_core: Path | None = None, policy
             member = _jar_member(root, entry["path"])
         else:
             raise GeneError(f"vendor-plan named a part of an unknown kind: {entry['what']!r}")
-        members.append({**member, "reason": entry["reason"]})
+        members.append({**member, "reason": member.pop("reason", None) or entry["reason"]})
+    members = list({(m["what"], m["path"]): m for m in members}.values())  # a jar class reached twice is one member
     from bridgeforge.genome.closure import SETTINGS_FILE, extend
 
     extra = extend(root, members, vanilla_core, [closure_id.split(":", 1)[1] for closure_id in plan["closure_ids"]])
@@ -173,7 +213,7 @@ def describe(mod: Path, anchor: str, *, vanilla_core: Path | None = None, policy
         "derived_from": None,
         "licence": licence,
         "phenotype_obligations": list(PHENOTYPE[kind]),
-        "unknowns": {"missing": plan["missing"] + extra["missing"], "suspects": suspects},
+        "unknowns": {"missing": plan["missing"] + missing_classes + extra["missing"], "suspects": suspects},
         "collected_from": list(COLLECTED_FROM),
     }
     problems = validate(gene)

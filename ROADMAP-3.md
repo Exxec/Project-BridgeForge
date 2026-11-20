@@ -838,7 +838,14 @@ unproven).
   **Done 2026-11-19.** A checkpointed source that carries errors is walked again.
   Test: `tests/test_state_snapshot.py` `test_a_checkpointed_source_that_carries_errors_is_walked_again`. On Test1 the stale
   checkpoint was moved aside (kept as `snapshot.partial.jsonl.stale-20261119`) and a fresh snapshot started. Gate R8 stays
-  open until that snapshot ends with no errors and `snapshot-restore-check` passes.
+  open until that snapshot ends with no errors and `snapshot-restore-check` passes. That snapshot ended the same day with 0
+  errors, and its checkpoint cleared.
+- 96.16 (S) **A flaky research test on Windows CI.** `tests/test_research_inputs.py`
+  `test_flags_reach_the_report_and_the_cache_lands_beside_the_report` failed once on Windows shard 3/4 for PR #185 (run
+  44643449898): it found 2 cached `TemCrusade.java` copies where it expects 1. It passes locally, and main's run on the
+  same merge commit passed (44644028462). Likely cause, not yet confirmed: the decompile cache directory is keyed in a way
+  that can yield two folders within one run, such as a time or path component. To do: find the key, make it
+  deterministic, and assert on it. Recorded 2026-11-19, after the PR was merged on an UNSTABLE status by mistake.
 - 95.1 (M) **Owner rulings as standing policy.** The owner ruled the same way many times: CSV rows with no file that nothing uses
   (Musashi, Bultach, UAF: "keep them and ignore warning if it doesn't affect anything"), findings the reference build shares in a
   mod that works there (UAF: "Your clear to proceed"), and behaviour as authored with evidence (Sunrider: "yes"). Encode them as
@@ -1398,8 +1405,28 @@ history as the closure benchmark, a cross-repository trace check, an early Java 
 
     Two bugs were caught before merge: a multi-line array's first line was cut, and a dotted class name hid a leak.
     Mutation-checked: 8 mutants killed.
-  - Next: P2 (Navarchy of Tania's jar-backed junkyard spawner: jar-class members, the combat plugin), then P3 (Eridani's
-    Pantheon system, the first registration slice). The boot halves of P1's proofs run when live testing resumes.
+  **Slice 3 Done 2026-11-19: a gene names the class the game loads.**
+  - Describing P2 (`hullmod:tania_junkyard_spawner`) gave `src/data/hullmods/tania_Placebo_For_IDs.java` as a member.
+    The game never loads a file under `src/`; it loads `jars/tania.jar!data/hullmods/tania_Placebo_For_IDs.class`.
+  - vendor-plan prefers a class's source on purpose: RevenantLib rebuilds what it vendors from source, so `vendor-copy`
+    and its copy plan are left unchanged. `gene describe` applies the load rule instead:
+    - a loaded jar's class wins, and the source path goes into the member's reason;
+    - otherwise a `.java` is a member only at its package path, where the loose-script loader looks;
+    - otherwise it is missing ("the game never loads it").
+
+    Members reached twice are one member.
+  - P1's identity is unchanged (`bb64ad41…`). P2's member is the jar class.
+  - Tests: `tests/test_gene_loaded_class.py`:
+    - a jar class beats a source under `src/`, and a loose script of the same name;
+    - a loose script at its package path is the member;
+    - a source only under `src/` with no jar is missing.
+
+    Mutation-checked: 3 mutants killed. vendor-plan's and vendor-copy's own tests still pass.
+  - Next: schema 4, the last bump G2 needs. It adds every G2 kind, among them `combat-plugin`, anchored on its
+    `settings.json` `plugins` key, and refuses kinds it cannot close yet. `proof.py` learns nested JSON Pointers. Then P2
+    as the whole `tania_CombatHandlerSpawner` plugin: its three spawner modes share one jar class, so a junkyard-only gene
+    is a recorded refusal, not a hand-built one. Then P3 (Eridani's Pantheon system, the first registration slice). The
+    boot halves of P1's proofs run when live testing resumes.
 - 94.G3 **Gene bank**: content-addressed store, alleles across the corpus, lineage, licence state; RevenantLib distributes genes
   from vanished authors (GD-3). The store's payloads live under `data_root()`, like `Done/`, never in this public
   repository; only manifests of the owner's own or permitted content become committed fixtures (2026-11-19).
