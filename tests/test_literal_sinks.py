@@ -88,7 +88,7 @@ class LiteralSinkTests(unittest.TestCase):
         self.assertEqual(sinks["demo_added"], {"com/fs/starfarer/api/combat/ShipVariantAPI.addMod#0"})
         self.assertEqual(sinks["demo_unused_const"], {NOT_LOADED})
         self.assertEqual(sinks["demo_stored"], {"unknown: stored"})
-        self.assertEqual(sinks["demo_table"], {"java/util/Map.put#0"})
+        self.assertEqual(sinks["demo_table"], {"java/util/Map.put#0@demo/Probe.table"})  # the map field it goes into (slice 14)
         self.assertEqual(sinks["demo_dup"], {"unknown: duplicated"})  # its copy goes on to addMod: not followed, kept
         mentions = {value for value, where in sinks.items() if is_mention(where)}
         self.assertEqual(mentions & {f"demo_{n}" for n in ("checked", "key", "unused_const", "added", "both", "stored", "table", "a",
@@ -131,6 +131,90 @@ class LiteralSinkTests(unittest.TestCase):
         mention = [s for s in gene["unknowns"]["suspects"] if "a mention, not a need" in s["reason"]]
         self.assertEqual([(s["path"], s["mentions"]) for s in mention],
                          [("jars/demo.jar!demo/Checker.class", ["demo_other", "demo_port"])])  # not its own demo_checker
+
+
+TABLES = """package demo;
+public class Tables {
+    public static final java.util.Map<String, Integer> POINTS = new java.util.HashMap<>();
+    public static final java.util.Map<String, Integer> ITERATED = new java.util.HashMap<>();
+    static Object BOXED = new java.util.HashMap<String, Integer>();  // not typed as a map: never called lookup-only
+    static { POINTS.put("demo_listed", 1); ITERATED.put("demo_iterated", 1); }
+    int score(String id) { return POINTS.containsKey(id) ? POINTS.get(id) : 0; }
+    @SuppressWarnings("unchecked")
+    int boxed(String id) { return ((java.util.Map<String, Integer>) BOXED).containsKey(id) ? 1 : 0; }
+    void local() { java.util.Map<String, Integer> m = new java.util.HashMap<>(); m.put("demo_local", 2); }  // no field
+}
+"""
+USER = """package demo;
+import com.fs.starfarer.api.combat.ShipVariantAPI;
+public class User { void all(ShipVariantAPI v) { for (String id : Tables.ITERATED.keySet()) v.addMod(id); } }
+"""
+
+
+@unittest.skipUnless(_javac(), "needs javac")
+class LookupOnlyMapTests(unittest.TestCase):
+    # Slice 14 (owner 2026-11-20, "Lookup-only keys = suspect"): ECE_FluxEMPHullMod's HULLMOD_POINTS table.
+    def test_a_key_of_a_map_only_looked_up_is_a_mention_and_one_iterated_elsewhere_is_a_need(self) -> None:
+        with resolved_temp_dir() as root:
+            classes = _compile(root, {"demo/Tables.java": TABLES, "demo/User.java": USER})
+            tables, user = (classes / "demo" / "Tables.class").read_bytes(), (classes / "demo" / "User.class").read_bytes()
+        sinks = class_literal_sinks(tables, _parse_class_file(tables).string_constants)
+        self.assertEqual(sinks["demo_listed"], {"java/util/Map.put#0@demo/Tables.POINTS"})
+        self.assertEqual(sinks["demo_local"], {"java/util/Map.put#0"})  # a local map's key: no field, so a need
+        whole_mod = literal_sinks.lookup_only_maps([tables, user])
+        self.assertEqual(whole_mod, {"demo/Tables.POINTS"})  # User iterates ITERATED's keys into addMod
+        self.assertTrue(is_mention(sinks["demo_listed"], whole_mod))
+        self.assertFalse(is_mention(sinks["demo_iterated"], whole_mod))
+        self.assertFalse(is_mention(sinks["demo_listed"]))  # without the mod-wide answer, a key stays a need
+        self.assertEqual(literal_sinks.lookup_only_maps([tables]), {"demo/Tables.POINTS", "demo/Tables.ITERATED"})
+        self.assertEqual(literal_sinks.lookup_only_maps([tables, b"not a class"]), frozenset())  # unreadable: none
+
+    def test_a_field_loaded_under_another_owner_is_not_lookup_only(self) -> None:
+        # javac names the qualifying type: Sub.POINTS is Tables.POINTS in the Fieldref of `SubUser` (review 2026-11-20).
+        sub = "package demo;\npublic class Sub extends Tables {}\n"
+        sub_user = "package demo;\npublic class SubUser { boolean has(String id) { return Sub.POINTS.containsKey(id); } }\n"
+        with resolved_temp_dir() as root:
+            classes = _compile(root, {"demo/Tables.java": TABLES, "demo/Sub.java": sub, "demo/SubUser.java": sub_user})
+            data = [(classes / "demo" / f"{n}.class").read_bytes() for n in ("Tables", "Sub", "SubUser")]
+        self.assertNotIn("demo/Tables.POINTS", literal_sinks.lookup_only_maps(data))
+        self.assertIn("demo/Tables.POINTS", literal_sinks.lookup_only_maps(data[:2]))
+
+    def test_a_loose_script_or_an_unread_jar_keeps_a_table_s_keys_needs(self) -> None:
+        from bridgeforge.genome.closure import lookup_only
+
+        loose = ("package data.scripts;\nimport com.fs.starfarer.api.combat.ShipVariantAPI;\npublic class Loose {\n"
+                 "    void all(ShipVariantAPI v) { for (String k : demo.Tables.POINTS.keySet()) v.addMod(k); }\n}\n")
+        with resolved_temp_dir() as root:
+            classes = _compile(root, {"demo/Tables.java": TABLES})
+            mod = root / "mod"
+            _write(mod / "mod_info.json", json.dumps({"id": "demo", "name": "Demo", "jars": ["jars/demo.jar"]}))
+            (mod / "jars").mkdir()
+            with zipfile.ZipFile(mod / "jars/demo.jar", "w") as jar:
+                jar.write(classes / "demo" / "Tables.class", "demo/Tables.class")
+            _write(mod / "src/demo/Tables.java", TABLES)  # the jar's own source names POINTS too: not a loose script
+            self.assertIn("demo/Tables.POINTS", lookup_only(mod))
+            _write(mod / "data/scripts/Loose.java", loose)
+            self.assertNotIn("demo/Tables.POINTS", lookup_only(mod))  # a loose script is not read as bytecode
+            (mod / "data/scripts/Loose.java").unlink()
+            _write(mod / "mod_info.json", json.dumps({"id": "demo", "name": "Demo", "jars": ["jars/demo.jar", "jars/broken.jar"]}))
+            _write(mod / "jars/broken.jar", "not a zip")
+            self.assertEqual(lookup_only(mod), frozenset())  # an unread jar might iterate it
+
+    def test_describe_leaves_a_lookup_table_s_keys_behind(self) -> None:
+        with resolved_temp_dir() as root:
+            classes = _compile(root, {"demo/Tables.java": TABLES, "demo/User.java": USER})
+            mod = root / "mod"
+            _write(mod / "mod_info.json", json.dumps({"id": "demo", "name": "Demo", "jars": ["jars/demo.jar"]}))
+            _write(mod / "data/hullmods/hull_mods.csv", "name,id,script\nTable,demo_table,demo.Tables\nListed,demo_listed,\n"
+                   "Iterated,demo_iterated,\n")
+            (mod / "jars").mkdir()
+            with zipfile.ZipFile(mod / "jars/demo.jar", "w") as jar:
+                for name in ("Tables", "User"):
+                    jar.write(classes / "demo" / f"{name}.class", f"demo/{name}.class")
+            gene = describe(mod, "hullmod:demo_table")
+        self.assertEqual(gene["provides"], ["hullmod:demo_iterated", "hullmod:demo_table"])
+        mention = [s for s in gene["unknowns"]["suspects"] if "a mention, not a need" in s["reason"]]
+        self.assertEqual([(s["path"], s["mentions"]) for s in mention], [("jars/demo.jar!demo/Tables.class", ["demo_listed"])])
 
 
 class SamePackageLiteralTests(unittest.TestCase):
