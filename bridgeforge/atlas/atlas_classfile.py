@@ -196,14 +196,15 @@ _INVOKES = (0xb6, 0xb7, 0xb8, 0xb9)
 
 
 def instructions(code: bytes) -> list[tuple[int, int, int | None]]:
-    """(pc, opcode, operand) in order: the pool index of ldc and invokes, the local of every astore/aload form, folded to
-    0x3a/0x19 (wide included); None for other operands."""
+    """(pc, opcode, operand) in order: the pool index of ldc, invokes and field instructions (getstatic to putfield: 94.G2
+    slice 14 follows a map field), the local of every astore/aload form, folded to 0x3a/0x19 (wide included); None for other
+    operands."""
     found, pc = [], 0
     while pc < len(code):
         op, arg = code[pc], None
         if op == _LDC:
             arg = code[pc + 1]
-        elif op == _LDC_W or op in _INVOKES:
+        elif op == _LDC_W or op in _INVOKES or 0xb2 <= op <= 0xb5:
             arg = struct.unpack_from(">H", code, pc + 1)[0]
         elif op in (_ASTORE, _ALOAD):
             arg = code[pc + 1]

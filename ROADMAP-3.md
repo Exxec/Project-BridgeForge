@@ -2039,6 +2039,46 @@ history as the closure benchmark, a cross-repository trace check, an early Java 
       entry.
 
     Mutation-checked: 14 mutants, all killed (the `dup` case needed its own probe method).
+  **Slice 14 Done 2026-11-20: keys of a map that is only looked up are mentions (owner ruling).**
+  - **Owner 2026-11-20** (asked with the numbers, chose "Lookup-only keys = suspect"): `ECE_FluxEMPHullMod` keeps a public
+    `HULLMOD_POINTS` table of 10 other hull mod ids. Its code only looks entries up (javap: `containsKey`, `get`), yet the
+    table made that hull mod, and every hull that builds it in, carry all 10.
+  - **The rule** (`literal_sinks`):
+    - a literal put as a map key is tagged with the map field when that field's load comes right before it
+      (`Map.put#0@owner.field`);
+    - `lookup_only_maps` reads every load of each map-typed field in the mod's loaded classes. A field qualifies only
+      when every load ends in `get`, `containsKey` or `put`;
+    - iterating, storing or passing the map keeps its keys as needs, and so does a class it cannot read. A map in a local
+      or behind a cast is never tagged.
+
+    `closure.lookup_only` caches the answer per root by the loaded jars' paths, sizes and times. `instructions()` now
+    also returns the pool index of field instructions.
+  - **Results:**
+    - P1, P2 (89e207d1) and P3 (3ebc89de) keep their slice-13 identities;
+    - Eridani's lookup-only maps are `HULLMOD_POINTS` and `modRecorder`;
+    - `hullmod:ECE_FluxEMPHullMod` is 7 members, providing only itself;
+    - `hull:ECE_Neptune` is 11 members, providing itself and the hull mod it builds in.
+    - **P3's set** (`genes/p3-set-20261120-s14/`): PASS. 56 genes, carrier `gene_carrier_7e9378bdc19e`, nothing
+      unresolved.
+    - **Binding:** 56 distinct genes, largest strongly connected group 1, 32 standalone. The largest hull gene now
+      provides 7 anchors (was 17): the hull, its own built-in hull mods, systems and modules.
+  - Tests: `tests/test_literal_sinks.py`:
+    - a table only looked up, beside one another class iterates into `addMod`;
+    - a local map and an `Object` field read through a cast;
+    - one class alone against the whole mod, and an unreadable class;
+    - `describe` leaving the looked-up key behind as a suspect while the iterated one is a need.
+
+    An independent review found no crash, but three ways a real need could be dropped. All are fixed with tests, each
+    falling back to "a need":
+    - **A jar or class the reader skipped** (it failed to open, was oversized, or had a bad CRC) went unseen. Any such
+      jar or class now makes the answer empty.
+    - **Loose `.java` scripts were never read.** A field whose name a loose script contains as a word is never
+      lookup-only; a jar class's shipped source does not count.
+    - **javac names the qualifying type** (`Sub.MAP` for `Base.MAP`). So a field name loaded under two owners is never
+      lookup-only.
+
+    By the ruling's scope, another mod or reflection reading a public table is not seen. Mutation-checked: 13 mutants,
+    all killed (a local map and a cast field each needed their own case).
 - 94.G3 **Gene bank**: content-addressed store, alleles across the corpus, lineage, licence state; RevenantLib distributes genes
   from vanished authors (GD-3). The store's payloads live under `data_root()`, like `Done/`, never in this public
   repository; only manifests of the owner's own or permitted content become committed fixtures (2026-11-19).

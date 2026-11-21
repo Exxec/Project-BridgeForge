@@ -19,6 +19,7 @@ are the same allele.
 """
 from __future__ import annotations
 
+import functools
 import hashlib
 import json
 import re
@@ -140,19 +141,55 @@ def _jar_class_sinks(root: Path, member: dict) -> dict[str, set[str]] | None:
     return class_literal_sinks(data, info.string_constants) if info is not None else None
 
 
+@functools.lru_cache(maxsize=16)
+def _lookup_only_cached(jars: tuple[tuple[str, int, int], ...], scripts: tuple[tuple[str, int, int], ...]) -> frozenset[str]:
+    from bridgeforge.genome.literal_sinks import lookup_only_maps
+    from bridgeforge.scan.scan_classfile import iter_class_files_in_jars
+    from bridgeforge.vendor_plan import _COMMENTS, _PACKAGE
+
+    unreadable: list[str] = []
+    skipped: list[str] = []
+    classes, names = [], set()
+    for _jar, member, data in iter_class_files_in_jars([Path(path) for path, _s, _t in jars], unreadable, skipped_entries=skipped):
+        classes.append(data)
+        names.add(member[:-len(".class")].replace("/", "."))
+    if unreadable or skipped:
+        return frozenset()  # a jar or class not read might iterate the map (review 2026-11-20)
+    loose = []
+    for path, _size, _time in scripts:  # loose scripts, not a jar class's shipped source: the game compiles them
+        text = _COMMENTS.sub("", Path(path).read_text(encoding="utf-8-sig", errors="replace"))
+        package = _PACKAGE.search(text)
+        if (f"{package.group(1)}.{Path(path).stem}" if package else Path(path).stem) not in names:
+            loose.append(text)
+    return lookup_only_maps(classes, "\n".join(loose))
+
+
+def lookup_only(root: Path) -> frozenset[str]:
+    """The map fields of the mod's loaded classes that are only looked up (slice 14, `literal_sinks.lookup_only_maps`),
+    cached by the paths, sizes and times of the loaded jars and the mod's .java files."""
+    from bridgeforge.scan.scan_classfile import _loaded_mod_jars
+
+    def stats(paths) -> tuple[tuple[str, int, int], ...]:
+        return tuple((str(p), p.stat().st_size, p.stat().st_mtime_ns) for p in sorted(Path(x).resolve() for x in paths))
+
+    root = Path(root).resolve()
+    return _lookup_only_cached(stats(_loaded_mod_jars(root)), stats(root.rglob("*.java")))
+
+
 def code_literals(root: Path, members: list[dict]) -> set[str]:
     """The string literals of a gene's code members that may name what the code needs: every literal of a loose script (by
     text), and each literal of a jar class used at least once other than as a mention (slice 13, owner 2026-11-20:
-    `literal_sinks.is_mention`)."""
+    `literal_sinks.is_mention`; slice 14: a key of a map field that is only looked up is a mention too)."""
     from bridgeforge.genome.literal_sinks import is_mention
 
     literals: set[str] = set()
+    maps = lookup_only(root) if any(m["what"] == "jar-class" for m in members) else frozenset()
     for member in members:
         if member["what"] == "file" and member["path"].endswith(".java"):
             literals |= set(_STRING_LITERAL.findall((Path(root) / member["path"]).read_text(encoding="utf-8-sig", errors="replace")))
         elif member["what"] == "jar-class":
             sinks = _jar_class_sinks(root, member)
-            literals |= {value for value, where in (sinks or {}).items() if not is_mention(where)}
+            literals |= {value for value, where in (sinks or {}).items() if not is_mention(where, maps)}
     return literals
 
 
@@ -161,9 +198,10 @@ def code_mentions(root: Path, members: list[dict]) -> dict[str, dict[str, set[st
     from bridgeforge.genome.literal_sinks import is_mention
 
     found: dict[str, dict[str, set[str]]] = {}
+    maps = lookup_only(root) if any(m["what"] == "jar-class" for m in members) else frozenset()
     for member in members:
         if member["what"] == "jar-class":
-            mentioned = {value: where for value, where in (_jar_class_sinks(root, member) or {}).items() if is_mention(where)}
+            mentioned = {value: where for value, where in (_jar_class_sinks(root, member) or {}).items() if is_mention(where, maps)}
             if mentioned:
                 found[member["path"]] = mentioned
     return found

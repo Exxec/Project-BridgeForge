@@ -18,6 +18,7 @@ judged where it is loaded. Loose `.java` scripts keep their literals as before (
 """
 from __future__ import annotations
 
+import re
 import struct
 
 from bridgeforge.atlas.atlas_classfile import ClassFormatError, instructions, iter_method_code, jump_targets
@@ -106,11 +107,11 @@ def class_literal_sinks(data: bytes, constants: list[str] | set[str]) -> dict[st
         methods = iter_method_code(data)
         for _owner, _method, code, pool, _params in methods:
             steps, targets = instructions(code), jump_targets(code)
-            for i, (_pc, op, arg) in enumerate(steps):
+            for i, (pc, op, arg) in enumerate(steps):
                 if op in _LDC:
                     value = pool.string(arg)
                     if value is not None:
-                        sinks.setdefault(value, set()).add(sink_of(steps, i, targets, pool))
+                        sinks.setdefault(value, set()).add(_keyed(steps, i, targets, pool, sink_of(steps, i, targets, pool)))
     except (ClassFormatError, ValueError, IndexError, KeyError, struct.error):  # truncated code: struct.error (review)
         return {value: {"unknown: the class could not be read"} for value in constants}
     for value in constants:
@@ -118,9 +119,69 @@ def class_literal_sinks(data: bytes, constants: list[str] | set[str]) -> dict[st
     return sinks
 
 
-def is_mention(sinks: set[str]) -> bool:
-    """True when every occurrence only names the literal: a mention sink, or a constant never loaded."""
-    return bool(sinks) and all(s in MENTION_SINKS or s == NOT_LOADED for s in sinks)
+# Slice 14 (owner 2026-11-20, "Lookup-only keys = suspect"): a literal put as a key into a map field is a mention when every
+# load of that field in the mod's loaded code ends in a lookup. ECE_FluxEMPHullMod's public HULLMOD_POINTS maps 10 hull
+# mod ids to points, read only by containsKey and get (javap 2026-11-20).
+MAP_OWNERS = ("java/util/Map", "java/util/HashMap", "java/util/LinkedHashMap", "java/util/TreeMap")
+_PUTS = {f"{owner}.put#0" for owner in MAP_OWNERS}
+_MAP_READS_ALLOWED = {f"{owner}.{method}#recv" for owner in MAP_OWNERS for method in ("get", "containsKey", "put")}
+_FIELD_LOADS = (0xb2, 0xb4)  # getstatic, getfield
 
 
-__all__ = ["MENTION_SINKS", "NOT_LOADED", "class_literal_sinks", "is_mention", "sink_of"]
+def _keyed(steps: list, start: int, targets: set[int], pool, sink: str) -> str:
+    """`sink@owner.field` when the literal is a key put into the map a field load pushed right before it; else `sink`."""
+    if sink not in _PUTS or start == 0 or steps[start][0] in targets or steps[start - 1][1] not in _FIELD_LOADS:
+        return sink
+    owner, name, _descriptor = pool.member(steps[start - 1][2])
+    return f"{sink}@{owner}.{name}"
+
+
+def map_field_loads(data: bytes) -> dict[str, set[str]]:
+    """{`owner.field` of each map-typed field one class loads: the sinks of those loads}. Raises on an unreadable class;
+    `lookup_only_maps` then calls no field lookup-only."""
+    loads: dict[str, set[str]] = {}
+    for _owner, _method, code, pool, _params in iter_method_code(data):
+        steps, targets = instructions(code), jump_targets(code)
+        for i, (_pc, op, arg) in enumerate(steps):
+            if op in _FIELD_LOADS:
+                owner, name, descriptor = pool.member(arg)
+                if descriptor.strip("L;") in MAP_OWNERS:
+                    loads.setdefault(f"{owner}.{name}", set()).add(sink_of(steps, i, targets, pool))
+    return loads
+
+
+def lookup_only_maps(classes, loose_text: str = "") -> frozenset[str]:
+    """The map fields (`owner.field`) that every load in `classes` (class file bytes) only looks up or puts into. Each rule
+    below falls back to "a need" (review 2026-11-20):
+    - a class that cannot be read makes the answer empty, since any field might be read there in another way;
+    - a field name loaded under two owners is never lookup-only. javac names the qualifying type, so `Sub.MAP` and
+      `Base.MAP` may be one field;
+    - a field whose name the mod's loose scripts (`loose_text`) contain as a word is never lookup-only, since a script is
+      not read as bytecode."""
+    loads: dict[str, set[str]] = {}
+    for data in classes:
+        try:
+            for field, sinks in map_field_loads(data).items():
+                loads.setdefault(field, set()).update(sinks)
+        except (ClassFormatError, ValueError, IndexError, KeyError, struct.error):
+            return frozenset()
+    owners: dict[str, set[str]] = {}
+    for field in loads:
+        owners.setdefault(field.rsplit(".", 1)[1], set()).add(field)
+    named_loose = {name for name in owners if re.search(rf"\b{re.escape(name)}\b", loose_text)}
+    return frozenset(field for field, sinks in loads.items() if sinks <= _MAP_READS_ALLOWED
+                     and len(owners[field.rsplit(".", 1)[1]]) == 1 and field.rsplit(".", 1)[1] not in named_loose)
+
+
+def is_mention(sinks: set[str], lookup_only: frozenset[str] = frozenset()) -> bool:
+    """True when every occurrence only names the literal: a mention sink, a constant never loaded, or a key put into a map
+    field that is only looked up (`lookup_only`, from `lookup_only_maps`)."""
+    def named_only(sink: str) -> bool:
+        put, _, field = sink.partition("@")
+        return sink in MENTION_SINKS or sink == NOT_LOADED or (bool(field) and put in _PUTS and field in lookup_only)
+
+    return bool(sinks) and all(named_only(s) for s in sinks)
+
+
+__all__ = ["MAP_OWNERS", "MENTION_SINKS", "NOT_LOADED", "class_literal_sinks", "is_mention", "lookup_only_maps", "map_field_loads",
+           "sink_of"]
