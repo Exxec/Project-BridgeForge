@@ -1,0 +1,1 @@
+- RC8_BEHAVIOUR RC8-47's evidence now traces `SpecStore`'s `ship_systems.csv`, `hull_mods.csv` and `descriptions.csv` loads to the same `#`-dropping CSV parser, which backs the vanilla `pdintegration` finding (94.G2).
