@@ -35,6 +35,18 @@ class CutTests(unittest.TestCase):
         with self.assertRaises(ProofError):
             cut_csv_row("name,desc\nA,b\n", "tank_mod")
 
+    def test_the_row_cut_is_the_one_the_game_keeps_not_a_commented_one(self) -> None:
+        # RC8-47: the game drops a row whose line starts with '#', so the gene's row is the live one after it (slice 16).
+        text = "name,id\n#Old,tank_mod\nNew,tank_mod\nC,other\n"
+        rest, row = cut_csv_row(text, "tank_mod")
+        self.assertEqual(row, "New,tank_mod\n")
+        self.assertEqual(rest, "name,id\n#Old,tank_mod\nC,other\n")
+        with self.assertRaises(ProofError):
+            cut_csv_row("name,id\n#Only,tank_mod\n", "tank_mod")
+        # Lines are counted as csv counts them: a form feed inside a quoted cell is not a line break.
+        self.assertEqual(cut_csv_row('name,id,desc\nA,a,"x\x0cy"\nB,tank_mod,z\n', "tank_mod"),
+                         ('name,id,desc\nA,a,"x\x0cy"\n', "B,tank_mod,z\n"))
+
     def test_a_settings_key_line_is_cut_and_a_multi_line_value_is_refused(self) -> None:
         text = '{\n  # comment\n  "tank_mod_rate": 5,\n  "other": [1,\n    2],\n  "last": true,\n}\n'
         self.assertEqual(cut_json_key(text, "tank_mod_rate"), '{\n  # comment\n  "other": [1,\n    2],\n  "last": true,\n}\n')

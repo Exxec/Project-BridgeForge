@@ -89,6 +89,38 @@ class VendorPlanTests(unittest.TestCase):
         self.assertEqual([m.split(" ")[0] for m in plan["missing"]], ["wing:ghost_wing"])
         self.assertNotIn("data/hullmods/Other.java", paths)
 
+    def test_a_commented_row_is_not_the_mods_and_the_id_falls_to_vanilla_or_its_spec(self):
+        # RC8-47 (94.G2 slice 16): Eridani's weapon_data.csv has "#Atropos..." rows with clean ids. The game never sees them,
+        # so a weapon named only there is vanilla's; a commented row beside the mod's own .wpn leaves the gene its .wpn.
+        with resolved_temp_dir() as root:
+            mod = _rebal(root)
+            _write(mod / "working/data/weapons/weapon_data.csv", "name,id\n#Rail,rebal_rail\n#Vanilla Gun,lasergun\n")
+            _write(mod / "working/data/variants/lasher_Rebal.variant",
+                   {"variantId": "lasher_Rebal", "hullId": "lasher", "weaponGroups": [{"weapons": {"WS1": "rebal_rail", "WS2": "lasergun"}}]})
+            core = _vanilla(root)
+            _write(core / "data/weapons/weapon_data.csv", "name,id\nLaser,lasergun\n#Point Defense Integration,pdi_like\n")
+            plan = vendor_plan(mod, ["variant:lasher_Rebal"], vanilla_core=core)
+            weapon = vendor_plan(mod, ["weapon:rebal_rail"], vanilla_core=core)
+        paths = {e["path"] for e in plan["include"]}
+        self.assertNotIn("data/weapons/weapon_data.csv [rebal_rail]", paths)
+        self.assertNotIn("data/weapons/weapon_data.csv [lasergun]", paths)
+        self.assertIn("data/weapons/rebal_rail.wpn", paths)
+        self.assertIn("weapon:lasergun", plan["provided_by_vanilla"])
+        self.assertEqual({e["what"] for e in weapon["include"] if e["path"].startswith("data/weapons/")}, {"file"})
+
+    def test_a_commented_vanilla_row_does_not_provide_its_id(self):
+        # Vanilla RC7 hull_mods.csv has only "#Point Defense Integration,pdintegration,...": the game has no such hull mod.
+        with resolved_temp_dir() as root:
+            mod = _rebal(root)
+            core = _vanilla(root)
+            _write(core / "data/hullmods/hull_mods.csv", "name,id\nArmor,heavyarmor\n#Point Defense Integration,pdintegration\n")
+            _write(mod / "working/data/variants/lasher_Rebal.variant",
+                   {"variantId": "lasher_Rebal", "hullId": "lasher", "hullMods": ["heavyarmor", "pdintegration"]})
+            plan = vendor_plan(mod, ["variant:lasher_Rebal"], vanilla_core=core)
+        self.assertIn("hullmod:heavyarmor", plan["provided_by_vanilla"])
+        self.assertNotIn("hullmod:pdintegration", plan["provided_by_vanilla"])
+        self.assertIn("hullmod:pdintegration", [m.split(" ")[0] for m in plan["missing"]])
+
     def test_target_reports_ids_it_has_and_file_collisions(self):
         with resolved_temp_dir() as root:
             provider = _rebal(root)

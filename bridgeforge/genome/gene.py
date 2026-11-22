@@ -116,14 +116,14 @@ TABLE_KEYS = {"data/world/factions/factions.csv": "faction"}
 
 
 def keyed_rows(root: Path, table: str) -> dict[str, dict[str, str]]:
-    """{key: row} for `table`, keyed by its key column (TABLE_KEYS, else `id`)."""
+    """{key: row} for `table`, keyed by its key column (TABLE_KEYS, else `id`), of the rows the game keeps (RC8-47)."""
     key = TABLE_KEYS.get(table)
     if key is None:
         return _rows(root, table)
-    from bridgeforge.vendor_plan import _read_csv_rows_lenient
+    from bridgeforge.game_csv import game_rows
 
     rows: dict[str, dict[str, str]] = {}
-    for row in _read_csv_rows_lenient(Path(root) / table) or []:
+    for row in game_rows(Path(root) / table) or []:
         value = (row.get(key) or "").strip()
         if value and not value.startswith("#"):
             rows.setdefault(value, row)
