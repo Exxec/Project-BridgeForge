@@ -419,6 +419,13 @@ def prove(mod: Path, anchor: str, out: Path, *, vanilla_core: Path | None = None
         for site in subtraction["registration_sites"]:
             site["status"] = "cut from the copy's build source and class (registration_cut)"
     isolation = classify_isolation(donor_scan, scan_mod(work / "carrier", TargetProfile(), vanilla_core), gene)
+    # Slice 15: the scan alone passed knock-outs (slice 12), so the carrier must also define everything the gene provides. Its
+    # needs.genes are not carried by a single gene's carrier, by design.
+    from bridgeforge.genome.gene_set import unresolved_in_carrier
+
+    isolation["unresolved_in_carrier"] = unresolved_in_carrier(work / "carrier", {anchor: {**gene, "needs": {**gene["needs"], "genes": []}}})
+    if isolation["unresolved_in_carrier"]:
+        isolation["verdict"] = "FAIL"
     inputs = [("member", path) for path in sorted({member_file(m["path"]) for m in gene["members"]})]
     atomic_write_text(out / "gene.json", dumps(gene), newline="")
     written = {}

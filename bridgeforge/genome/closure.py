@@ -211,24 +211,48 @@ def mention_suspects(root: Path, members: list[dict], vanilla_core: Path | None,
     """One suspect per jar class whose code only mentions ids the mod or the core defines (content, faction or campaign ids):
     recorded, not followed (owner 2026-11-20, "Mention = suspect"). An id the gene's code needs elsewhere, or one of the
     gene's own ids (`own`, such as a hull mod's id used as its stat key), is no suspect (review 2026-11-20)."""
+    return mention_findings(root, members, vanilla_core, own)[0]
+
+
+def mention_findings(root: Path, members: list[dict], vanilla_core: Path | None,
+                     own: set[str] = frozenset()) -> tuple[list[dict], list[dict]]:
+    """(suspects, conditions) for the ids the gene's jar classes only mention (see `mention_suspects`). An id some
+    occurrence of which is a check (`literal_sinks.CHECK_SINKS`) is also a condition `{kind: "checks-for", subject:
+    "<kind>:<id>", locus, via}`: the gene may act only where that content is present (slice 15, advisor 2026-11-20)."""
     from bridgeforge.genome.campaign import _CampaignIndex
+    from bridgeforge.genome.literal_sinks import CHECK_SINKS
     from bridgeforge.vendor_plan import KINDS, _Index
 
     core = Path(vanilla_core).expanduser().resolve() if vanilla_core else None
     indexes = [_Index(Path(root)), _Index(core)]
     campaigns = [_CampaignIndex(Path(root))] + ([_CampaignIndex(core)] if core else [])
     needed = code_literals(root, members) | set(own)
-    suspects = []
-    for path, mentioned in sorted(code_mentions(root, members).items()):
-        ids = {value: where for value, where in mentioned.items() if value not in needed and (
-               any(index.defines(kind, value) for kind in KINDS for index in indexes)
-               or any(campaign.hits(value, set(mentioned)) for campaign in campaigns))}
+    suspects, conditions = [], []
+    mentions = code_mentions(root, members)
+    literals = set(needed)  # a graphics key counts only when its category is a literal too, used or mentioned
+    for mentioned in mentions.values():
+        literals |= set(mentioned)
+    for path, mentioned in sorted(mentions.items()):
+        ids: dict[str, set[str]] = {}
+        for value, where in mentioned.items():
+            if value in needed:
+                continue
+            # A graphics key is `graphics:<category>/<key>`, as campaign_ids names it (review 2026-11-20).
+            subjects = sorted({f"{kind}:{value}" for kind in KINDS for index in indexes if index.defines(kind, value)}
+                              | {f"graphics:{detail}/{value}" if kind == "graphics" else f"{kind}:{value}"
+                                 for campaign in campaigns for kind, detail in campaign.hits(value, literals)})
+            if subjects:
+                ids[value] = where
+                checks = sorted(s.split("/")[-1] for s in where & CHECK_SINKS)
+                several = {"note": "the id names several kinds; which one the check means is not known"} if len(subjects) > 1 else {}
+                conditions += [{"kind": "checks-for", "subject": subject, "locus": path, "via": checks, **several}
+                               for subject in subjects if checks]
         if ids:
             sinks = sorted({s.split("/")[-1] for where in ids.values() for s in where})
             suspects.append({"path": path, "mentions": sorted(ids),
                              "reason": f"named only as a key, a check or an unloaded constant ({', '.join(sinks)}): a mention, "
                                        "not a need (owner 2026-11-20)"})
-    return suspects
+    return suspects, sorted(conditions, key=lambda c: (c["subject"], c["locus"]))
 
 
 def ids_named_by_code(root: Path, members: list[dict], vanilla_core: Path | None) -> list[str]:
@@ -328,4 +352,4 @@ def extend(root: Path, members: list[dict], vanilla_core: Path | None, closure_n
     return {"members": added, "vanilla": sorted(set(vanilla)), "missing": missing, "suspects": suspects}
 
 
-__all__ = ["GETTERS", "SETTINGS_FILE", "code_literals", "code_mentions", "extend", "ids_named_by_code", "keys_read_by_class", "keys_read_by_source", "mention_suspects", "pointer", "value_sha256"]
+__all__ = ["GETTERS", "SETTINGS_FILE", "code_literals", "code_mentions", "extend", "ids_named_by_code", "keys_read_by_class", "keys_read_by_source", "mention_findings", "mention_suspects", "pointer", "value_sha256"]

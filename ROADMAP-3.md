@@ -2011,6 +2011,10 @@ history as the closure benchmark, a cross-repository trace check, an early Java 
     - **P2 changed as the ruling says.** Its plugin only checks `getHullMods().contains("tania_*_spawner")`, so four
       spawner hull mod rows and two classes became suspects. Re-proved: identity 89e207d1, both static halves PASS
       (`genes/p2-tania_CombatHandlerSpawner-20261120-s13/`).
+      **Correction 2026-11-20 (slice 15):** three of the four rows are spawners, each left by its `Collection.contains`
+      check. The fourth, `tania_addsmods_norefit_luddic`, left because of the spawners, with no sink of its own: it was
+      requested only because `tania_Placebo_For_IDs`, the spawner rows' script class, names it. No `removeMod` was
+      involved.
     - Hulls keep their built-in hull mods (Neptune: `hiressensors`, `surveying_equipment`, `ECE_FluxEMPHullMod`).
     - **P3's set** (`genes/p3-set-20261120-s13/`): PASS. 56 genes, carrier `gene_carrier_da1d29484d73`, nothing
       unresolved. The three knock-outs still FAIL on the new closure. The faction knock-out is now named by the system
@@ -2079,6 +2083,52 @@ history as the closure benchmark, a cross-repository trace check, an early Java 
 
     By the ruling's scope, another mod or reflection reading a public table is not seen. Mutation-checked: 13 mutants,
     all killed (a local map and a cast field each needed their own case).
+  **Slice 15 Done 2026-11-20: an id a gene checks for is a condition, and a single gene's carrier is checked too.**
+  - **Why (advisor):** a gene that loads alone may not act alone.
+    - `ECE_Dlorica.isApplicableToShip` is `getHullMods().contains("ECE_FluxEMPHullMod")` (javap). It installs only on
+      a ship that has that hull mod, which means an Eridani hull that builds it in.
+    - P2's plugin acts only on ships carrying the spawner hull mods.
+
+    Both ids are mentions under the ruling (suspects, not members), but they gate the effect.
+  - **Conditions:** a mention some occurrence of which is a check (`literal_sinks.CHECK_SINKS`: `Collection.contains`,
+    `LinkedHashSet.contains`, `hasHullMod`, `hasTag`) is also recorded in the manifest's `conditions`, as
+    `{kind: checks-for, subject: <kind>:<id>, locus, via}`. FEATURE_GENOME_ROADMAP defines `conditions` as regulators,
+    "what switches a gene on or off". Its elements already allow these fields, so the schema and the contract are
+    unchanged. Identity hashes members only, so no identity changes.
+  - **Single-gene `prove`:** the isolation half now also runs slice 12's resolution check on the carrier: the gene's
+    `provides`, not its `needs.genes`, which a single gene's carrier does not hold by design. An unresolved anchor
+    FAILs it. P1, P2 and P3 still PASS with nothing unresolved.
+  - **Results:**
+    - all 12 Eridani hull mods record `checks-for hullmod:ECE_FluxEMPHullMod`;
+    - P2 records `checks-for` its three spawner hull mods;
+    - P1 and P3 have none.
+
+    So "32 genes stand alone" (slice 13) holds for loading. A hull mod spliced alone is installable only where
+    `ECE_FluxEMPHullMod` is present, and P2's boot needs a host ship carrying a spawner hull mod.
+  - **WP5 sweep:** `gene evidence check --root` passes on every current P1–P3 proof:
+    - P1: `genes/p1-sa_lobster_tanks-20261120-s14/`, re-proved here, because the 2026-11-19 record carries withdrawn
+      gene schema 3;
+    - P2: `-20261120-s13`;
+    - P3: `proofs-v3` and set `-s14`.
+
+    Each superseded folder now holds a `SUPERSEDED.txt` naming its successor. Nothing was deleted.
+  - **Test1:** both its `prove-set` runs (slice 13 and 14 code) matched White_Legion's carriers
+    (`gene_carrier_da1d29484d73`, `gene_carrier_7e9378bdc19e`).
+  - Tests:
+    - `tests/test_literal_sinks.py`: a checked id (through `hasHullMod` or a `contains`) is a condition, a key-only id is
+      not, and every check sink is a mention sink;
+    - `tests/test_gene_proof.py`: a carrier missing the gene's row FAILs, and a needed gene is not asked of the carrier.
+
+    An independent review found one defect and two smaller points, all fixed with tests:
+    - **A graphics condition named its key alone**, while the rest of the code writes `graphics:<category>/<key>`.
+      Its category may also be a literal the code uses for real, so that counts now too.
+    - **An id defined as two kinds** gives one condition per kind, each with a note that which one is meant is not
+      known, as campaign_ids already does.
+    - **`via` is sorted by the short sink names.**
+
+    The same subject checked from two classes stays one condition per class (its `locus`).
+
+    Mutation-checked: 8 mutants, all killed (a `contains` check needed its own case).
 - 94.G3 **Gene bank**: content-addressed store, alleles across the corpus, lineage, licence state; RevenantLib distributes genes
   from vanished authors (GD-3). The store's payloads live under `data_root()`, like `Done/`, never in this public
   repository; only manifests of the owner's own or permitted content become committed fixtures (2026-11-19).
