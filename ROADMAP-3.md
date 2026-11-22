@@ -2129,6 +2129,41 @@ history as the closure benchmark, a cross-repository trace check, an early Java 
     The same subject checked from two classes stays one condition per class (its `locus`).
 
     Mutation-checked: 8 mutants, all killed (a `contains` check needed its own case).
+
+  **Project Go P9 item 1 Done 2026-11-22: a gene's strings export as one unit** (Project-Go PRs #15 contract pin, #16
+  Java number suffixes, #17 `ssmt-cli gene-strings`).
+  - **P3's set:** 739 distinct units (288 data strings, 451 raw jar constants; Eridani has no reviewed bytecode catalog),
+    verdict PASS. `gene evidence check --root` accepts the export, with 184 inputs re-hashed. The export stays in the
+    proof folder, since Eridani is LOCAL_ONLY.
+  - **Candidate: the faction gene lacks its description.** The export's only uncovered unit is the FACTION row of
+    `descriptions.csv` for `faction:EridaniCombine`: no member names it. Closure gap, open.
+  - **Candidate: commented rows as members.** The weapon genes `atropos`, `heavyblaster` and `plasma` each carry a
+    `weapon_data.csv` row whose line starts with `#` (in the `name` column). Project Go skips such a row as a comment;
+    `vendor_plan._rows` treats a row as a comment only when its `id` starts with `#`. Which rule the game's CSV loader
+    follows needs javap evidence before either side changes. Open.
+  - **Mutation check fix:** `.claude/skills/bridgeforge-pr/scripts/mutate_check.py` changed in four ways:
+    - It runs the selector unmutated first, and stops unless that run passes with a test that is not skipped.
+    - A mutant that stops the test module loading is reported INVALID.
+    - Each run compiles from source under an empty bytecode cache.
+    - Each verdict has its own exit code.
+
+    The trigger: Project Go's first drivers ran `cmd /c gradlew.bat`, which never started
+    (`NoDefaultCurrentDirectoryInExePath`), so every mutant printed as killed. Re-run properly, one of #15's mutants
+    survived; #17 adds the test.
+
+    An independent review found a deeper flaw in the old script: Python trusts a `.pyc` whose whole-second mtime and size
+    match. A same-length mutant written or restored within the second of a compile therefore ran the wrong code
+    (reproduced on a scratch package: a real mutant read PASSES). The review also found that an all-skipped selector
+    passed the baseline.
+
+    Checked by hand:
+    - a mistyped selector and an all-skipped selector stop at the baseline;
+    - a real mutant FAILS, three runs in a row, same-length included;
+    - a syntax-breaking mutant is INVALID;
+    - a harmless edit PASSES.
+    Past BridgeForge claims used the old script and were not re-run. Its gaps were narrower than Project Go's:
+    - a mistyped selector or an import-breaking mutant counted as caught;
+    - a same-length mutant applied within a second of a compile could run unmutated.
 - 94.G3 **Gene bank**: content-addressed store, alleles across the corpus, lineage, licence state; RevenantLib distributes genes
   from vanished authors (GD-3). The store's payloads live under `data_root()`, like `Done/`, never in this public
   repository; only manifests of the owner's own or permitted content become committed fixtures (2026-11-19).

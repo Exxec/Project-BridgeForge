@@ -23,7 +23,19 @@ would describe code you no longer have. Edit another worktree meanwhile.
 
 Write the failing test, watch it fail for the right reason, then fix. For a test that guards a property, run
 `scripts/mutate_check.py` (break the code on purpose; the test must fail). A test that still passes against the broken
-code proves nothing. That happened twice on 2026-11-17.
+code proves nothing. That happened twice on 2026-11-17. How the script decides:
+- **Baseline:** it first runs the selector unmutated, and stops unless that run passes with a test that is not skipped.
+  Without it, a mistyped selector reads as a kill: a Project Go driver printed void kills that way (2026-11-22).
+- **No stale bytecode:** each run compiles from source under an empty bytecode cache. A same-length mutant restored
+  within the second otherwise kept running.
+- **Verdicts and exit codes:**
+  - FAILS (0): the test catches the mutation, the only result to claim;
+  - PASSES (1);
+  - nothing run (2);
+  - INVALID (3): the test module no longer loads;
+  - timed out (4).
+- **A mutant that breaks a module imported only inside a test** shows as an ERROR, so it reads FAILS. Check that the
+  failure is the assertion you meant.
 
 CI runs on clean Windows and Ubuntu runners: no Starsector install, no licence key in the registry, Java 8 on PATH. Patch
 machine state (registry, installed games, home folder) in tests. One rig-doctor test read the developer's registry and
