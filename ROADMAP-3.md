@@ -2129,6 +2129,25 @@ history as the closure benchmark, a cross-repository trace check, an early Java 
     The same subject checked from two classes stays one condition per class (its `locus`).
 
     Mutation-checked: 8 mutants, all killed (a `contains` check needed its own case).
+
+  **Project Go P9 item 1 Done 2026-11-22: a gene's strings export as one unit** (Project-Go PRs #15 contract pin, #16
+  Java number suffixes, #17 `ssmt-cli gene-strings`).
+  - **P3's set:** 739 distinct units (288 data strings, 451 raw jar constants; Eridani has no reviewed bytecode catalog),
+    verdict PASS. `gene evidence check --root` accepts the export, with 184 inputs re-hashed. The export stays in the
+    proof folder, since Eridani is LOCAL_ONLY.
+  - **Candidate: the faction gene lacks its description.** The export's only uncovered unit is the FACTION row of
+    `descriptions.csv` for `faction:EridaniCombine`: no member names it. Closure gap, open.
+  - **Candidate: commented rows as members.** The weapon genes `atropos`, `heavyblaster` and `plasma` each carry a
+    `weapon_data.csv` row whose line starts with `#` (in the `name` column). Project Go skips such a row as a comment;
+    `vendor_plan._rows` treats a row as a comment only when its `id` starts with `#`. Which rule the game's CSV loader
+    follows needs javap evidence before either side changes. Open.
+  - **Mutation check fix:** `.claude/skills/bridgeforge-pr/scripts/mutate_check.py` now runs the selector unmutated
+    first and stops unless it passes. A mutant that stops the tests loading is reported INVALID. The trigger: Project Go's
+    first drivers ran `cmd /c gradlew.bat`, which never started (`NoDefaultCurrentDirectoryInExePath`), so every mutant
+    printed as killed. Re-run properly, one of #15's mutants survived; #17 adds the test. Checked by hand: a mistyped
+    selector stops at the baseline, a real mutant FAILS, a syntax-breaking mutant is INVALID, a harmless edit PASSES.
+    Past BridgeForge claims used the old script. Its gap was narrower (only a mistyped selector or an import-breaking
+    mutant counted as caught), and those claims were not re-run.
 - 94.G3 **Gene bank**: content-addressed store, alleles across the corpus, lineage, licence state; RevenantLib distributes genes
   from vanished authors (GD-3). The store's payloads live under `data_root()`, like `Done/`, never in this public
   repository; only manifests of the owner's own or permitted content become committed fixtures (2026-11-19).

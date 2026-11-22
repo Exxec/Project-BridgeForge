@@ -23,7 +23,9 @@ would describe code you no longer have. Edit another worktree meanwhile.
 
 Write the failing test, watch it fail for the right reason, then fix. For a test that guards a property, run
 `scripts/mutate_check.py` (break the code on purpose; the test must fail). A test that still passes against the broken
-code proves nothing. That happened twice on 2026-11-17.
+code proves nothing. That happened twice on 2026-11-17. The script first runs the selector unmutated and stops unless it
+passes; a mutant that stops the tests loading is INVALID, not caught. Claim only "FAILS" results. Without the baseline, a
+mistyped selector reads as a kill: a Project Go driver printed void kills that way (2026-11-22).
 
 CI runs on clean Windows and Ubuntu runners: no Starsector install, no licence key in the registry, Java 8 on PATH. Patch
 machine state (registry, installed games, home folder) in tests. One rig-doctor test read the developer's registry and

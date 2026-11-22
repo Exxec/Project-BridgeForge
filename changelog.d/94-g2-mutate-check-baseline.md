@@ -1,0 +1,1 @@
+- The PR skill's `mutate_check.py` runs the test selector unmutated first and stops unless it passes, and reports a mutant that stops the tests loading as INVALID instead of caught; ROADMAP-3 94.G2 records Project Go P9 item 1 (a gene's strings exported as one unit) and two closure candidates it found (94.G2).
