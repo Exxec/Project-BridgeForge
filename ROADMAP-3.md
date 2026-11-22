@@ -2228,6 +2228,21 @@ history as the closure benchmark, a cross-repository trace check, an early Java 
   repository; only manifests of the owner's own or permitted content become committed fixtures (2026-11-19).
 - 94.G4 **Adaptation**: target-impact, gated fixers and `src-to-jar` at gene scope; Project Go carries translations; SpriteForge
   validates sprites and slots.
+  **Project Go's part, slice 1 (2026-11-22, Project-Go #19): `ssmt-cli gene-carry`, a read-only report.**
+  - **What it does:** for a gene set's `gene-strings` export and a host folder, it selects the host's units by the same
+    member rule. String-diff then says per unit ADDED / REMOVED / CHANGED / UNCHANGED, plus carry verdicts given a
+    pack.
+  - **Flags:** host text still in CJK, and CSV cells that differ only in CRLF against LF. The verdict judges data units
+    only.
+  - **P3 across builds** (the original Chinese build into `working/`): 271 unchanged, and 18 changed, exactly the ones
+    that were Chinese. PASS.
+  - **P3 into the s16 carrier:** 35 data cells changed, every one only in line endings. `gene prove-set`'s carrier writes
+    LF inside multi-line quoted cells, where the donor had CRLF. To the game that is the same text: RC7's CSV parser
+    begins with `replaceAll("\r\n", "\n")` (`com.fs.starfarer.loading.void.o00000`, javap 2026-11-22). Nothing to fix.
+  - **Both reports pass** `gene evidence check --root`.
+  - **Open:** writing or approving carried translations. Eridani has no Project Go pack, and one derived from
+    `original/` against `working/` would be inferred, so that is the owner's call. The exit criterion waits on a real
+    host (94.G5).
 - 94.G5 **Insertion**: carrier mod first, then integration on workspace copies (GD-5); collision checks; XStream aliases
   (`ModPlugin.configureXStream`, 0.98.5a API) proven with Salvor; VoidSmith variants and faction-knowledge proposals;
   SpriteForge restyles on request.
