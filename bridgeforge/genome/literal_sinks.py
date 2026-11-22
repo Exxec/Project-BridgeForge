@@ -40,6 +40,12 @@ MENTION_SINKS = {
     "com/fs/starfarer/api/loading/WeaponSpecAPI.hasTag#0": "RC7 BaseWeaponSpec.hasTag: Set.contains (javap)",
 }
 NOT_LOADED = "a static final constant no instruction of its class loads"
+# Slice 15 (advisor 2026-11-20): the mention sinks that test for the id rather than use it as a key or a label. A gene whose
+# code only checks for an id may still need it present to act: ECE_Dlorica's isApplicableToShip is
+# `getHullMods().contains("ECE_FluxEMPHullMod")` (javap), so it installs only on a ship that has that hull mod. Such an id
+# is a condition of the gene (FEATURE_GENOME_ROADMAP: a regulator, "what switches a gene on or off"), not a member.
+CHECK_SINKS = frozenset({"java/util/Collection.contains#0", "java/util/LinkedHashSet.contains#0",
+                         "com/fs/starfarer/api/combat/ShipVariantAPI.hasHullMod#0", "com/fs/starfarer/api/loading/WeaponSpecAPI.hasTag#0"})
 
 _LDC = (0x12, 0x13)
 _INVOKES = {0xb6: False, 0xb7: False, 0xb8: True, 0xb9: False}  # opcode -> static
@@ -183,5 +189,5 @@ def is_mention(sinks: set[str], lookup_only: frozenset[str] = frozenset()) -> bo
     return bool(sinks) and all(named_only(s) for s in sinks)
 
 
-__all__ = ["MAP_OWNERS", "MENTION_SINKS", "NOT_LOADED", "class_literal_sinks", "is_mention", "lookup_only_maps", "map_field_loads",
+__all__ = ["CHECK_SINKS", "MAP_OWNERS", "MENTION_SINKS", "NOT_LOADED", "class_literal_sinks", "is_mention", "lookup_only_maps", "map_field_loads",
            "sink_of"]

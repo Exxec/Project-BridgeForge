@@ -108,8 +108,44 @@ class ProveTests(unittest.TestCase):
             carrier = out / "work" / "carrier"
             self.assertEqual(json.loads((carrier / "data" / "config" / "settings.json").read_text(encoding="utf-8")), {"tank_mod_rate": 5})
             self.assertEqual({p.relative_to(mod).as_posix(): p.read_bytes() for p in mod.rglob("*") if p.is_file()}, before)
+            self.assertEqual(json.loads((out / "isolation-proof.json").read_text(encoding="utf-8"))["unresolved_in_carrier"], [])
             with self.assertRaises(ProofError):
                 prove(mod, "hullmod:tank_mod", out)  # never into a folder that holds something
+
+    def test_a_carrier_that_lacks_what_the_gene_provides_fails_isolation(self) -> None:
+        # Slice 15: the scan alone did not see a knock-out (slice 12), so a single gene's carrier is checked too.
+        from unittest import mock
+
+        from bridgeforge.genome import proof
+
+        real = proof.build_carrier
+
+        def without_the_row(root, gene, dest, **kwargs):
+            made = real(root, gene, dest, **kwargs)
+            (dest / "data" / "hullmods" / "hull_mods.csv").unlink()
+            return made
+
+        with resolved_temp_dir() as root, mock.patch.object(proof, "build_carrier", side_effect=without_the_row):
+            result = prove(_mod(root), "hullmod:tank_mod", root / "proofs")
+            made = json.loads((root / "proofs" / "isolation-proof.json").read_text(encoding="utf-8"))
+        self.assertEqual(result["verdicts"]["isolation-proof"], "FAIL")
+        self.assertEqual([u["anchor"] for u in made["unresolved_in_carrier"]], ["hullmod:tank_mod"])
+
+    def test_a_single_gene_s_needed_genes_are_not_asked_of_its_carrier(self) -> None:
+        # P3 needs the faction, which its own carrier does not hold by design: that is no unresolved anchor.
+        from unittest import mock
+
+        from bridgeforge.genome import proof
+
+        real = proof.describe
+
+        def needing_another(*args, **kwargs):
+            gene = real(*args, **kwargs)
+            return {**gene, "needs": {**gene["needs"], "genes": ["hullmod:other_mod"]}}
+
+        with resolved_temp_dir() as root, mock.patch.object(proof, "describe", side_effect=needing_another):
+            result = prove(_mod(root), "hullmod:tank_mod", root / "proofs")
+        self.assertEqual(result["verdicts"]["isolation-proof"], "PASS")
 
     def test_the_cli_reports_the_verdicts(self) -> None:
         with resolved_temp_dir() as root:

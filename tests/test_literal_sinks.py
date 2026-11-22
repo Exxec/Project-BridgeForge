@@ -103,6 +103,9 @@ class LiteralSinkTests(unittest.TestCase):
         self.assertEqual({f"sink_{i}": sinks[f"sink_{i}"] for i in range(len(MENTION_SINKS))},
                          {f"sink_{i}": {key} for i, key in enumerate(MENTION_SINKS)})  # a typo in the table fails here
 
+    def test_every_check_sink_is_a_mention_sink(self) -> None:
+        self.assertLessEqual(literal_sinks.CHECK_SINKS, set(MENTION_SINKS))
+
     def test_an_unreadable_method_keeps_every_literal_a_need(self) -> None:
         with resolved_temp_dir() as root:
             data = (_compile(root, {"demo/Probe.java": PROBE}) / "demo" / "Probe.class").read_bytes()
@@ -114,12 +117,18 @@ class LiteralSinkTests(unittest.TestCase):
     def test_a_hull_mod_that_only_checks_another_does_not_bring_it(self) -> None:
         checker = ("package demo;\nimport com.fs.starfarer.api.combat.*;\npublic class Checker {\n"
                    "    public boolean applies(ShipVariantAPI v) { return !v.hasHullMod(\"demo_other\") && !v.hasHullMod(\"demo_port\"); }\n"
-                   "    public void apply(MutableStat s) { s.modifyMult(\"demo_checker\", 2f); }\n}\n")  # its own id as a key
+                   "    public void apply(MutableStat s) { s.modifyMult(\"demo_checker\", 2f); s.modifyMult(\"demo_keyed\", 1f); }\n"
+                   "    public boolean listed(java.util.Collection<String> mods) { return mods.contains(\"demo_listed\"); }\n"
+                   "    public boolean pic(java.util.Collection<String> c) { return c.contains(\"demo_pic\") || c.contains(\"demo_two\"); }\n"
+                   "    public String category() { return \"intel\"; }\n}\n")  # a graphics key's category, used for real
         with resolved_temp_dir() as root:
             classes = _compile(root, {"demo/Checker.java": checker, "demo/Other.java": "package demo;\npublic class Other {}\n"})
             mod = root / "mod"
             _write(mod / "mod_info.json", json.dumps({"id": "demo", "name": "Demo", "jars": ["jars/demo.jar"]}))
-            _write(mod / "data/hullmods/hull_mods.csv", "name,id,script\nChecker,demo_checker,demo.Checker\nOther,demo_other,demo.Other\n")
+            _write(mod / "data/hullmods/hull_mods.csv", "name,id,script\nChecker,demo_checker,demo.Checker\nOther,demo_other,demo.Other\n"
+                   "Keyed,demo_keyed,\nListed,demo_listed,\nTwo,demo_two,\n")
+            _write(mod / "data/weapons/weapon_data.csv", "name,id\nTwo,demo_two\n")  # one id, two kinds
+            _write(mod / "data/config/settings.json", json.dumps({"graphics": {"intel": {"demo_pic": "graphics/x.png"}}}))
             _write(mod / "data/campaign/industries.csv", "id,name\ndemo_port,Port\n")  # a campaign id, mentioned only
             (mod / "jars").mkdir()
             with zipfile.ZipFile(mod / "jars/demo.jar", "w") as jar:
@@ -130,7 +139,21 @@ class LiteralSinkTests(unittest.TestCase):
         self.assertFalse([m for m in gene["members"] if "demo_other" in m["path"] or "Other" in m["path"]])
         mention = [s for s in gene["unknowns"]["suspects"] if "a mention, not a need" in s["reason"]]
         self.assertEqual([(s["path"], s["mentions"]) for s in mention],
-                         [("jars/demo.jar!demo/Checker.class", ["demo_other", "demo_port"])])  # not its own demo_checker
+                         [("jars/demo.jar!demo/Checker.class",
+                           ["demo_keyed", "demo_listed", "demo_other", "demo_pic", "demo_port", "demo_two"])])
+        # Slice 15: what it checks for is a condition of the gene; what it only uses as a key is not.
+        where = "jars/demo.jar!demo/Checker.class"
+        two = "the id names several kinds; which one the check means is not known"
+        self.assertEqual(gene["conditions"], [
+            {"kind": "checks-for", "subject": "graphics:intel/demo_pic", "locus": where, "via": ["Collection.contains#0"]},
+            {"kind": "checks-for", "subject": "hullmod:demo_listed", "locus": "jars/demo.jar!demo/Checker.class",
+             "via": ["Collection.contains#0"]},
+            {"kind": "checks-for", "subject": "hullmod:demo_other", "locus": "jars/demo.jar!demo/Checker.class",
+             "via": ["ShipVariantAPI.hasHullMod#0"]},
+            {"kind": "checks-for", "subject": "hullmod:demo_two", "locus": where, "via": ["Collection.contains#0"], "note": two},
+            {"kind": "checks-for", "subject": "industry:demo_port", "locus": "jars/demo.jar!demo/Checker.class",
+             "via": ["ShipVariantAPI.hasHullMod#0"]},
+            {"kind": "checks-for", "subject": "weapon:demo_two", "locus": where, "via": ["Collection.contains#0"], "note": two}])
 
 
 TABLES = """package demo;

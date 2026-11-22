@@ -3,8 +3,9 @@
 A gene is the minimal closed set of parts that gives one player-observable capability. `describe(mod, "kind:id")` writes
 its manifest, `gene.json` schema 3, from `vendor-plan`'s closure: the six content kinds it covers (hull mod, weapon, wing,
 hull, variant, ship system). Campaign features, registration slicing and the archaeology fields (registrations,
-conditions, persistent state) come with G2; `describe` leaves them empty and `collected_from` says so, but schema 2 fixes
-the shape of each element now, before a sister repository pins the contract (advisor review 2026-11-19):
+conditions, persistent state) came with G2: since slice 15 `conditions` holds the ids a gene's code only checks for
+(`checks-for`, closure.mention_findings). Schema 2 fixed the shape of each element before a sister repository pinned the
+contract (advisor review 2026-11-19):
 - a registration is `{locus, statement}`: where the gene is registered (a member path, or `Class#method`) and what it adds;
 - a condition is `{kind, subject}`: what must hold for the gene to exist (`mod-enabled` / `nexerelin`, a setting key);
 - a persistent-state entry is `{name, via}`: a class or key that reaches saves, and how (`xstream`, `memory`, ...).
@@ -256,12 +257,12 @@ def describe(mod: Path, anchor: str, *, vanilla_core: Path | None = None, policy
     members += extra["members"]
     members.sort(key=lambda m: (m["what"], m["path"]))
     # The whole-file settings.json SUSPECT is replaced by key-level ones (a key no member reads), or by nothing.
-    from bridgeforge.genome.closure import mention_suspects
+    from bridgeforge.genome.closure import mention_findings
 
+    mentioned, conditions = mention_findings(root, _code_members(root, plan), vanilla_core,
+                                             {p.split(":", 1)[1] for p in {anchor, *plan["closure_ids"], *campaign["provides"]}})
     suspects = ([s for s in plan["suspects"] if s["path"] != SETTINGS_FILE] + extra["suspects"] + campaign["suspects"]
-                + (system["suspects"] if system else [])
-                + mention_suspects(root, _code_members(root, plan), vanilla_core,
-                                   {p.split(":", 1)[1] for p in {anchor, *plan["closure_ids"], *campaign["provides"]}}))
+                + (system["suspects"] if system else []) + mentioned)
     info = read_mod_info(root) or {}
     licence = _licence(plan["licence"], info, [m["path"] for m in members], policy_path)
     dependencies = sorted(d["id"] for d in info.get("dependencies") or [] if isinstance(d, dict) and isinstance(d.get("id"), str))
@@ -274,7 +275,7 @@ def describe(mod: Path, anchor: str, *, vanilla_core: Path | None = None, policy
         "needs": {"vanilla": sorted(set(plan["provided_by_vanilla"]) | set(extra["vanilla"]) | set(campaign["vanilla"])),
                   "mods": mods_needed(root, members, dependencies),
                   "genes": [g for g in campaign["genes"] if g != anchor]},
-        "registrations": registrations, "conditions": [], "persistent_state": _saved_state(system, campaign, members),
+        "registrations": registrations, "conditions": conditions, "persistent_state": _saved_state(system, campaign, members),
         "build": {"game_version": info.get("gameVersion"), "mod_version": _version_text(info.get("version"))},
         "provenance": {"mod_id": info.get("id"), "mod_name": info.get("name"), "author": info.get("author")},
         "derived_from": None,
