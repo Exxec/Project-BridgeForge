@@ -1,0 +1,1 @@
+- ROADMAP-3 94.G4 records Project Go's `gene-carry` report (slice 1) and P3's results, including that the set carrier writes LF inside multi-line CSV cells, which the game reads as the same text (94.G4).
