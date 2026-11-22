@@ -21,6 +21,7 @@ from pathlib import Path
 
 from bridgeforge.scan.scanner import _load_lenient_json_file, _parse_class_file, _read_csv_rows_lenient, iter_class_files_in_jars
 from bridgeforge.file_hash import sha256_file as _sha256  # 96.5 A10
+from bridgeforge.game_csv import game_rows
 
 SCHEMA_VERSION = 1
 KINDS = ("hullmod", "weapon", "wing", "hull", "variant", "shipsystem")
@@ -58,8 +59,9 @@ def _mod_root(path: Path) -> Path:
 
 
 def _rows(root: Path, table: str) -> dict[str, dict[str, str]]:
+    """{id: first row} of the rows the game keeps: a row whose line starts with '#' is not there (RC8-47, 94.G2 slice 16)."""
     rows = {}
-    for row in _read_csv_rows_lenient(root / table) or []:
+    for row in game_rows(root / table) or []:
         ident = (row.get("id") or "").strip()
         if ident and not ident.startswith("#"):
             rows.setdefault(ident, row)

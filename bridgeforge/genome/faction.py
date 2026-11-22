@@ -220,6 +220,25 @@ def _registrations(root: Path, ident: str) -> tuple[list[dict], list[dict]]:
     return sorted(elements, key=lambda e: e["locus"]), sorted(notes, key=lambda n: n["reason"])
 
 
+DESCRIPTIONS_CSV = "data/strings/descriptions.csv"
+
+
+def _description(root: Path, ident: str) -> tuple[dict | None, dict | None]:
+    """(member, suspect) for the faction's FACTION row in descriptions.csv. The intel screen reads it:
+    `SelectedFactionInfo` calls `SpecStore.super(faction.getId(), Description.Type.FACTION)` (javap RC7 2026-11-22; a
+    code-set `descIdOverride` is read the same way and is not followed). A csv-row path names the first row with an id, so
+    when that row has another type the FACTION row cannot be a member: it is a suspect (94.G2 slice 16)."""
+    from bridgeforge.game_csv import game_rows
+
+    rows = [row for row in game_rows(root / DESCRIPTIONS_CSV) or [] if (row.get("id") or "").strip() == ident]
+    if not any((row.get("type") or "").strip() == "FACTION" for row in rows):
+        return None, None
+    if (rows[0].get("type") or "").strip() != "FACTION":
+        return None, {"path": DESCRIPTIONS_CSV, "mentions": [ident], "reason": "the faction's FACTION description follows a "
+                      "row of another type with the same id; a csv-row member names only the first"}
+    return {**_row_member(root, f"{DESCRIPTIONS_CSV} [{ident}]"), "reason": "the faction's description (intel screen)"}, None
+
+
 def describe_faction(mod: Path, ident: str, vanilla_core: Path | None, policy_path: Path | None = None) -> dict:
     """The gene manifest of `faction:<ident>`."""
     from bridgeforge.genome.campaign import _CampaignIndex, _json_object
@@ -243,6 +262,8 @@ def describe_faction(mod: Path, ident: str, vanilla_core: Path | None, policy_pa
         members.append({**_row_member(root, f"{FACTIONS_CSV} [{path}]"), "reason": "the faction's registration in factions.csv"})
     except GeneError:
         missing.append(f"{FACTIONS_CSV} row for {path} (the game loads a .faction only when factions.csv lists it)")
+    description, description_suspect = _description(root, ident)
+    members += [description] if description else []
     files, core_files, absent = _files_named(root, core_root, faction)
     members += [{**_file_member(root, f), "reason": "a file the faction names (logo, crest, portraits)"} for f in files]
     mod_index, core_index = _Index(root), _Index(core_root)
@@ -265,7 +286,7 @@ def describe_faction(mod: Path, ident: str, vanilla_core: Path | None, policy_pa
     registrations, notes = _registrations(root, ident)
     suspects = ([{"path": path, "mentions": tags, "reason": "the faction's lists name tags: sets of hulls, weapons or wings, "
                   "recorded and not expanded"}] if tags else [])
-    suspects += commodity_suspects + _unread(path, faction) + notes
+    suspects += commodity_suspects + _unread(path, faction) + notes + ([description_suspect] if description_suspect else [])
     members.sort(key=lambda m: (m["what"], m["path"]))
     info = read_mod_info(root) or {}
     licence = _licence(revival_licence(info.get("id"), info.get("name"), policy_path), info, [m["path"] for m in members], policy_path)

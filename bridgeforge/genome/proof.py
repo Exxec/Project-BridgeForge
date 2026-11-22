@@ -36,14 +36,13 @@ until live testing runs them.
 """
 from __future__ import annotations
 
-import csv
-import io
 import json
 import re
 import shutil
 import zipfile
 from pathlib import Path
 
+from bridgeforge import game_csv
 from bridgeforge.genome import carrier_plugin
 from bridgeforge.genome.carrier_plugin import CarrierPluginRefused
 from bridgeforge.genome.evidence import header
@@ -62,29 +61,22 @@ class ProofError(ValueError):
     """A gene whose members cannot be taken out of, or put into, a copy."""
 
 
-def _rows_with_lines(text: str):
-    """(row, first line, end line) per CSV record, lines counted from 0 over `text.splitlines(keepends=True)`."""
-    reader = csv.reader(io.StringIO(text))
-    start = 0
-    for row in reader:
-        yield row, start, reader.line_num
-        start = reader.line_num
-
-
 def cut_csv_row(text: str, ident: str, key: str = "id") -> tuple[str, str]:
     """(table without the row, the row's own text). The key column (`gene.TABLE_KEYS`, else `id`) is found from the header:
-    factions.csv rows are keyed by `faction` (slice 11)."""
-    lines = text.splitlines(keepends=True)
-    records = list(_rows_with_lines(text))
-    if not records:
+    factions.csv rows are keyed by `faction` (slice 11). The row is one the game keeps: a commented row with the same id is
+    left in place (RC8-47, slice 16). Lines are counted as csv counts them, not by str.splitlines, which also breaks at a
+    form feed or a Unicode line separator inside a quoted cell."""
+    physical = game_csv.lines(text)
+    found = list(game_csv.records(text))
+    if not found:
         raise ProofError("an empty table")
-    header_row = [cell.strip() for cell in records[0][0]]
+    header_row = [cell.strip() for cell in found[0][0]]
     if key not in header_row:
         raise ProofError(f"the table has no {key} column")
     column = header_row.index(key)
-    for row, first, end in records[1:]:
-        if len(row) > column and row[column].strip() == ident:
-            return "".join(lines[:first] + lines[end:]), "".join(lines[first:end])
+    for row, first, end, commented in found[1:]:
+        if not commented and len(row) > column and row[column].strip() == ident:
+            return "".join(physical[:first] + physical[end:]), "".join(physical[first:end])
     raise ProofError(f"no row {ident!r}")
 
 

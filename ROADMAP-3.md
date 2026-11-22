@@ -2136,11 +2136,11 @@ history as the closure benchmark, a cross-repository trace check, an early Java 
     verdict PASS. `gene evidence check --root` accepts the export, with 184 inputs re-hashed. The export stays in the
     proof folder, since Eridani is LOCAL_ONLY.
   - **Candidate: the faction gene lacks its description.** The export's only uncovered unit is the FACTION row of
-    `descriptions.csv` for `faction:EridaniCombine`: no member names it. Closure gap, open.
+    `descriptions.csv` for `faction:EridaniCombine`: no member names it. Closed by slice 16.
   - **Candidate: commented rows as members.** The weapon genes `atropos`, `heavyblaster` and `plasma` each carry a
     `weapon_data.csv` row whose line starts with `#` (in the `name` column). Project Go skips such a row as a comment;
-    `vendor_plan._rows` treats a row as a comment only when its `id` starts with `#`. Which rule the game's CSV loader
-    follows needs javap evidence before either side changes. Open.
+    `vendor_plan._rows` treats a row as a comment only when its `id` starts with `#`. Closed by slice 16: javap shows
+    the game drops the row (RC8-47), so the three were phantom genes.
   - **Mutation check fix:** `.claude/skills/bridgeforge-pr/scripts/mutate_check.py` changed in four ways:
     - It runs the selector unmutated first, and stops unless that run passes with a test that is not skipped.
     - A mutant that stops the test module loading is reported INVALID.
@@ -2164,6 +2164,65 @@ history as the closure benchmark, a cross-repository trace check, an early Java 
     Past BridgeForge claims used the old script and were not re-run. Its gaps were narrower than Project Go's:
     - a mistyped selector or an import-breaking mutant counted as caught;
     - a same-length mutant applied within a second of a compile could run unmutated.
+
+  **Slice 16 Done 2026-11-22: a row the game drops is not a member, and a faction gene carries its description.**
+  - **Evidence (RC8_BEHAVIOUR RC8-47):** the game drops a CSV row whose raw line starts with `#`, whatever its id.
+    - RC7's parser `com.fs.starfarer.loading.void.o00000(String)` sets a comment flag when a row's first character is
+      `#` (`bipush 35`), and the flag skips `JSONArray.put`.
+    - The weapon, hull and wing spreadsheet loaders all reach it through `LoadingUtils.Object(String,String)`.
+    - RC8's `com.fs.starfarer.loading.G` is the same code.
+    - It matches the Navarchy live run (G4-LIVE-0985a-20261117).
+    - The test is on the raw character: vanilla's `"#Light Mortar ...",lightmortar_fighter` is kept.
+    - Vanilla RC7 defines `pdintegration` only on a `#` line, so RC7 has no such hull mod. BridgeForge believed vanilla
+      provided it.
+  - **`bridgeforge/game_csv.py`:**
+    - `records(text)` gives each record's lines and comment flag, counting lines as `csv` does.
+    - `game_rows(path)` gives the rows the game keeps, cell for cell as `csv.DictReader` gives them (newline='').
+      Row hashes and identities therefore do not move.
+    - `vendor_plan._rows` (which feeds the closure, census, campaign and faction code), `gene.keyed_rows` and
+      `proof.cut_csv_row` use them.
+    - `cut_csv_row` now counts lines as `csv` does, not by `str.splitlines`, which also breaks at a form feed inside a
+      quoted cell.
+  - **Faction description:**
+    - The intel screen reads a faction's FACTION row (`SelectedFactionInfo` calls `SpecStore.super(faction.getId(),
+      Description.Type.FACTION)`, javap RC7), so `describe_faction` adds the row as a member.
+    - When the id's first row in `descriptions.csv` has another type, a csv-row path cannot name the FACTION row, so it
+      is a suspect instead.
+    - A code-set `descIdOverride` is not followed.
+  - **Results:**
+    - **P1, P2 and P3's own manifests:** byte-identical before and after.
+    - **The faction gene:** identity 54e5e03e -> 6e29aca1. It gains its description row, and `atropos`, `heavyblaster`
+      and `plasma` move from `needs.genes` to `needs.vanilla`.
+    - **Commented duplicates:** of 177 csv-row members in the current P1-P3 proofs, only those three phantoms had a
+      commented record. No earlier subtraction proof cut a wrong row.
+    - **P3 set:** re-proved as `genes/p3-set-20261122-s16`, PASS with 53 genes, carrier `gene_carrier_92b783705cff` (319
+      members). It has 53 distinct identities, largest strongly connected group 1, and 29 standalone (12 hull mods, 17
+      weapons); that corrects slice 13's 56 and 32. `gene evidence check --root` passes.
+    - **Superseded folders:** `p3-set-20261120-s14` and `faction-EridaniCombine-20261120` now hold `SUPERSEDED.txt`.
+    - **Project Go's export of s16:** 740 units (289 data, 451 raw jar), 0 uncovered, 11 `no_units` (6 jar classes,
+      4 settings entries, the `factions.csv` row). It confirms both fixes independently.
+  - **Tests:**
+    - `tests/test_game_csv.py`:
+      - a `#` line with a clean id is dropped;
+      - a quoted or indented `#` is kept;
+      - a `#` row after a blank line is dropped, while a `#` line inside a quoted cell is not a row;
+      - the cells equal the lenient reader's, with CRLF endings, extra cells and short rows;
+      - a leading blank line (with and without a BOM, with CRLF);
+      - record line spans.
+    - `test_gene_proof`: the live row is cut, not the commented duplicate; a form feed inside a cell.
+    - `test_vendor_plan`: a commented mod row falls to vanilla or to the mod's `.wpn`; a commented vanilla row
+      provides nothing.
+    - `test_gene_faction`: the description is a member; another type first makes a suspect; with no FACTION row, nothing;
+      a `#` line before the key column in `factions.csv`.
+  - **Mutation-checked** with the fixed `mutate_check.py`: 11 mutants, all killed after a passing baseline.
+  - **Independent review:** one defect, fixed with a test that failed first. `csv.DictReader` takes the first record as
+    the header even when it is blank, but `game_rows` paired its rows with the non-blank records, so a file starting
+    with a blank line raised ValueError. The review found nothing wrong in the line counting, `cut_csv_row` or the
+    faction description logic.
+  - **Candidates:** other readers still test only the id or a stripped, unquoted first cell. Examples are
+    `conversion_checks.live` (92.28), `probe_config._csv_ids`, `renamed_ids` and `provider_renamed_ids`. Project Go's
+    `CsvExtractor` skips a parsed first cell starting `#` after `stripLeading`, so it drops vanilla's quoted
+    `"#Light Mortar ..."` row and any row starting ` #`, both of which the game keeps.
 - 94.G3 **Gene bank**: content-addressed store, alleles across the corpus, lineage, licence state; RevenantLib distributes genes
   from vanished authors (GD-3). The store's payloads live under `data_root()`, like `Done/`, never in this public
   repository; only manifests of the owner's own or permitted content become committed fixtures (2026-11-19).

@@ -104,6 +104,48 @@ class FactionGeneTests(unittest.TestCase):
             self.assertEqual(list(keyed_rows(mod, "data/world/factions/factions.csv")), ["data/world/factions/demo.faction"])
             self.assertEqual(list(keyed_rows(mod, "data/hulls/ship_data.csv")), ["demo_hull"])
 
+    def test_the_factions_description_row_is_a_member(self) -> None:
+        # Slice 16: the intel screen reads it (SelectedFactionInfo calls SpecStore.super(faction.getId(), Description.Type.FACTION),
+        # javap RC7 2026-11-22). P3's Gene strings export found Eridani's FACTION row uncovered.
+        with resolved_temp_dir() as root:
+            mod = _mod(root)
+            plain = describe(mod, "faction:demo_faction", vanilla_core=_core(root))
+            _write(mod / "data" / "strings" / "descriptions.csv",
+                   "id,type,text1\ndemo_hull,SHIP,A hull.\ndemo_faction,FACTION,Who they are.\n")
+            gene = describe(mod, "faction:demo_faction", vanilla_core=_core(root))
+        self.assertIn(("csv-row", "data/strings/descriptions.csv [demo_faction]"), {(m["what"], m["path"]) for m in gene["members"]})
+        self.assertNotEqual(gene["identity"], plain["identity"])
+        self.assertEqual(validate(gene), [])
+
+    def test_an_id_first_described_as_another_type_is_a_suspect_not_a_member(self) -> None:
+        # A csv-row path names the first row with an id; when that is not the FACTION row, the member would hash another row.
+        with resolved_temp_dir() as root:
+            mod = _mod(root)
+            _write(mod / "data" / "strings" / "descriptions.csv",
+                   "id,type,text1\ndemo_faction,CUSTOM,A place.\ndemo_faction,FACTION,Who they are.\n")
+            gene = describe(mod, "faction:demo_faction", vanilla_core=_core(root))
+        self.assertFalse(any(m["path"].startswith("data/strings/descriptions.csv") for m in gene["members"]))
+        self.assertTrue(any(s["path"] == "data/strings/descriptions.csv" and s["mentions"] == ["demo_faction"]
+                            for s in gene["unknowns"]["suspects"]))
+        with resolved_temp_dir() as root:  # no FACTION row at all: neither a member nor a suspect
+            mod = _mod(root)
+            _write(mod / "data" / "strings" / "descriptions.csv", "id,type,text1\ndemo_faction,CUSTOM,A place.\n")
+            other = describe(mod, "faction:demo_faction", vanilla_core=_core(root))
+        self.assertFalse(any(m["path"].startswith("data/strings/descriptions.csv") for m in other["members"]))
+        self.assertFalse(any(s["path"] == "data/strings/descriptions.csv" for s in other["unknowns"]["suspects"]))
+
+    def test_a_commented_factions_csv_line_is_not_a_registration(self) -> None:
+        # RC8-47: the game drops a row whose line starts with '#'.
+        with resolved_temp_dir() as root:
+            mod = _mod(root, with_row=False)
+            _write(mod / "data" / "world" / "factions" / "factions.csv", "faction\n#data/world/factions/demo.faction\n")
+            gene = describe(mod, "faction:demo_faction", vanilla_core=_core(root))
+            # The '#' starts the line, not the key: the game still drops the row.
+            _write(mod / "data" / "world" / "factions" / "factions.csv", "note,faction\n#old,data/world/factions/demo.faction\n")
+            keyed = keyed_rows(mod, "data/world/factions/factions.csv")
+        self.assertTrue(any(m.startswith("data/world/factions/factions.csv row") for m in gene["unknowns"]["missing"]))
+        self.assertEqual(keyed, {})
+
     @unittest.skipUnless(_javac(), "needs javac")
     def test_code_passing_the_id_to_getfaction_is_a_registration_element(self) -> None:
         with resolved_temp_dir() as root:
