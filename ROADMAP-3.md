@@ -2613,6 +2613,44 @@ history as the closure benchmark, a cross-repository trace check, an early Java 
 
     Mutation-checked: 14 mutants, five of them taken from the javap facts. Two survived (a mod's system id losing to the
     core's; `removeHints` ignored) until the last two tests were added; then all were caught.
+  - **Independent review:** no critical finding. It confirmed the javap rule. In particular, the defense type is the
+    shield type, and skins load before the system loop. Fixed, with tests:
+    - **Without `--vanilla-core`, the closure never learned phasecloak's suffixes,** so a hull with a `PHASE` shield
+      lost its glows and the proof passed. When no core is given, the core's value from RC8-51 now applies.
+    - **Hint order:** the game's skin loader removes hints, then adds them.
+    - **Fail closed:** a phase system or base hull defined only in a dependency the proof was not given made the check
+      pass. Such a carrier hull is now `hull-phase-unresolved`: a skin whose base hull is defined nowhere, or a phase
+      hull whose ship system is defined nowhere.
+    - **Ratchets:** `vendor_plan()` had passed the 200-line limit, so the queueing moved to `_phase_sprite_files` and
+      `_Index.phase_systems`. `tests/module_timings.json` was refreshed from a full timed run: 358 modules, 36 of which
+      had no weight.
+
+    Recorded, not changed:
+    - only carrier hulls are checked. A carried `.system` with unusual suffixes would also apply to the core's phase
+      hulls; 66 of 67 phase systems in the installed mods use `_glow1`/`_glow2`;
+    - a hull defined only by a CSV row is not checked;
+    - `gene prove-set` takes no `--provider-root`, so a dependency's phase systems reach its check only through the
+      unresolved gap.
+
+    Mutation check after the fixes: 18 mutants, all caught.
+  - **Diagnostic boots, 2026-11-23** (never evaluated, recorded or archived). These were the slice-21 set carriers, built
+    on White_Legion and copied to `_genes-diag-queue`, with matching tree hashes.
+    - **DIAG-P3-S21 and DIAG-P4-S21** reached the main menu and the campaign: the load gaps are closed. Both were Fatal
+      in the probe's first battle, when a ship was built for combat:
+      - P3: an engine slot's `CUSTOM` engine style, which only the donor's `engine_styles.json` defines.
+      - P4: the flux tracker looking up the hull style's `*Set` sound ids, which only the donor's `sounds.json`
+        defines.
+    - **DIAG-P3-S22A,** with the one engine style and its 2 files added by hand: **LIVE_DONE** (main menu, campaign,
+      combat). For P3 that completes the list: hull styles, phase sprites and an engine style.
+    - **DIAG-P4-S22A,** with 2 engine styles, 5 style sounds and their files added: the battle ran, then a weapon's
+      every-frame script played a mod sound id the carrier lacks, and `playSound` was Fatal.
+    - **DIAG-P4-S22B,** with all 12 mod sound ids its specs and code name (4 in jar classes, 5 style sets, 2 in
+      `.system` files, 1 in a `.wpn`) and their files: **LIVE_DONE**.
+    - **Next, slice 22: engine styles and sounds as needs.**
+      - Each `CUSTOM` engine style a gene's hulls use, and each mod sound id that its specs, carried hull styles or
+        code name, goes into `needs.donor` as a `engine_styles.json` or `sounds.json` entry with its files.
+      - The carrier check gets matching gaps.
+      - Two RC8_BEHAVIOUR rows to write, from these runs.
 - 94.G3 **Gene bank**: content-addressed store, alleles across the corpus, lineage, licence state; RevenantLib distributes genes
   from vanished authors (GD-3). The store's payloads live under `data_root()`, like `Done/`, never in this public
   repository; only manifests of the owner's own or permitted content become committed fixtures (2026-11-19).
