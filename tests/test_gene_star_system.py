@@ -327,12 +327,12 @@ class CarrierPluginTests(unittest.TestCase):
         with resolved_temp_dir() as root:
             mod = root / "mod"
             _write(mod / "data" / "config" / "settings.json", json.dumps(
-                {"designTypeColors": {"天苑四设计": [1, 2, 3, 255]}, "graphics": {"intel": {"x": "a.png", "y": "b.png"}}},
+                {"designTypeColors": {"示例设计": [1, 2, 3, 255]}, "graphics": {"intel": {"x": "a.png", "y": "b.png"}}},
                 ensure_ascii=False))
             gene = {"members": [{"what": "json-entry", "path": "data/config/settings.json#/graphics/intel/x"}]}
             subtract(mod, gene, root / "copy")
             text = (root / "copy" / "data" / "config" / "settings.json").read_text(encoding="utf-8")
-            self.assertIn("天苑四设计", text)
+            self.assertIn("示例设计", text)
             self.assertNotIn('"x"', text)
 
     def test_boot_notes_say_what_each_boot_half_needs(self) -> None:

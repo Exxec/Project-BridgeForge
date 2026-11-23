@@ -54,10 +54,10 @@ class FixerGapTests(unittest.TestCase):
         # Eridani Combine: trailing '#' comments in .faction/*_styles.json and a designTypeColors key.
         with resolved_temp_dir() as root:
             _write(root / "mod_info.json", INFO)
-            _write(root / "data" / "config" / "engine_styles.json", '{"S": {"color":[1,2,3,4], # 引擎火焰\n}}\n')
-            _write(root / "data" / "config" / "settings.json", '{"designTypeColors": {"天苑四设计":[1,2,3,255]}}\n')
+            _write(root / "data" / "config" / "engine_styles.json", '{"S": {"color":[1,2,3,4], # 示例注释\n}}\n')
+            _write(root / "data" / "config" / "settings.json", '{"designTypeColors": {"示例设计":[1,2,3,255]}}\n')
             clean = [f.id for f in scan_mod(root).findings]
-            _write(root / "data" / "config" / "settings.json", '{"name": "天苑四"}\n')  # a value is player text
+            _write(root / "data" / "config" / "settings.json", '{"name": "示例名"}\n')  # a value is player text
             flagged = [f.id for f in scan_mod(root).findings]
         self.assertNotIn("player-text-non-english", clean)
         self.assertIn("player-text-non-english", flagged)
@@ -81,20 +81,21 @@ class FixerGapTests(unittest.TestCase):
         self.assertIn("jar-source-not-rebuilt", ids)
 
     def test_fullwidth_punctuation_in_english_text_is_made_ascii(self) -> None:
-        # 92.32: Eridani after translation: "Code Support：Hanliu" and "seconds，holds" (by hand), outside the game font.
+        # 92.32: Eridani after translation: a full-width colon in its author credit and a full-width comma in a hull mod's
+        # text (fixed by hand), outside the game font. Synthetic text below.
         with resolved_temp_dir() as root:
-            _write(root / "mod_info.json", '{"id":"demo","name":"Demo","version":"1.0","gameVersion":"0.98a-RC8","author":"Code Support：Hanliu"}\r\n')
+            _write(root / "mod_info.json", '{"id":"demo","name":"Demo","version":"1.0","gameVersion":"0.98a-RC8","author":"Art Support：Demo"}\r\n')
             _write(root / "data" / "hullmods" / "hull_mods.csv",
-                   'name,id,desc\r\nTimeflow,ece_t,"Burst of %s seconds，holds %s charges."\r\nUntranslated,ece_u,"天苑，四"\r\n')
+                   'name,id,desc\r\nPulse,demo_t,"Burst of %s seconds，holds %s charges."\r\nUntranslated,demo_u,"示例，名"\r\n')
             found = [f for f in scan_mod(root).findings if f.id == "fullwidth-punctuation-in-text"]
             apply_fix(compute_fix(root, "fullwidth-punctuation-in-text", {}))
             info = (root / "mod_info.json").read_bytes()
             csv_text = (root / "data" / "hullmods" / "hull_mods.csv").read_bytes().decode("utf-8")
             after = [f.id for f in scan_mod(root).findings]
         self.assertEqual(found[0].classification, "SAFE")
-        self.assertIn(b'"author":"Code Support:Hanliu"}\r\n', info)  # line ending kept
+        self.assertIn(b'"author":"Art Support:Demo"}\r\n', info)  # line ending kept
         self.assertIn("Burst of %s seconds, holds %s charges.", csv_text)
-        self.assertIn("天苑，四", csv_text)  # an untranslated line is left to translation
+        self.assertIn("示例，名", csv_text)  # an untranslated line is left to translation
         self.assertNotIn("fullwidth-punctuation-in-text", after)
 
     def test_fix_rescans_with_its_own_target(self) -> None:
