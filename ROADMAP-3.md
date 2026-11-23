@@ -813,6 +813,19 @@ unproven).
   refused it: "staged files differ from the candidate working copy". It took a hand move to `_rig-0985a/_stale-staged-2026-11-19/`
   and a re-run (BS6). Sync should move a rig file the working copy no longer has into a dated holding folder in the rig
   (never deleting it), and say so. Priority: with 95.4.
+  **Done 2026-11-22.**
+  - **What sync does now:** `sync_working_copy` (used by `probe-group install` and `rig-up`) moves each rig file the
+    working copy no longer ships into `<rig>/_stale-staged/<UTC time>/<mod folder>/<path>`. It never deletes one, and
+    reports what it moved ("moved N the working copy no longer has to ...").
+  - **Before:** the drift count included those files, so every later sync reported drift again and never converged.
+  - **Batches:** two syncs in one second get separate folders.
+  - **Case:** a rig path that differs from a shipped one only in case is the same file on Windows, so it is not
+    moved (review of #214: the rig lost and regained it on alternate syncs).
+  - **Tests:** `tests/test_probe_group.py` `SyncStaleFilesTests`:
+    - the stale file moved intact, and the next sync finds nothing to do;
+    - a new rig folder copied whole;
+    - two stale batches kept apart.
+  - **Mutation-checked:** 4 mutants, all caught after a passing baseline.
 - 96.13 (S) **The probe writes no combat END when a battle ends early.** `BfProbeCombatPlugin` writes `combat-perf`,
   `combat-summary` and `combat END` only once `combatSeconds` have passed. In P962SA2-LIVE-0985a-20261119 Station Augments'
   one frigate destroyed the filler enemy first: the game closed the battle (mission score 100%), and the probe wrote none of

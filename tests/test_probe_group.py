@@ -664,6 +664,82 @@ if __name__ == "__main__":
     unittest.main()
 
 
+class SyncStaleFilesTests(unittest.TestCase):
+    """96.12: Broken Star's bf.4 moved two .wpn files out of data/weapons/decorative/, the rig kept the old ones, and record
+    refused the passing P962BS5 as "staged files differ from the candidate working copy"."""
+
+    def _copies(self, root: Path) -> tuple[Path, Path]:
+        from tests.support import write_text as _write
+
+        working = root / "q" / "BS" / "working"
+        _write(working / "mod_info.json", json.dumps({"id": "bs", "version": "1.0+bf.4"}))
+        _write(working / "data" / "weapons" / "gun.wpn", "{}")
+        target = root / "rig" / "mods" / "BS"
+        _write(target / "mod_info.json", json.dumps({"id": "bs", "version": "1.0+bf.4"}))
+        _write(target / "data" / "weapons" / "gun.wpn", "{}")
+        _write(target / "data" / "weapons" / "decorative" / "gun.wpn", '{"old": true}')
+        return working, target
+
+    def test_a_rig_file_the_working_copy_no_longer_has_is_moved_aside_not_deleted(self) -> None:
+        from bridgeforge.probe.probe_group import sync_working_copy
+
+        with resolved_temp_dir() as root:
+            working, target = self._copies(root)
+            said = sync_working_copy(working, target)
+            gone = not (target / "data" / "weapons" / "decorative" / "gun.wpn").exists()
+            held = list((root / "rig" / "_stale-staged").rglob("gun.wpn"))
+            content = held[0].read_text(encoding="utf-8") if held else None
+            again = sync_working_copy(working, target)
+        self.assertTrue(gone)
+        self.assertEqual(len(held), 1)
+        self.assertEqual(held[0].parts[-5:], ("BS", "data", "weapons", "decorative", "gun.wpn"))
+        self.assertEqual(content, '{"old": true}')
+        self.assertIn("moved 1 the working copy no longer has", said)
+        self.assertIsNone(again)  # the rig copy now matches: the next sync has nothing to do
+
+    def test_a_path_that_differs_only_in_case_is_not_moved_aside(self) -> None:
+        # Review of #214: `Data/x.csv` in the rig and `data/x.csv` in the working copy are one file on Windows; moving the
+        # "extra" took away the file just copied, and every other sync lost it again.
+        from bridgeforge.probe.probe_group import sync_working_copy
+        from tests.support import write_text as _write
+
+        with resolved_temp_dir() as root:
+            working, target = self._copies(root)
+            (target / "data" / "weapons" / "decorative" / "gun.wpn").unlink()
+            weapons = target / "data" / "weapons"
+            (weapons / "gun.wpn").rename(weapons / "Gun.wpn")  # the same file name, another case
+            _write(weapons / "Gun.wpn", '{"old": 1}')
+            for _ in range(3):
+                sync_working_copy(working, target)
+            present = [p for p in weapons.iterdir() if p.name.lower() == "gun.wpn"]
+            held = (root / "rig" / "_stale-staged").exists()
+        self.assertTrue(present)  # the rig always has the file
+        self.assertFalse(held)    # and nothing was moved aside for it
+
+    def test_a_new_rig_folder_is_copied_whole(self) -> None:
+        from bridgeforge.probe.probe_group import sync_working_copy
+
+        with resolved_temp_dir() as root:
+            working, _ = self._copies(root)
+            target = root / "rig" / "mods" / "Fresh"
+            said = sync_working_copy(working, target)
+            copied = (target / "data" / "weapons" / "gun.wpn").is_file()
+        self.assertEqual(said, "copied")
+        self.assertTrue(copied)
+
+    def test_two_stale_batches_are_kept_apart(self) -> None:
+        from bridgeforge.probe.probe_group import sync_working_copy
+        from tests.support import write_text as _write
+
+        with resolved_temp_dir() as root:
+            working, target = self._copies(root)
+            sync_working_copy(working, target)
+            _write(target / "data" / "weapons" / "decorative" / "gun.wpn", '{"second": true}')
+            sync_working_copy(working, target)
+            held = sorted(p.read_text(encoding="utf-8") for p in (root / "rig" / "_stale-staged").rglob("gun.wpn"))
+        self.assertEqual(held, ['{"old": true}', '{"second": true}'])
+
+
 class DependencyVersionTests(unittest.TestCase):
     def test_major_mismatch_is_reported_minor_is_not(self) -> None:
         # RC8-23: zzz Bingus Sustem declared IndEvo 3.0.c against 4.1.b and was silently disabled (GRP2C-20261005)

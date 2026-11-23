@@ -1,0 +1,1 @@
+- Syncing a mod into the rig moves a file the working copy no longer ships into `<rig>/_stale-staged/<time>/`, never deleting it, so a passing run is no longer refused at record for stale staged files (96.12).
