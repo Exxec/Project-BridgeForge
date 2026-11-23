@@ -2688,7 +2688,13 @@ history as the closure benchmark, a cross-repository trace check, an early Java 
     - missing styles and sounds, with and without the core;
     - the proof carrying the entries, the subtraction keeping them, and an id with a space;
     - the three gaps, and the code walk turned off;
-    - a javac-compiled jar class playing an undefined sound.
+    - a javac-compiled jar class playing an undefined sound;
+    - the core's own engine styles and sounds, which are not carried.
+
+    Mutation-checked: 20 mutants, five of them taken from the javap facts. Two survived (a core engine style carried,
+    a core sound carried) until their test was added; then all were caught. Recorded: a mod that re-defines a core
+    engine style or sound id keeps the core's in the carrier. That loses fidelity, as with hull styles, and the carrier
+    still loads.
 - 94.G3 **Gene bank**: content-addressed store, alleles across the corpus, lineage, licence state; RevenantLib distributes genes
   from vanished authors (GD-3). The store's payloads live under `data_root()`, like `Done/`, never in this public
   repository; only manifests of the owner's own or permitted content become committed fixtures (2026-11-19).
