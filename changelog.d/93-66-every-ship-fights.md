@@ -1,0 +1,1 @@
+- Every ship fights in the probe's combat rounds, hidden or not: a mod's skins now join the deployable hulls, and a hull with no variant file fights unarmed as its empty `<id>_Hull` variant (`hulls_empty_variant` in the probe config) (93.66).

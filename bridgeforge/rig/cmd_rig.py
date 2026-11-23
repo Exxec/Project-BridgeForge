@@ -530,7 +530,7 @@ def _run_probe_config(args: argparse.Namespace) -> int:
     else:
         config = result["config"]
         print(f"Target mod: {config['target_mod_id']}")
-        print(f"Hulls with a variant: {len(config['hulls'])} (skipped, no variant: {len(config['hulls_skipped_no_variant'])})")
+        print(f"Hulls that fight: {len(config['hulls'])} ({len(config.get('hulls_empty_variant') or [])} unarmed, as their empty <id>_Hull variant)")
         print(f"Config: {result['config_path']} (written: {result['written']})")
         print(f"Rig marker: {result['marker_path']}")
         if result.get("installed"):
