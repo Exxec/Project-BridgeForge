@@ -2366,6 +2366,10 @@ history as the closure benchmark, a cross-repository trace check, an early Java 
     - evaluate did not re-check the static half;
     - a dependent with an empty or unprovided target explained every line;
     - a line was cut to 300 characters before it was matched (now only the evidence keeps 300).
+    - **Found later (advisor, 2026-11-23):** a carrier's provided ids read OBSERVED even when the probe never ran.
+      P2B-CAR-20261122 stalled at load, yet its evidence listed ten variants OBSERVED. `_observed` now also requires the
+      probe's content check to have run (`test_nothing_is_observed_when_the_probe_never_ran`). The two FAIL verdicts stand;
+      their evidence files are left as written.
 
     Its first finding, that the record refusal misses a boot copy the mod-id lookup cannot resolve, does not hold: such a
     workspace is not recorded either.
@@ -2446,6 +2450,17 @@ history as the closure benchmark, a cross-repository trace check, an early Java 
     - A style other donor hulls also use must stay in the subtraction copy: it is needed and shared, not owned. Design
       with the advisor first.
     - P4's carrier has the same gap.
+  - **Diagnostic boots, 2026-11-23** (never evaluated, recorded or archived). Copies of the two carriers had the donor's
+    `hull_styles.json` added by hand, in their own queue `_genes-diag-queue`. P3's copy came from a fresh Test1 re-proof
+    with slice 18, carrier `gene_carrier_93f4646e00d1`, the same as White_Legion's.
+    - **DIAG-P2-STYLES-20261123: LIVE_DONE** (main menu, campaign, combat). For P2 the style was the only load gap.
+    - **DIAG-P3-STYLES-20261123:** past the styles, a new Fatal at load: one weapon-slot cover image, which the style
+      names and the carrier lacks. So a style brings the files it names too (RC8_BEHAVIOUR RC8-49).
+    - **Owner 2026-11-23 ("Separate, needed"):** a part the gene's hulls share with other donor content, such as a hull
+      style, is a need, not a member. A carrier gets a copy, and the subtraction copy keeps it. The same ruling settles P4's
+      starting ship (slice 18): the start's gene is its registration and classes, and the ship is a need.
+    - **Owner 2026-11-23 ("Counts only, scrub"):** the public repository describes Eridani Combine by counts, never by
+      its identifiers. A follow-up PR replaces the names already on main.
 - 94.G3 **Gene bank**: content-addressed store, alleles across the corpus, lineage, licence state; RevenantLib distributes genes
   from vanished authors (GD-3). The store's payloads live under `data_root()`, like `Done/`, never in this public
   repository; only manifests of the owner's own or permitted content become committed fixtures (2026-11-19).
@@ -3157,6 +3172,9 @@ fixes of 93.28. 93.26-93.35 are that day's findings.
     deployed 67 of 108, none of its three empty-variant hulls (`ork_aithris`, `ork_sgoltadh`, `ork_sledgehammer`). No
     `addToFleet` failure for any hull. The pass condition (every planned hull deploys) is not met; the cause is 93.67, not
     the config.
+  - **Live 2026-11-22, probe 0.3.5 (P035-BULTACH-20261122): `<id>_Hull` proven.** `ork_sgoltadh` logged `combat-deployment`.
+    No `.variant` file in the mod names that hull, and no variant lists one as a module, so only `ork_sgoltadh_Hull` could
+    field it (RC8_BEHAVIOUR RC8-48). The other two empty-variant hulls stayed in reserve (93.67).
 - 93.67 (M) **Reserves never deploy before a probe battle's 60 s end, so not every planned hull fights.**
   P034-BULTACH-20261122 (Test1, RC7 rig, probe 0.3.4) had 108 planned hulls in 2 rounds of 60 (30 a side). Every one was
   added to a fleet with no `addToFleet` failure, but only 67 logged `combat-deployment`. Round 1 deployed 34 ships (modules
@@ -3188,6 +3206,26 @@ fixes of 93.28. 93.26-93.35 are that day's findings.
     - a ship first seen on the battle's last frame got no deployment line; `finish()` now logs new ships first;
     - a hull listed twice in `hulls` counted twice;
     - the WARN line now also names a round that never started, and has a test.
+  - **Live 2026-11-22, probe 0.3.5 (P035-TANIA-20261122, P035-BULTACH-20261122 on Test1's RC7 rig): not passed.** Both
+    LIVE_DONE; every battle ended `reason=time` at 60 s; report FATAL 0, members PASS, manifest ACCEPTABLE.
+    - **Coverage:** Bultach 59 of 108 planned hulls deployed, Tania 14 of 15. Tania's owner 0 emptied its reserves; owner
+      1 kept `tania_wader_main`. Bultach's sides kept ships on both sides in both rounds.
+    - **The raise did not persist.** At init the limit rose (`max 202 -> 100202`). When both sides were first seen, the
+      second line read `max 202 -> 100202` again: the raise made at init was gone by then, so the opening deployment ran
+      under the original limit. Whether the limit is what keeps the rest in reserve is unknown.
+    - Round 2's "owner 1 at 120 of 299" was read with 23 of 24 still in reserve, while deployment was probably still under
+      way. It does not show the AI holding ships back.
+    - **Ship sections:** 32 of Bultach's 108 planned hulls are sections, hulls of a variant another variant lists under
+      `modules`. Of the 49 that never deployed, 10 are sections and 39 are ships.
+      - A section fights with its parent, yet the plan gives it a standalone fleet slot, and it may never deploy alone.
+    - **Next (probe 0.3.6):**
+      - spawn what is still in reserve (`spawnFleetMember`), and check that a spawned member leaves the reserves, so it
+        cannot deploy twice;
+      - log `getMaxStrength()` in the end line;
+      - plan a section through its parent, and count it deployed when its parent deployed.
+- 93.68 (S) **A ship section takes a standalone slot in the probe plan.** See 93.67's live result: 32 of Bultach's 108
+  planned hulls are sections other variants list under `modules`. Plan them through their parent (the parent's variant
+  brings them), and judge their coverage by the parent's deployment.
 - 93.64 (S) **A gate whose subject left Done/ had no state to close it.** bf-0b-15 (SEEKER Betelgeuse modules survive save
   and reload) tests SEEKER 0.3.0+bf.5's Betelgeuse and TWIG code. That archive moved to `Done/_replaced-2026-11-17/` when
   SEEKER 0.6.6 replaced it, and 0.6.6 has neither. The owner ruled 2026-11-19: "Close as superseded". `gates.json` allowed

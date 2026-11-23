@@ -194,13 +194,15 @@ def _explained(lines: list[str], dependents: list[dict], enabled: set[str], prov
     return explained, unexplained
 
 
-def _observed(gene: dict, member: dict | None, config_lists: dict) -> dict[str, str]:
-    """{provided ref: OBSERVED | NOT_OBSERVED}: observed when the probe's list for its kind held the id and no FAIL named it."""
+def _observed(gene: dict, member: dict | None, config_lists: dict, content_ran: bool) -> dict[str, str]:
+    """{provided ref: OBSERVED | NOT_OBSERVED}: observed when the probe's content check ran, its list for the id's kind held
+    the id, and no FAIL named it. P2B-CAR-20261122 stalled at load, yet its evidence listed ten variants OBSERVED: the
+    probe never ran, so its lists showed nothing (advisor review 2026-11-23)."""
     failed = {entry.split("|", 2)[1].split(":", 1)[-1] for entry in (member or {}).get("failures", []) if entry.count("|") >= 2}
     result = {}
     for ref in gene.get("provides") or []:
         kind, _, ident = ref.partition(":")
-        checked = ident in (config_lists.get(PROBE_LISTS.get(kind, ""), []) or [])
+        checked = content_ran and ident in (config_lists.get(PROBE_LISTS.get(kind, ""), []) or [])
         result[ref] = "OBSERVED" if checked and ident not in failed else "NOT_OBSERVED"
     return result
 
@@ -310,8 +312,10 @@ def _judge(half: str, gene: dict, static: dict, facts: dict, rig: Path, log: Pat
         return _judge_subtraction(facts, static, list(gene.get("provides") or []))
     config_path = rig / CONFIG_RELATIVE
     config = _read_json(config_path, "the probe config") if config_path.is_file() else {}
-    member = group_report(log, config, mods_dir=rig / "mods")["members"].get(mod_id)
-    return {**_judge_carrier(facts, member), "provided": _observed(gene, member, (config.get("group_members") or {}).get(mod_id) or {})}
+    report = group_report(log, config, mods_dir=rig / "mods")
+    member = report["members"].get(mod_id)
+    lists = (config.get("group_members") or {}).get(mod_id) or {}
+    return {**_judge_carrier(facts, member), "provided": _observed(gene, member, lists, bool(report.get("content_ids_ran")))}
 
 
 def evaluate(proof: Path, half: str, rig: Path, test_id: str) -> dict:
