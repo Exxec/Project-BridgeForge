@@ -2790,7 +2790,7 @@ fixes of 93.28. 93.26-93.35 are that day's findings.
   - **The window:** `real_hands` raises `GameWindowGone` (still a `RuntimeError`, in `bridgeforge/live/window_gone.py`),
     and `drive` turns it into LIVE_STUCK at the stage in progress (`new-game`, `leave-campaign` or `combat-round-N`; the
     stages between only wait on the log, which reports a game that exited). The verdict quotes the log's last three lines.
-    The reload's own driver (`save_reload_run.drive_reload`) is not covered here: 88.19/88.22 add it.
+    The reload's own driver (`save_reload_run.drive_reload`) does the same since 88.19/88.22.
   - **The saves:** `probe-group install` moves the rig's `saves/save_*` folders into `<rig>/_saves-moved/<UTC time>/`,
     never deleting one, and says so.
     - `saves/common` (the probe's config and marker) stays.
@@ -3450,6 +3450,32 @@ approved for now set in roadmap").** Each entry names the hand work it replaces.
   old save, reported as stuck at new-game. Confirm the save-load log line after the click. Also: REMOVALS.json needs its `files`
   category (77.19), since bf.2 needed `--allow-unexplained` for four files known to be fine, and that path writes "recorded by the
   owner" into ARCHIVE_NOTE.md even when an agent wrote the reason on the owner's instruction.
+  **88.19 and 88.22's load check Done 2026-11-22** (owner 2026-11-22: "follow your recommendation"; recommended because a
+  false pass is the worst kind of test result). `save_reload_run.drive_reload` now:
+  - **Continue:** after the click, waits for the game's own load line (`CampaignGameManager - Loading ..saves/..`, as
+    `log_triage` reads it). With none, it is LIVE_STUCK at `continue` ("Continue loaded no save ... may have started a New
+    Game"), not at the compare line much later.
+  - **The compare line** must come after the click.
+  - **Settling:** after the compare line it stays up for 20 s (`RELOAD_SETTLE_SECONDS`). A new dialog in
+    `<TESTID>.windows.txt`, a Fatal line in the log, or the game exiting makes it LIVE_STUCK at `after-compare`, naming
+    it. A passing reload's stages end with `settled`.
+  - **A vanished window** is LIVE_STUCK at the stage in progress, with the log's last lines, as in `drive` (93.50).
+  - **Tests:** `tests/test_save_fingerprint.py` `DriveTests`:
+    - the load, compare and settle path;
+    - a compare-line wait with no compare;
+    - Continue that loads no save;
+    - a dialog, a Fatal line and a dead game after the compare line;
+    - a vanished window at Continue.
+  - **Mutation-checked:** 5 mutants, all caught after a passing baseline.
+  - **Review of #215:**
+    - **The Fatal scan:** it starts at the end of the compare line itself. The wait polls once a second, so a Fatal
+      243 ms after the line could land before the poll saw it.
+    - **Dialogs:** they count from the Continue click, which also catches a dialog during the load.
+    - **Tests:** a Fatal right behind the compare line, a dialog during the load, and old load and compare lines
+      before the click. 4 more mutants, all caught.
+  - **Left:**
+    - 88.22's reverse case, a New Game that loaded an old save: 93.50 now moves the rig's old saves aside at install.
+    - REMOVALS.json's `files` category (77.19) is not part of this.
 - 88.23 `fleet-presence` WARN "0 fleets" is mostly false: route fleets spawn only near the player (RC8-41 evidence). Count routes per
   faction from the save or the API instead. `faction-known-lists` should be read with hull bays: 0 known fighters matters on a carrier.
   Window screenshots (`*-window1.png`) can catch the desktop when the game is not in front; keep them out of shared evidence.
