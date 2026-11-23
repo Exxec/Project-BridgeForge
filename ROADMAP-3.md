@@ -2774,6 +2774,21 @@ history as the closure benchmark, a cross-repository trace check, an early Java 
     - the carrier gap for the roles file and for `shipRoles`, and the subtraction check skipping it.
 
     Mutation-checked: 14 mutants, all caught on the first run.
+  - **Independent review:** no critical finding. Checked against 65 local role files and the RC7 core. Fixed, with tests:
+    - **Hulls and wings known by tag.** These get no fleet needs, because tags are not expanded (a slice-10 decision).
+      Most vanilla factions, and several revived mods' factions, know their ships that way. P3's faction does not. The gene
+      now records a suspect naming the fleet gap.
+      **Owner question:** expand tags against the hull and wing `tags` columns, so such factions carry their fleets too?
+    - **Undefined role variants.** A role entry whose variant nothing defines, perhaps a dependency's, was dropped
+      silently. It is now a suspect.
+    - **Unreadable files.** An unreadable roles or `.faction` file read as empty. It is now `ship-roles-unreadable`,
+      failing closed.
+    - **Tests** now cover `priorityShips`, the core's object-shaped `fallback` and `fallback2`, and a set proof end to
+      end.
+    - **Duplicate helper.** The copied JSON reader was dropped.
+
+    Recorded, not changed: a variant whose `hullId` is a skin the faction does not list, while it lists the base hull,
+    is not taken. That matches vanilla data (core factions list skin ids), but the game's check is not javap-verified.
 - 94.G3 **Gene bank**: content-addressed store, alleles across the corpus, lineage, licence state; RevenantLib distributes genes
   from vanished authors (GD-3). The store's payloads live under `data_root()`, like `Done/`, never in this public
   repository; only manifests of the owner's own or permitted content become committed fixtures (2026-11-19).

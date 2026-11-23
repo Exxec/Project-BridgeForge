@@ -53,6 +53,56 @@ class FleetNeedTests(unittest.TestCase):
         self.assertNotIn("donor", gene["needs"])
 
 
+class ReviewTests(unittest.TestCase):
+    """The independent review of slice 23 (2026-11-23)."""
+
+    def test_priority_lists_count_and_object_fallbacks_travel_with_their_block(self) -> None:
+        faction = {**FACTION, "priorityShips": {"tags": [], "hulls": ["prio_hull"]}}
+        roles = {"combatMedium": {"prio_Var1": 4, "fallback": {"combatSmall": 1}, "fallback2": {"combatLarge": 1}}}
+        with resolved_temp_dir() as root:
+            mod = _mod(root, faction=faction)
+            _write(mod / ROLES_FILE, json.dumps(roles))
+            _write(mod / "data" / "variants" / "prio_Var1.variant", json.dumps({"variantId": "prio_Var1", "hullId": "prio_hull"}))
+            gene = describe(mod, "faction:demo_faction", vanilla_core=_core(root))
+        self.assertEqual(gene["needs"]["donor"], [f"{ROLES_FILE}#/combatMedium/fallback", f"{ROLES_FILE}#/combatMedium/fallback2",
+                                                  f"{ROLES_FILE}#/combatMedium/prio_Var1"])
+        self.assertIn("variant:prio_Var1", gene["needs"]["genes"])
+
+    def test_hulls_known_by_tag_and_undefined_role_variants_are_suspects(self) -> None:
+        faction = {**KNOWS, "knownShips": {"tags": ["demo_bp"], "hulls": ["demo_hull"]}}
+        with resolved_temp_dir() as root:
+            mod = _fleet_mod(root)
+            _write(mod / "data" / "world" / "factions" / "demo.faction", json.dumps(faction))
+            roles = {**ROLES, "combatSmall": {**ROLES["combatSmall"], "ghost_Var1": 2}}
+            _write(mod / ROLES_FILE, json.dumps(roles))
+            gene = describe(mod, "faction:demo_faction", vanilla_core=_fleet_core(root))
+        fleet = [s for s in gene["unknowns"]["suspects"] if s["path"] == ROLES_FILE]
+        self.assertEqual([s["mentions"] for s in fleet], [["demo_bp"], ["ghost_Var1"]])
+        self.assertFalse([d for d in gene["needs"]["donor"] if "ghost_Var1" in d])
+
+    def test_an_unreadable_role_file_fails_closed(self) -> None:
+        with resolved_temp_dir() as root:
+            carrier = root / "carrier"
+            _write(carrier / ROLES_FILE, "[1, 2")
+            gaps = role_gaps(carrier, [_fleet_core(root)])
+        self.assertEqual(gaps, [{"finding": "ship-roles-unreadable", "file": ROLES_FILE}])
+
+    def test_a_set_carrier_holds_the_chosen_role_entries_and_their_variants(self) -> None:
+        from bridgeforge.genome.gene_set import prove_set
+
+        with resolved_temp_dir() as root:
+            mod, core = _fleet_mod(root), _fleet_core(root)
+            result = prove_set(mod, "faction:demo_faction", root / "set", vanilla_core=core, quiet=True)
+            carrier = root / "set" / "work" / "carrier"
+            roles = json.loads((carrier / ROLES_FILE).read_text(encoding="utf-8"))
+            variant = (carrier / "data" / "variants" / "demo_hull_Var1.variant").is_file()
+            proof = json.loads((root / "set" / "set-isolation-proof.json").read_text(encoding="utf-8"))
+        self.assertEqual(roles, {"combatSmall": {"demo_hull_Var1": 10, "wolf_CS": 3, "includeDefault": False},
+                                 "fighterWings": {"demo_wing": 5}})
+        self.assertTrue(variant)
+        self.assertEqual((result["refused"], [g for g in proof["load_gaps"] if g["finding"].startswith("ship-role")]), (0, []))
+
+
 class RoleGapTests(unittest.TestCase):
     def test_a_carrier_role_entry_nothing_defines_is_a_gap_and_the_subtraction_check_skips_it(self) -> None:
         with resolved_temp_dir() as root:

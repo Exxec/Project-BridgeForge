@@ -20,39 +20,39 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from bridgeforge.genome.combat_needs import _json_object
+
 ROLES_FILE = "data/world/factions/default_ship_roles.json"
 _KNOWN = {"knownShips": "hull", "priorityShips": "hull", "knownFighters": "wing", "priorityFighters": "wing"}
 
 
-def _json_object(path: Path) -> dict:
-    from bridgeforge.scan.scanner import _load_lenient_json_file
-
-    data = _load_lenient_json_file(path) if path.is_file() else None
-    return data if isinstance(data, dict) else {}
-
-
 def known(faction: dict) -> dict[str, set[str]]:
-    """{"hull": ids, "wing": ids} the faction's known and priority lists name."""
+    """{"hull": ids, "wing": ids, "tags": tags} the faction's known and priority lists name. Tags are not expanded (a slice-10
+    decision); `fleet_needs` flags them."""
     from bridgeforge.genome.faction import LIST_FIELD
 
-    found: dict[str, set[str]] = {"hull": set(), "wing": set()}
+    found: dict[str, set[str]] = {"hull": set(), "wing": set(), "tags": set()}
     for key, kind in _KNOWN.items():
         block = faction.get(key)
         values = block.get(LIST_FIELD[kind]) if isinstance(block, dict) else None
         found[kind] |= {v for v in values if isinstance(v, str)} if isinstance(values, list) else set()
+        tags = block.get("tags") if isinstance(block, dict) else None
+        found["tags"] |= {t for t in tags if isinstance(t, str)} if isinstance(tags, list) else set()
     return found
 
 
-def fleet_needs(root: Path, faction: dict, mod_index, core_index) -> dict[str, list[str]]:
-    """{"donor", "genes", "vanilla", "missing"}: the role entries of the donor's `default_ship_roles.json` that name a
-    variant of a hull the faction knows, or a wing it knows, and what each entry names. A role block with a chosen entry
-    also brings its `includeDefault`/`fallback` keys."""
+def fleet_needs(root: Path, faction: dict, mod_index, core_index) -> dict[str, list]:
+    """{"donor", "genes", "vanilla", "missing", "suspects"}: the role entries of the donor's `default_ship_roles.json` that
+    name a variant of a hull the faction knows, or a wing it knows, and what each entry names. A role block with a chosen
+    entry also brings its `includeDefault`/`fallback` keys. Review of slice 23: a faction that knows hulls or wings by tag,
+    and a role variant nothing defines (perhaps a dependency's), are suspects, never dropped silently."""
     from bridgeforge.genome.closure import pointer
     from bridgeforge.genome.faction import ROLE_NOT_VARIANTS, ROLE_SKIPPED
 
     roles = _json_object(Path(root) / ROLES_FILE)
     knows = known(faction)
-    result: dict[str, list[str]] = {"donor": [], "genes": [], "vanilla": [], "missing": []}
+    result: dict[str, list] = {"donor": [], "genes": [], "vanilla": [], "missing": [], "suspects": []}
+    undefined = []
     for role, block in sorted(roles.items()):
         if role in ROLE_SKIPPED or not isinstance(block, dict):
             continue
@@ -61,20 +61,23 @@ def fleet_needs(root: Path, faction: dict, mod_index, core_index) -> dict[str, l
             if key in ROLE_NOT_VARIANTS or not isinstance(key, str):
                 continue
             kind = "wing" if key.endswith("_wing") else "variant"
-            if kind == "wing" and key not in knows["wing"]:
+            if not (mod_index.defines(kind, key) or core_index.defines(kind, key)):
+                undefined.append(key)
                 continue
-            if kind == "variant" and _hull_of(key, mod_index, core_index) not in knows["hull"]:
+            if key not in knows["wing"] if kind == "wing" else _hull_of(key, mod_index, core_index) not in knows["hull"]:
                 continue
             chosen.append(key)
-            if mod_index.defines(kind, key):
-                result["genes"].append(f"{kind}:{key}")
-            elif core_index.defines(kind, key):
-                result["vanilla"].append(f"{kind}:{key}")
-            else:
-                result["missing"].append(f"{kind}:{key} ({ROLES_FILE} role {role}; neither the mod nor the core defines it)")
+            result["genes" if mod_index.defines(kind, key) else "vanilla"].append(f"{kind}:{key}")
         if chosen:
             result["donor"] += [f"{ROLES_FILE}#{pointer(role)}{pointer(key)}" for key in [*chosen, *(k for k in block if k in ROLE_NOT_VARIANTS)]]
-    return {key: sorted(set(values)) for key, values in result.items()}
+    if knows["tags"] and roles:
+        result["suspects"].append({"path": ROLES_FILE, "mentions": sorted(knows["tags"]), "reason": "the faction knows hulls or "
+                                   "wings by tag, which is not expanded: role entries for them are not carried, so its fleet "
+                                   "may be partial or empty (RC8-54)"})
+    if undefined:
+        result["suspects"].append({"path": ROLES_FILE, "mentions": sorted(set(undefined)), "reason": "role entries whose variant "
+                                   "or wing neither the mod nor the core defines (perhaps a dependency's): not judged"})
+    return {key: values if key == "suspects" else sorted(set(values)) for key, values in result.items()}
 
 
 def _hull_of(variant: str, mod_index, core_index) -> str | None:
@@ -91,16 +94,24 @@ def role_gaps(carrier: Path, others: list[Path]) -> list[dict]:
     from bridgeforge.genome.faction import ROLE_NOT_VARIANTS, ROLE_SKIPPED
     from bridgeforge.vendor_plan import _rows, _specs
 
+    from bridgeforge.scan.scanner import _load_lenient_json_file
+
     carrier = Path(carrier)
     roots = [carrier, *others]
     variants = {v for root in roots for v in _specs(root, "data/variants", "*.variant", "variantId")}
     wings = {w for root in roots for w in _rows(root, "data/hulls/wing_data.csv")}
-    sources = [(ROLES_FILE, _json_object(carrier / ROLES_FILE))]
+    gaps, sources = [], []
     factions = carrier / "data" / "world" / "factions"
-    for path in sorted(factions.glob("*.faction")) if factions.is_dir() else []:
-        roles = _json_object(path).get("shipRoles")
-        sources.append((path.relative_to(carrier).as_posix(), roles if isinstance(roles, dict) else {}))
-    gaps = []
+    for path in [carrier / ROLES_FILE, *(sorted(factions.glob("*.faction")) if factions.is_dir() else [])]:
+        if not path.is_file():
+            continue
+        data = _load_lenient_json_file(path)
+        relative = path.relative_to(carrier).as_posix()
+        if not isinstance(data, dict):  # fail closed, as `hull-styles-unreadable` does (review of slice 23)
+            gaps.append({"finding": "ship-roles-unreadable", "file": relative})
+            continue
+        roles = data if relative == ROLES_FILE else data.get("shipRoles")
+        sources.append((relative, roles if isinstance(roles, dict) else {}))
     for file, roles in sources:
         for role, block in sorted(roles.items()):
             if role in ROLE_SKIPPED or not isinstance(block, dict):

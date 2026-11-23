@@ -292,7 +292,8 @@ def describe_faction(mod: Path, ident: str, vanilla_core: Path | None, policy_pa
     registrations, notes = _registrations(root, ident)
     suspects = ([{"path": path, "mentions": tags, "reason": "the faction's lists name tags: sets of hulls, weapons or wings, "
                   "recorded and not expanded"}] if tags else [])
-    suspects += commodity_suspects + _unread(path, faction) + notes + ([description_suspect] if description_suspect else [])
+    suspects += (commodity_suspects + _unread(path, faction) + notes + ([description_suspect] if description_suspect else [])
+                 + fleet["suspects"])
     members.sort(key=lambda m: (m["what"], m["path"]))
     info = read_mod_info(root) or {}
     licence = _licence(revival_licence(info.get("id"), info.get("name"), policy_path), info, [m["path"] for m in members], policy_path)
