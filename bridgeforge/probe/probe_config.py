@@ -325,6 +325,33 @@ def _wreck_pieces(mod_root: Path) -> list[str]:
     return sorted({(row.get("id") or "").strip() for row in _read_csv_rows(path) or [] if (row.get("id") or "").strip() and _is_wreck_piece(row)})
 
 
+# Every hull spec has an empty variant `<hullId>_Hull`: RC7's own code builds such ids for any hull, a skin included
+# (CodexDataV2 `spec.getHullId() + "_Hull"`, CustomProductionContract `addFleetMember(getSpecId() + "_Hull")`, BaseSubmarketPlugin;
+# starfarer.api.zip sources, 2026-11-22). Owner 2026-11-22: "test all ships hidden or not".
+EMPTY_VARIANT_SUFFIX = "_Hull"
+
+
+def _skin_hulls(mod_root: Path, deployable: list[str]) -> list[str]:
+    """Skin hull ids from data/hulls/**/*.skin whose base hull is deployable, or is not one of this mod's hulls (a vanilla base).
+
+    A skin is not in ship_data.csv, so it never fought (Navarchy of Tania's two skins, measured 2026-11-22). A skin of the
+    mod's own module, fighter or wreck hull stays out, as its base does (PRB-FIGHTER-01)."""
+    hulls_dir = mod_root / "data" / "hulls"
+    if not hulls_dir.is_dir():
+        return []
+    own = {(row.get("id") or "").strip() for row in _read_csv_rows(hulls_dir / "ship_data.csv") or []}
+    allowed = set(deployable)
+    found = set()
+    for path in sorted(hulls_dir.rglob("*.skin")):
+        data = _load_lenient_json_file(path)
+        if not isinstance(data, dict):
+            continue
+        skin, base = data.get("skinHullId"), data.get("baseHullId")
+        if isinstance(skin, str) and skin and isinstance(base, str) and (base in allowed or base not in own):
+            found.add(skin)
+    return sorted(found - allowed)
+
+
 def _variant_by_hull(mod_root: Path, hulls: list[str]) -> dict[str, str]:
     """Pick one variant id per hull from data/variants/**.variant (first match wins, sorted for determinism)."""
     variants_root = mod_root / "data" / "variants"
@@ -542,9 +569,11 @@ def build_probe_config(
         raise ProbeConfigError(f"{mod_info_path} has no string 'id'.")
 
     hulls = _hull_inventory(mod_root)
-    variants = _variant_by_hull(mod_root, hulls)
-    hulls_with_variant = [hull for hull in hulls if hull in variants]
-    skipped = sorted(set(hulls) - set(hulls_with_variant))
+    # Every ship fights, hidden or not (owner 2026-11-22): skins too, and a hull with no variant file as its empty `<id>_Hull`.
+    deployable = sorted(set(hulls) | set(_skin_hulls(mod_root, hulls)))
+    variants = _variant_by_hull(mod_root, deployable)
+    empty_variant = sorted(hull for hull in deployable if hull not in variants)
+    variants.update({hull: hull + EMPTY_VARIANT_SUFFIX for hull in empty_variant})
 
     merged_setups = parse_setups(setups)
     apply_mode = DEFAULT_PROFILE_APPLY
@@ -563,12 +592,13 @@ def build_probe_config(
         "content_parity": {target_mod_id: expected_content(mod_root, systems=mod_systems, body_types=sorted(body_types))},
         # 78.8: a day whose campaign frame-time p95 exceeds this many ms is flagged slow; 0 turns the flag off
         "campaign_perf_p95_ms": 0,
-        "hulls": hulls_with_variant,
+        "hulls": deployable,
         "variants": variants,
+        "hulls_empty_variant": empty_variant,  # fight unarmed, as `<id>_Hull`: the mod ships no variant for them
         "track_entities": sorted(set(track_entities or [])),
         "factions": _mod_faction_ids(mod_root),
         "patched_factions": _mod_patched_faction_ids(mod_root),
-        "content_variants": _content_variants(mod_root, hulls),
+        "content_variants": _content_variants(mod_root, deployable),
         "content_ship_hulls": _content_ship_hulls(mod_root, hulls),
         "content_special_items": _content_special_items(mod_root),
         "mod_systems": mod_systems,
@@ -586,7 +616,7 @@ def build_probe_config(
         "campaign_interval_days": campaign_interval_days,
         "combat_seconds": combat_seconds,
         "combat_cap_per_side": combat_cap_per_side,
-        "hulls_skipped_no_variant": skipped,
+        "hulls_skipped_no_variant": [],  # since 2026-11-22 such hulls fight with their empty variant (hulls_empty_variant)
         "setups": merged_setups,
         "apply": apply_mode,
     }

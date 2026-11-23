@@ -46,10 +46,30 @@ class ProbeConfigBuildTests(unittest.TestCase):
             mod = _make_fixture_mod(Path(directory))
             config = build_probe_config(mod, track_entities=["exipirated_avesta"])
             self.assertEqual(config["target_mod_id"], "fixture_mod")
-            self.assertEqual(config["hulls"], ["fx_hull1"])
-            self.assertEqual(config["variants"], {"fx_hull1": "fx_hull1_Standard"})
-            self.assertEqual(config["hulls_skipped_no_variant"], ["fx_hull2"])
+            # Owner 2026-11-22, "test all ships hidden or not": a hull with no variant fights as its empty `<id>_Hull`.
+            self.assertEqual(config["hulls"], ["fx_hull1", "fx_hull2"])
+            self.assertEqual(config["variants"], {"fx_hull1": "fx_hull1_Standard", "fx_hull2": "fx_hull2_Hull"})
+            self.assertEqual(config["hulls_empty_variant"], ["fx_hull2"])
+            self.assertEqual(config["hulls_skipped_no_variant"], [])
             self.assertEqual(config["track_entities"], ["exipirated_avesta"])
+
+    def test_skins_fight_unless_their_base_is_a_module_fighter_or_wreck(self) -> None:
+        # Navarchy of Tania's two skins never fought: a skin is not in ship_data.csv (measured 2026-11-22).
+        with tempfile.TemporaryDirectory() as directory:
+            mod = _make_fixture_mod(Path(directory))
+            skins = mod / "data" / "hulls" / "skins"
+            skins.mkdir()
+            for skin, base in (("fx_hull1_elite", "fx_hull1"), ("fx_module1_alt", "fx_module1"), ("onslaught_fx", "onslaught"),
+                               ("fx_fighter1_alt", "fx_fighter1")):
+                (skins / f"{skin}.skin").write_text(f'{{"baseHullId":"{base}","skinHullId":"{skin}"}}', encoding="utf-8")
+            (mod / "data" / "variants" / "fx_hull1_elite_Assault.variant").write_text(
+                '{"hullId":"fx_hull1_elite","variantId":"fx_hull1_elite_Assault"}', encoding="utf-8")
+            config = build_probe_config(mod)
+        self.assertEqual(config["hulls"], ["fx_hull1", "fx_hull1_elite", "fx_hull2", "onslaught_fx"])
+        self.assertEqual(config["variants"]["fx_hull1_elite"], "fx_hull1_elite_Assault")  # its own variant
+        self.assertEqual(config["variants"]["onslaught_fx"], "onslaught_fx_Hull")  # a vanilla base's skin, no variant
+        self.assertEqual(config["hulls_empty_variant"], ["fx_hull2", "onslaught_fx"])
+        self.assertIn("fx_hull1_elite_Assault", config["content_variants"]["ship"])  # built as a ship, not only looked up
 
     def test_missing_mod_id_raises(self) -> None:
         with tempfile.TemporaryDirectory() as directory:

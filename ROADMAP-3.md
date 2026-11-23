@@ -2491,6 +2491,9 @@ fixes of 93.28. 93.26-93.35 are that day's findings.
   waiting in-game days; and (approved) field such fleets' named variants in the probe's combat rounds. Not only Tania: find
   `createEmptyFleet`/`addFleetMember` calls and their triggers, propose the save edit (Salvor), reload, check the spawned fleet.
   Tania was archived before this exists (owner: "For now archive Tania and we can create the testbed after").
+  **Kept in the queue (owner 2026-11-22: "I want to be able to test all ships hidden or not. If you deem it not necessary then
+  we can park it").** Recommended against parking: hidden factions' code-built fleets are the ships 93.66's hull coverage
+  cannot reach. 93.66 covers every hull and skin the mod ships.
 - 93.31 **Sound files the game cannot load.** Bultach 1.1.7's `melta_fire.ogg` is FLAC in an Ogg container and the game decodes only
   Vorbis ("This Ogg bitstream does not contain Vorbis audio data"); re-encoded with ffmpeg libvorbis on the owner's word ("Fix it"),
   explained in SHIPPED_CHANGES.json (no file of the mod plays it). Add a scanner check for non-Vorbis and empty `.ogg` files and a
@@ -2928,6 +2931,41 @@ fixes of 93.28. 93.26-93.35 are that day's findings.
   - Tests: `tests/test_probe_group.py` (a member that did not load fails, a library that did not load is the group's);
     `tests/test_gene_star_system.py` (the carrier's mod_info has `id`, `name` and `description`). Mutation-checked: 2
     mutants, both killed.
+  **P1's carrier boot, re-run 2026-11-22 (owner: "live test in-between"):**
+  - **P1B-CAR2-20261122:** LIVE_STUCK at main-menu. The game was still loading textures at 212 s: 438 in about 130 s,
+    against P1B-SUB2's 2,697 in 98 s. Windows Search indexing was the busiest process on Test1 (not proven the cause).
+  - **P1B-CAR3-20261122,** the same install with `--menu-timeout 600`: LIVE_DONE.
+    - The carrier loaded (no `Error loading mod`), and the hull mod script `data.hullmods.sa_lobster_tanks` compiled.
+    - `report`: FATAL 0, MOD-ERROR 0, member PASS. `run-manifest check`: ACCEPTABLE. Not recorded: a gene boot run.
+    - This boot proves the carrier loads and its hull mod compiles. No ship fought with the hull mod: the filler
+      ships fought.
+  - **P1's boot halves are both done:** this one, and the subtraction boot, BLOCKED_BY_DEPENDENT, which the owner ruled
+    the expected outcome on 2026-11-20.
+- 93.66 (M) **Every ship fights, hidden or not** (owner 2026-11-22: "I want to be able to test all ships hidden or not").
+  - **Measured first** (BridgeForge's own selection, read-only, five revived mods):
+    - every deployable hull with a variant file already fought, hidden or restricted tags included (UAF 34 of 47 tagged,
+      Bultach 49 of 72; the rest are modules or fighters);
+    - **skins never fought:** they are not in `ship_data.csv` (Navarchy of Tania has two, with variants);
+    - **a hull with no variant file never fought:** UAF 7, Bultach 3, Sunrider 1;
+    - only one variant per hull fights (UAF has 147 more): not changed here.
+  - **Evidence:** RC7's own code builds `<hullId>_Hull` variant ids for any hull, a skin included (`starfarer.api.zip`,
+    2026-11-22): `CodexDataV2` (`spec.getHullId() + "_Hull"`), `CustomProductionContract`
+    (`addFleetMember(getSpecId() + "_Hull")`) and `BaseSubmarketPlugin`.
+  **Done 2026-11-22 (code; live proof with the first probe 0.3.4 run).**
+  - **Skins:** `probe_config._skin_hulls` adds every `data/hulls/**/*.skin` whose base hull is deployable, or not one of
+    the mod's own (a vanilla base). A skin of the mod's own module, fighter or wreck stays out (PRB-FIGHTER-01).
+  - **Hulls with no variant** fight unarmed as `<id>_Hull`, listed in `hulls_empty_variant`; `hulls_skipped_no_variant`
+    stays empty.
+  - **Coverage on the five mods:** Tania 13 -> 15, UAF 86 -> 93, Bultach 105 -> 108, Sunrider 22 -> 24, Eridani 17.
+  - **Tests:** `tests/test_probe_config.py`:
+    - a hull without a variant fights as `<id>_Hull`;
+    - skins fight, with their own variant or `<id>_Hull`, unless the base is the mod's module or fighter.
+
+    The probe contract lists `hulls_empty_variant` as Python-only. Mutation-checked: 5 mutants, all caught.
+  - **Left:**
+    - fighting every variant, not only the first, would mean more rounds; the owner's call;
+    - modules fight only attached to their parent;
+    - code-built fleets of hidden factions stay 93.30's scenario testbed, which the owner un-parked on 2026-11-22.
 - 93.64 (S) **A gate whose subject left Done/ had no state to close it.** bf-0b-15 (SEEKER Betelgeuse modules survive save
   and reload) tests SEEKER 0.3.0+bf.5's Betelgeuse and TWIG code. That archive moved to `Done/_replaced-2026-11-17/` when
   SEEKER 0.6.6 replaced it, and 0.6.6 has neither. The owner ruled 2026-11-19: "Close as superseded". `gates.json` allowed
