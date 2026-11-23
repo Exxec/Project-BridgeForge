@@ -1,6 +1,6 @@
 # Feature genome: extracting and inserting mod features
 
-**Status: approved by the owner 2026-11-17 ("all approved"), not yet implemented.** Requested 2026-11-17: "design roadmap from
+**Status: approved by the owner 2026-11-17 ("all approved"). Updated 2026-11-23: 94.G1 is done (WP1 to WP6, 2026-11-19) and 94.G2 is in progress (slices 1 to 18 merged or built, pilots P1 to P4); 94.G3 to 94.G7 are not started (ROADMAP-3 item 94).** Requested 2026-11-17: "design roadmap from
 now to endgoal of being able to extract and insert features like DNA"; "factor in the other repos as well"; then "all approved.
 Please make sure everything is traceable and each repo gets a copy of its roadmap specific portion." This is a strategy addition
 under CLAUDE.md's development policy, recorded here with its decisions (section 11). It extends, and must not weaken,
@@ -321,3 +321,5 @@ The four pilots' donors are live-validated on the 0.98.5a-RC7 rig. Status per pa
 Outside this track unless D2 changes: a shared workspace layout imported from the review (WP1 decides where genes and evidence
 live against the existing workspace forms), a launcher, a GUI, workflow plugins, other games, merging repositories, and a
 shared runtime library.
+
+**State 2026-11-23:** the queue above was lifted on 2026-11-19. 94.G1 is done (WP1 to WP6) and GR-2's census is done; 94.G2 runs its four pilots (P1 to P4, listed in ROADMAP-3 item 94), with `gene boot` and the static proofs built through slice 18. Per-slice evidence is in ROADMAP-3 item 94.

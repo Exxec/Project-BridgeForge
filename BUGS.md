@@ -17,6 +17,7 @@
   `campaign|END`, but `probe-group live` exited 1 because the combat stage could not start.
 - Fix: when the enabled mods replace mission_list.csv and the probe mission is absent, record the combat stage NOT_TESTED
   with that reason instead of failing the run.
+- See also: ROADMAP-3 item 88.21 describes the same problem (the staged `mission_list.csv` differs from the candidate by the probe's own row); it is proposed, not started, so this entry stays open.
 
 ### LIVE-004 — `rig-up` leaves stale files from earlier revisions in the rig copy
 
@@ -26,11 +27,13 @@
   working copy"). The run still tested the stale file. Moved aside by hand to `_rig/scratch/moved-20261022-stale-extras/`.
 - Fix: `rig-up` moves every rig file absent from the candidate into `_rig/scratch/moved-<date>/` (logged, never deleted) before
   staging, so the staged copy always equals the candidate.
+- **Fixed:** 96.12 (2026-11-22): `sync_working_copy` (`probe-group install`, `rig-up`) moves each rig file the working copy no longer ships into `<rig>/_stale-staged/<UTC time>/<mod folder>/` and never deletes one (`tests/test_probe_group.py` `SyncStaleFilesTests`).
 
 ### LIVE-003 — The pre-patcher edits its own staged files at launch, reported as drift
 
 - Impact: noise. Every `-prep` run's `.completed.json` says `staged files of starsector_prepatcher changed since launch`.
 - Fix: exclude the pre-patcher's self-managed files (its cache/patched output) from the run's drift check, keep the rest.
+- **Fixed:** 93.41 (2026-11-17): `run_manifest.RUNTIME_OUTPUT_DIRS` keeps the pre-patcher's own `logs` folder out of its staged hash (`tests/test_run_manifest.py` `test_a_mods_own_runtime_log_is_not_drift_but_its_payload_is`).
 
 ## Found by the 2026-10-20 dropped-feature sweep
 
