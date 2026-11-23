@@ -2347,8 +2347,9 @@ history as the closure benchmark, a cross-repository trace check, an early Java 
 
     Its first finding, that the record refusal misses a boot copy the mod-id lookup cannot resolve, does not hold: such a
     workspace is not recorded either.
-  - **Tests:** `tests/test_gene_boot.py`, 35 tests on synthetic proofs and bound runs. Mutation-checked with
-    `mutate_batch.py`: MUTATION_RESULT.
+  - **Tests:** `tests/test_gene_boot.py`, 37 tests on synthetic proofs and bound runs. Mutation-checked with
+    `mutate_batch.py`: the first 18 mutants all caught; after the review, 30, of which 2 survived (a `Found mod` line of
+    another id, and the main-menu branch behind the load check) until two tests were added, then all 30 caught.
 - 94.G3 **Gene bank**: content-addressed store, alleles across the corpus, lineage, licence state; RevenantLib distributes genes
   from vanished authors (GD-3). The store's payloads live under `data_root()`, like `Done/`, never in this public
   repository; only manifests of the owner's own or permitted content become committed fixtures (2026-11-19).
