@@ -216,6 +216,23 @@ class SubtractionTests(unittest.TestCase):
             rig, _ = boot_run(root, proof, "subtraction", "SUB-6", ["5 [main] INFO  x.Y  - starting"], loaded_line=False)
             self.assertEqual(evaluate(proof, "subtraction", rig, "SUB-6")["verdict"], "UNKNOWN")
 
+    def test_a_donor_read_then_stalled_before_the_menu_is_unknown(self) -> None:
+        with resolved_temp_dir() as root:
+            proof = make_proof(root)
+            rig, _ = boot_run(root, proof, "subtraction", "SUB-6B", ["5 [main] INFO  x.Y  - loading textures"])
+            result = evaluate(proof, "subtraction", rig, "SUB-6B")
+            self.assertEqual((result["verdict"], result["boot_verdict"], result["found"]), ("UNKNOWN", "NO_MAIN_MENU", True))
+
+    def test_a_found_line_counts_only_for_this_mod_in_this_folder(self) -> None:
+        other_folder = ("500  [main] INFO  com.fs.starfarer.launcher.ModManager  - Found mod: fx_donor "
+                        "[C:\\rig\\starsector-core\\..\\mods\\fx_donor_original]")
+        other_id = found("subtraction", "someone_else")
+        for line in (other_folder, other_id):
+            with self.subTest(line=line[-40:]), resolved_temp_dir() as root:
+                proof = make_proof(root)
+                rig, _ = boot_run(root, proof, "subtraction", "SUB-6C", [line, MENU], loaded_line=False)
+                self.assertEqual(evaluate(proof, "subtraction", rig, "SUB-6C")["boot_verdict"], "NOT_LOADED")
+
     def test_a_donor_the_game_did_not_load_fails(self) -> None:
         with resolved_temp_dir() as root:
             proof = make_proof(root)
