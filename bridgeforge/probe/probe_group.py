@@ -618,7 +618,10 @@ def sync_working_copy(working: Path, target: Path) -> str | None:
     for relative in [*drift["missing_in_deployed"], *(d["path"] for d in drift["different"])]:
         (target / relative).parent.mkdir(parents=True, exist_ok=True)
         shutil.copy2(working / relative, target / relative)
-    stale = drift["extra_in_deployed"]
+    # A path that differs from a shipped one only in case is that same file on Windows (`Data/x.csv` against `data/x.csv`):
+    # moving it would take away the file just copied, and the rig would lose and regain it on alternate syncs (review of #214).
+    shipped = {name.lower() for name in _collect(working)}
+    stale = [relative for relative in drift["extra_in_deployed"] if relative.lower() not in shipped]
     if not stale:
         return f"synced {drift['drift_count']} file(s)"
     deployed_root, holding = Path(drift["deployed_root"]), _stale_holding(target)
