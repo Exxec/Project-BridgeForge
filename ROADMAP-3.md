@@ -830,6 +830,23 @@ unproven).
   the three. The run ended LIVE_STUCK at combat-round-1 ("no 'combat END' probe line"), although the battle had ended. P962SA,
   where the fight lasted the full time, ended normally. The plugin should write them as well when the engine ends the combat
   itself. That needs a probe release, checked first against RC7's `CombatEngineAPI` for the call that says combat is over.
+  **Done 2026-11-22 (code; its live proof is the first 0.3.4 run).**
+  - **Evidence:** javap of RC7's `starfarer.api.jar` shows `CombatEngineAPI.isCombatOver()`, `endCombat(float)` and
+    `endCombat(float, FleetSide)`.
+  - **Probe 0.3.4's `BfProbeCombatPlugin`** ends a battle and writes its END lines when one of these happens:
+    - the configured time runs out (as before);
+    - a runaway field (as before);
+    - the engine says combat is over, checked before the pause check, since the game may sit on its own end screen;
+    - one side has no live ship left after ships were deployed.
+  - **A new `combat-end|<reason>` line** gives the time and the hull ids still alive per side. It is WARN only for a
+    runaway.
+  - **The report:** `probe_record.combat_rounds` carries `ended` (reason and detail per battle). `probe-group report`
+    prints a battle that ended early ("side-wiped" or "engine-ended"), since hulls meant to deploy later may not have
+    fought.
+  - **Rebuilt** with `build-probe-mod` against RC7: 54 classes. The release copy is updated, version 0.3.4.
+  - **Tests:** `tests/test_probe_group.py` `CombatRoundsTests` (the reasons parsed; the existing round cases carry
+    `ended`).
+  - **The Java end conditions are proven only live,** by the first run on probe 0.3.4.
 - 96.14 (M) **A tool for game classes the obfuscator renamed.** Neutrino Corporation and Station Augments both called game
   classes that RC7's obfuscator renamed with unchanged members (`systems.F` -> `systems.return`, `specs.do` -> `specs.M`,
   `ai.ooOO` -> `ai.C`, ...). Each port needed hand tools, kept in the workspaces' `scratch/rc7-remap/`:
@@ -2772,6 +2789,17 @@ fixes of 93.28. 93.26-93.35 are that day's findings.
   - **Proposal:** the probe's combat plugin ends a battle after a quiet spell (no hull damaged or destroyed for N seconds).
     It logs `combat|END` with the reason and the ships still alive per side, so the run goes on to the next round; `report`
     shows such a round as fought with a WARN. This needs probe 0.3.4 and a live run.
+  **Closed 2026-11-22: the reading was wrong; nothing to build in the probe.**
+  - **The probe already ends every battle:** it ends combat once `combatSeconds` of running combat have passed
+    (`DEFAULT_COMBAT_SECONDS` 60).
+  - **SR6's own log shows the cause:**
+    - combat START at 203.6 s;
+    - the first ship deployed at 268.0 s (about 64 s paused: the unpause press was lost);
+    - the log ends at 304.7 s, about 37 s into running combat, before the probe's 60 s were up.
+  - **So the harness gave up first.** Its combat wait was too short for a lost press plus a round. 93.62 (Done
+    2026-11-19) fixed exactly that: `combat_wait()` is 255 s, covering two 90 s unpause retries and a round.
+  - **What this item proposed:** a quiet-spell end would only have added a second clock. The early-end lines it asked for
+    (why the battle ended, who was left) come with 96.13's probe 0.3.4.
 - 93.50 (S) **A vanished game window ends a live run with an exception.** SR7-LIVE-0985a-20261117 (Bultach again, after SR6)
   passed its smoke. Then, during New Game:
   - the game read the newest save (log line 30197 at 120.4 s: `Reading save data from [..\saves\save_HekaWillis_...]`,
