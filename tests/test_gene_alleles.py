@@ -72,7 +72,7 @@ def _corpus(base: Path) -> Path:
     _write(done / "Old.7z", "7z")
     mentioner = _mod(done / "Mentioner", "mentioner", "3", hullmod=False)
     _write(mentioner / "data/variants/m.variant", json.dumps({"variantId": "m", "hullId": "ship_a", "hullMods": ["hm_a"]}))
-    _write(mentioner / "data/strings/notes.txt", "hm_ab is another id; xship_a too")  # not whole words
+    _write(mentioner / "data/strings/notes.txt", "wing_ab is another id; xwing_a too")  # not whole words: wing_a not named
     (mentioner / "jars").mkdir()
     with zipfile.ZipFile(mentioner / "jars" / "m.jar", "w") as jar:
         jar.writestr("m/C.class", b"\xca\xfe\xba\xbe\x00\x08gun_a\x00")
@@ -95,11 +95,16 @@ class CorpusRootsTests(unittest.TestCase):
         self.assertEqual(sorted(p.name for p in zips), ["Mod-A-1.0.zip", "Nothing.zip", "Other.zip"])
         self.assertEqual([p.name for p in unread], ["Old.7z"])
 
-    def test_a_working_copy_outside_done_is_working_and_excluded_folders_are_skipped(self) -> None:
+    def test_a_working_copy_outside_done_is_working_and_excluded_folders_and_links_are_skipped(self) -> None:
+        from tests.support import link_dir
+
         with resolved_temp_dir() as root:
             ops = root / "In operation"
             _mod(ops / "A" / "working", "moda", "1.0")
             _mod(ops / "_rig-x" / "mods" / "A", "moda", "1.0")
+            _mod(root / "core-like" / "inner", "linked", "1")
+            (ops / "B").mkdir()
+            link_dir(root / "core-like", ops / "B" / "starsector-core")  # a rig links its core: never walked
             roots, _, _ = corpus_roots(ops, ("_rig-*",))
         self.assertEqual([(p.relative_to(ops).as_posix(), kind) for p, kind in roots], [("A/working", "working")])
 
@@ -136,7 +141,8 @@ class PlanTests(unittest.TestCase):
         self.assertEqual(result["pilot_anchors"], [PILOT])
         working = rows["Done/Mod-A/workspace/working"]
         self.assertEqual(sorted(working["defines"]), sorted(a for a in ANCHORS if a != "star-system:Sys"))
-        self.assertEqual((working["mod_id"], working["mod_version"], working["folder"]), ("moda", "1.0", "archive"))
+        self.assertEqual((working["mod_id"], working["mod_version"], working["folder"], working["mentions"]),
+                         ("moda", "1.0", "archive", []))  # a defined id is not also a mention
         self.assertEqual(rows["Done/Mod-A/original/Mod A-1.0"]["defines"], [PILOT])
         self.assertEqual((rows["Done/Mentioner"]["defines"], sorted(rows["Done/Mentioner"]["mentions"])),
                          ([], sorted(["hullmod:hm_a", "hull:ship_a", "weapon:gun_a"])))
@@ -161,9 +167,13 @@ class PlanTests(unittest.TestCase):
 
         with resolved_temp_dir() as root, mock.patch.object(alleles, "RootIndex", failing):
             result = self._plan(root)
+            args = SimpleNamespace(corpus=root / "Done", out=root / "plan.json", bank=root / "Genes", exclude=None, quiet=True)
+            with mock.patch("bridgeforge.genome.campaign.star_system_generators", return_value={}), \
+                    mock.patch("bridgeforge.paths.data_root", return_value=root), contextlib.redirect_stdout(io.StringIO()):
+                code = run_alleles_cli(args)
         errors = {r["path"]: r["error"] for r in result["roots"] if r["error"]}
         self.assertEqual(errors, {"Done/Mentioner": "KeyError: 'boom'"})
-        self.assertEqual((result["summary"]["errors"], result["summary"]["roots"]), (1, 5))
+        self.assertEqual((result["summary"]["errors"], result["summary"]["roots"], code), (1, 5, 1))  # an error fails the run
 
     def test_a_corpus_outside_the_data_root_an_empty_bank_and_an_unknown_kind_are_refused(self) -> None:
         with resolved_temp_dir() as root:
