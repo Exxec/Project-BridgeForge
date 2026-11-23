@@ -13,9 +13,11 @@ SPEC.json:
 }
 
 Each mutant runs mutate_check.py as its own process (cwd and PYTHONPATH = the repo, so a worktree tests its own code), so a
-crash cannot leave the next one mutated. Snippets are written to files byte for byte, so CRLF modules work. After every
-mutant the repo's `git status --porcelain` must be empty, or the batch stops. RESULTS.json is rewritten after each mutant,
-so an interrupted batch keeps what finished; a mutant already in it (same claim and name) is skipped on a re-run.
+crash cannot leave the next one mutated. Snippets are written to files byte for byte, so CRLF modules work, and a snippet
+ending in a line break keeps it. After every mutant the repo's `git status --porcelain` must be empty, or the batch stops;
+so RESULTS.json must be outside the repo (refused otherwise). RESULTS.json is rewritten after each mutant, so an
+interrupted batch keeps what finished. On a re-run a mutant already CAUGHT or MISSED (same claim and name, unique in the
+spec) is skipped; one that was NOT RUN, INVALID or TIMEOUT runs again.
 Verdicts: CAUGHT (the only one to claim), MISSED, NOT RUN, INVALID, TIMEOUT. Exit 0 only when every verdict is CAUGHT.
 Used for the re-run of 2026-11-22's claims (ROADMAP-3 94.G2, "Mutation re-run").
 """
@@ -46,8 +48,10 @@ def run_one(repo: Path, mutant: dict, checker: Path = CHECKER) -> dict:
     with tempfile.TemporaryDirectory(prefix="mutbatch-") as scratch:
         old_file = Path(scratch) / "old.txt"
         new_file = Path(scratch) / "new.txt"
-        old_file.write_bytes(mutant["old"].encode("utf-8"))
-        new_file.write_bytes(mutant["new"].encode("utf-8"))
+        # mutate_check strips one closing line break from a snippet file, so add one: the snippet arrives exactly
+        # (review 2026-11-22: a snippet ending in "\n" lost it, leaving a blank line where the line was to go).
+        old_file.write_bytes((mutant["old"] + "\n").encode("utf-8"))
+        new_file.write_bytes((mutant["new"] + "\n").encode("utf-8"))
         env = dict(os.environ, PYTHONPATH=str(repo))
         done = subprocess.run([sys.executable, str(checker), mutant["module"], f"@{old_file}", f"@{new_file}",
                                mutant["selector"]], cwd=repo, env=env, capture_output=True, text=True, check=False)
@@ -55,11 +59,23 @@ def run_one(repo: Path, mutant: dict, checker: Path = CHECKER) -> dict:
     return {**mutant, "verdict": verdict, "output": (done.stdout + done.stderr)[-1200:]}
 
 
+FINAL = {"CAUGHT", "MISSED"}  # a verdict about the test; the others are about the mutant or the run, so they run again
+
+
 def main(spec_path: str, results_path: str) -> int:
     spec = json.loads(Path(spec_path).read_text(encoding="utf-8"))
     repo = Path(spec.get("repo") or ".").resolve()
-    out = Path(results_path)
+    out = Path(results_path).resolve()
+    if out.is_relative_to(repo):
+        print(f"{out} is inside {repo}: the clean-checkout check would stop the batch; write RESULTS outside it")
+        return 2
+    keys = [_key(m) for m in spec["mutants"]]
+    repeated = sorted({k for k in keys if keys.count(k) > 1})
+    if repeated:
+        print(f"claim and name must be unique in the spec; repeated: {repeated}")
+        return 2
     results = json.loads(out.read_text(encoding="utf-8")) if out.exists() else []
+    results = [r for r in results if r.get("verdict") in FINAL]
     done_keys = {_key(r) for r in results}
     if _dirty(repo):
         print(f"{repo} has changes before the batch: stopped\n{_dirty(repo)}")
@@ -82,4 +98,6 @@ def main(spec_path: str, results_path: str) -> int:
 
 
 if __name__ == "__main__":
-    sys.exit(main(*sys.argv[1:3]))
+    if len(sys.argv) != 3:
+        sys.exit("usage: python mutate_batch.py SPEC.json RESULTS.json   (RESULTS outside the checkout)")
+    sys.exit(main(sys.argv[1], sys.argv[2]))
