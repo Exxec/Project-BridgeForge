@@ -418,6 +418,11 @@ def prove(mod: Path, anchor: str, out: Path, *, vanilla_core: Path | None = None
     isolation["unresolved_in_carrier"] = unresolved_in_carrier(work / "carrier", {anchor: {**gene, "needs": {**gene["needs"], "genes": []}}})
     if isolation["unresolved_in_carrier"]:
         isolation["verdict"] = "FAIL"
+    from bridgeforge.genome.carrier_load import load_gaps
+
+    isolation["load_gaps"] = load_gaps(work / "carrier", vanilla_core)  # slice 19: what the game needs to load it (RC8-49)
+    if isolation["load_gaps"]:
+        isolation["verdict"] = "FAIL"
     inputs = [("member", path) for path in sorted({member_file(m["path"]) for m in gene["members"]})]
     atomic_write_text(out / "gene.json", dumps(gene), newline="")
     written = {}
