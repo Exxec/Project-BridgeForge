@@ -109,6 +109,19 @@ class CorpusTests(unittest.TestCase):
             self.assertFalse(out.with_name("census.json.partial.jsonl").exists())
             self.assertEqual(result["summary"]["plugins"], {"none": 2})
 
+    def test_an_archive_seen_before_its_raw_copy_is_still_kept(self) -> None:
+        # The other test always meets the raw copy first, so "the last one seen wins" passed it (mutation re-run
+        # 2026-11-22). Here the archive sorts first and must stay.
+        with resolved_temp_dir() as root:
+            done = root / "Done"
+            _write(done / "A-Mod" / "workspace" / "working" / "mod_info.json", json.dumps({"id": "mod_a", "version": "1.0"}))
+            _write(done / "Z raw copy" / "mod_info.json", json.dumps({"id": "mod_a", "version": "1.0"}))
+            self.assertEqual([(f, s) for f, _, s in mod_roots(done)], [("A-Mod", "archive"), ("Z raw copy", "raw")])
+            with redirect_stderr(io.StringIO()):
+                result = run_census(done, root / "out" / "census.json")
+            self.assertEqual([(row["id"], row["source"]) for row in result["mods"]], [("mod_a", "archive")])
+            self.assertEqual(result["duplicates_skipped"], ["Z raw copy"])
+
     def test_an_interrupted_run_resumes_from_its_checkpoint(self) -> None:
         from unittest import mock
 

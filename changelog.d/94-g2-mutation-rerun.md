@@ -1,0 +1,1 @@
+- The mutation claims of 2026-11-17 to 2026-11-22, made with the old `mutate_check.py`, are re-run with the fixed one; the tests a re-run mutant survived are added, `mutate_batch.py` runs and records a spec of mutants, and `mutate_check.py` keeps CRLF in snippet files (94.G2).

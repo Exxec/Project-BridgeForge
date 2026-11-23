@@ -30,6 +30,9 @@ class CutTests(unittest.TestCase):
         rest, row = cut_csv_row(text, "tank_mod")
         self.assertEqual(row, "B,tank_mod,x\r\n")
         self.assertEqual(rest, 'name,id,desc\r\nA,keep_me,"two\r\nlines"\r\nC,also_keep,y\r\n')
+        # The cut row itself spans lines: all of it goes (mutation re-run 2026-11-22: only neighbours spanned lines before).
+        spanning = 'name,id,desc\r\nB,tank_mod,"one\r\ntwo"\r\nC,also_keep,y\r\n'
+        self.assertEqual(cut_csv_row(spanning, "tank_mod"), ('name,id,desc\r\nC,also_keep,y\r\n', 'B,tank_mod,"one\r\ntwo"\r\n'))
         id_second = "id,name\ntank_mod,A\nother,B\n"  # the id column is found from the header, not assumed
         self.assertEqual(cut_csv_row(id_second, "tank_mod")[0], "id,name\nother,B\n")
         with self.assertRaises(ProofError):

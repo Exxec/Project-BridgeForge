@@ -322,6 +322,20 @@ class JavacArgumentFileTests(unittest.TestCase):
             (mod / "mod_info.json").write_text(json.dumps({"id": "m", "jars": ["jars/lib.jar", _LINE_BREAK_JAR]}), encoding="utf-8")
             self.assertEqual(_mod_jars(mod), [mod / "jars" / "lib.jar"])
 
+    def test_a_found_jar_with_a_control_character_is_left_off_the_classpath(self) -> None:
+        """A mod that declares no jars gets every jar under it. Windows cannot create a name holding a line break, so the
+        walk is mocked; the guard was untested until the mutation re-run of 2026-11-22 removed it unnoticed."""
+        from pathlib import Path
+
+        from bridgeforge.bytecode.java_toolchain import _mod_jars
+
+        with resolved_temp_dir() as root:
+            mod = root / "mod"
+            mod.mkdir()
+            found = [mod / "jars" / "lib.jar", mod / "jars" / "x\n-proc:full.jar"]
+            with mock.patch.object(Path, "rglob", return_value=iter(found)):
+                self.assertEqual(_mod_jars(mod), [mod / "jars" / "lib.jar"])
+
     @unittest.skipIf(find_jdk() is None, "needs a JDK (javac)")
     def test_compile_check_runs_no_processor_from_a_mods_jar(self) -> None:
         """The reviewer's case end to end: before the fix the processor ran and compile-check said PASS."""

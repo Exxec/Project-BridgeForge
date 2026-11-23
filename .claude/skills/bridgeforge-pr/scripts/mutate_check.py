@@ -41,10 +41,17 @@ def _run(selector: str) -> tuple[int, int, str]:
     return done.returncode, executed, done.stderr
 
 
+def _snippet(path: str) -> str:
+    """A snippet file's exact text, its line endings kept, without the line break that ends the file."""
+    text = Path(path).read_bytes().decode("utf-8")
+    return text[:-2] if text.endswith("\r\n") else text[:-1] if text.endswith("\n") else text
+
+
 def main(module: str, old: str, new: str, selector: str) -> int:
     # An argument starting with @ names a file holding the snippet (shell quoting mangles backslashes).
-    old = Path(old[1:]).read_text(encoding="utf-8").rstrip("\n") if old.startswith("@") else old
-    new = Path(new[1:]).read_text(encoding="utf-8").rstrip("\n") if new.startswith("@") else new
+    # Read as bytes: read_text turns CRLF into LF, so a multi-line snippet never matched a CRLF module (2026-11-22).
+    old = _snippet(old[1:]) if old.startswith("@") else old
+    new = _snippet(new[1:]) if new.startswith("@") else new
     path = Path(module)
     original = path.read_bytes()
     stamp = path.stat()

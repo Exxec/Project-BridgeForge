@@ -36,6 +36,11 @@ code proves nothing. That happened twice on 2026-11-17. How the script decides:
   - timed out (4).
 - **A mutant that breaks a module imported only inside a test** shows as an ERROR, so it reads FAILS. Check that the
   failure is the assertion you meant.
+- **Several mutants:** write them as a spec and run `scripts/mutate_batch.py SPEC.json RESULTS.json`. It runs each through
+  `mutate_check.py`, records the verdicts, checks the checkout is clean after each, and resumes a stopped batch. Keep the
+  spec with the claim, so the claim can be re-run (`mutations/2026-11-22-rerun/` holds the re-run of 2026-11-17 to
+  2026-11-22's claims).
+- **Snippet files** (`@FILE`) are read byte for byte, so a multi-line snippet keeps CRLF and matches a CRLF module.
 
 CI runs on clean Windows and Ubuntu runners: no Starsector install, no licence key in the registry, Java 8 on PATH. Patch
 machine state (registry, installed games, home folder) in tests. One rig-doctor test read the developer's registry and
