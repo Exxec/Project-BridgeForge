@@ -9,7 +9,9 @@ from __future__ import annotations
 import json
 import unittest
 from pathlib import Path
+from unittest import mock
 
+from bridgeforge.archive import ArchiveError, archive_mod
 from bridgeforge.genome.boot import BLOCKED, BOOTED, STAGED_MARKER, BootError, _condition_held, evaluate, stage
 from bridgeforge.probe.probe_group import ProbeGroupError
 from bridgeforge.probe.probe_record import record_group
@@ -19,6 +21,7 @@ from tests.support import resolved_temp_dir
 
 IDENTITY = "ab" * 32
 DONOR, CARRIER = "fx_donor", "gene_carrier_fx"
+PROOF_NAME = "p9-fx_tanks-20261122"
 FATAL_TANKS = "12:00:01 dialog: 'Starsector' text: 'Fatal: Hullmod fx_tanks not found!'"
 FATAL_GUN = "12:00:01 dialog: 'Starsector' text: 'Fatal: Weapon spec [fx_gun] not found!'"
 
@@ -28,16 +31,29 @@ def _json(path: Path, data: object) -> None:
     path.write_text(json.dumps(data), encoding="utf-8")
 
 
+def found(half: str, mod_id: str) -> str:
+    """RC7's launcher line for a mod folder it read (P034-TANIA-20261122)."""
+    return (f"500  [main] INFO  com.fs.starfarer.launcher.ModManager  - Found mod: {mod_id} "
+            f"[C:\\rig\\starsector-core\\..\\mods\\{PROOF_NAME}-{half}]")
+
+
+def mod_error(message: str) -> list[str]:
+    """An exception whose frame is in a mod's scripts: log-triage's MOD-ERROR."""
+    return [f"300 [main] ERROR com.fs.starfarer.loading.SpecStore  - java.lang.IllegalStateException: {message}",
+            "\tat data.scripts.FxPlugin.onApplicationLoad(FxPlugin.java:12)"]
+
+
 def make_proof(root: Path, *, loaded: str = "always", static_verdict: str = "PASS", needs_mods: list[str] | None = None,
-               provides: list[str] | None = None, set_proof: bool = False) -> Path:
+               provides: list[str] | None = None, set_proof: bool = False, dependents: list[dict] | None = None) -> Path:
     """A proof folder as `gene prove` writes it: gene.json, both static proofs and the two work copies."""
-    proof = root / "p9-fx_tanks-20261122"
+    proof = root / PROOF_NAME
     gene = {"identity": IDENTITY, "schema_version": 4, "provides": provides or ["hullmod:fx_tanks", "hull:fx_ship"],
             "needs": {"vanilla": [], "mods": needs_mods or [], "genes": []}, "build": {"game_version": "0.98.5a-RC7"}}
     _json(proof / "gene.json", gene)
     head = {"evidence": "bridgeforge-gene-evidence", "gene": {"identity": IDENTITY, "schema_version": 4}, "verdict": static_verdict}
-    _json(proof / "subtraction-proof.json", {**head, "kind": "subtraction-proof", "dependents": [
-        {"from": "data/hulls/fx_other.ship", "to": "hullmod:fx_tanks", "grade": "reference", "loaded": loaded}]})
+    rows = dependents if dependents is not None else [
+        {"from": "data/hulls/fx_other.ship", "to": "hullmod:fx_tanks", "grade": "reference", "loaded": loaded}]
+    _json(proof / "subtraction-proof.json", {**head, "kind": "subtraction-proof", "dependents": rows})
     _json(proof / ("set-isolation-proof.json" if set_proof else "isolation-proof.json"), {**head, "kind": "isolation-proof"})
     for half, mod_id in (("subtraction", DONOR), ("carrier", CARRIER)):
         _json(proof / "work" / half / "mod_info.json", {"id": mod_id, "name": mod_id, "version": "1.0", "description": "x"})
@@ -50,18 +66,21 @@ def _config(mod_id: str, hulls: list[str]) -> dict:
                                        "commodities": [], "missions": [], "classes": []}}}
 
 
-def boot_run(root: Path, proof: Path, half: str, test_id: str, log: list[str], dialogs: list[str] | None = None,
-             config: dict | None = None, release: bool = True) -> tuple[Path, Path]:
-    """Stage the half into a queue, run it on a rig (synthetic log and dialog log), release it. Returns (rig, queue)."""
-    rig = make_rig(root)
+def boot_run(root: Path, proof: Path, half: str, test_id: str, log: list[str], dialogs: list[str] | tuple | None = (),
+             config: dict | None = None, release: bool = True, loaded_line: bool = True,
+             providers: dict[str, list[str]] | None = None) -> tuple[Path, Path]:
+    """Stage the half into a queue, run it on a rig (synthetic log, with the launcher's `Found mod` line unless
+    `loaded_line` is off, and a dialog log unless `dialogs` is None), release it. Returns (rig, queue)."""
+    rig = make_rig(root, providers)
     if config is not None:
         _json(rig / CONFIG_RELATIVE, config)
     queue = root / "queue"
     staged = stage(proof, half, queue, rig)
     mod_id = staged["mod_id"]
-    bound_run(root, {mod_id: Path(staged["workspace"])}, test_id, log, rig=rig, expected=(), release=release)
+    lines = ([found(half, mod_id)] if loaded_line else []) + log
+    bound_run(root, {mod_id: Path(staged["workspace"])}, test_id, lines, rig=rig, expected=(), release=release, providers=providers)
     if dialogs is not None:
-        (rig / "logs" / f"{test_id}.windows.txt").write_text("\n".join(dialogs) + "\n", encoding="utf-8")
+        (rig / "logs" / f"{test_id}.windows.txt").write_text("".join(f"{d}\n" for d in dialogs), encoding="utf-8")
     return rig, queue
 
 
@@ -71,7 +90,7 @@ class StageTests(unittest.TestCase):
             proof, rig, queue = make_proof(root), make_rig(root), root / "queue"
             first = stage(proof, "carrier", queue, rig, today="2026-11-22")
             workspace = Path(first["workspace"])
-            self.assertEqual(workspace.name, "p9-fx_tanks-20261122-carrier")
+            self.assertEqual(workspace.name, f"{PROOF_NAME}-carrier")
             self.assertTrue((workspace / "working" / "data" / "config" / "settings.json").is_file())
             marker = json.loads((workspace / STAGED_MARKER).read_text(encoding="utf-8"))
             self.assertEqual((marker["half"], marker["mod_id"], marker["gene"]["identity"]), ("carrier", CARRIER, IDENTITY))
@@ -80,6 +99,13 @@ class StageTests(unittest.TestCase):
             second = stage(proof, "carrier", queue, rig, today="2026-11-22")
             self.assertEqual(Path(second["replaced"]), queue / "_replaced-2026-11-22" / workspace.name)
             self.assertTrue((Path(second["replaced"]) / STAGED_MARKER).is_file())  # moved, never deleted
+
+    def test_a_copy_that_fails_part_way_is_still_marked(self) -> None:
+        with resolved_temp_dir() as root:
+            proof, rig, queue = make_proof(root), make_rig(root), root / "queue"
+            with mock.patch("bridgeforge.genome.boot.shutil.copytree", side_effect=OSError("disk full")), self.assertRaises(OSError):
+                stage(proof, "subtraction", queue, rig)
+            self.assertTrue((queue / f"{PROOF_NAME}-subtraction" / STAGED_MARKER).is_file())
 
     def test_stage_refuses_a_half_whose_static_proof_did_not_pass(self) -> None:
         with resolved_temp_dir() as root:
@@ -140,12 +166,42 @@ class SubtractionTests(unittest.TestCase):
                 rig, _ = boot_run(root, proof, "subtraction", "SUB-3", [MENU], [FATAL_TANKS])
                 self.assertEqual(evaluate(proof, "subtraction", rig, "SUB-3")["verdict"], "FAIL")
 
+    def test_a_dependent_loaded_with_an_enabled_mod_explains_its_line(self) -> None:
+        with resolved_temp_dir() as root:
+            proof = make_proof(root, loaded="with lw_lazylib, nexerelin")
+            rig, _ = boot_run(root, proof, "subtraction", "SUB-3B", [MENU], [FATAL_TANKS], providers={"lw_lazylib": []})
+            self.assertEqual(evaluate(proof, "subtraction", rig, "SUB-3B")["boot_verdict"], BLOCKED)
+
+    def test_a_dependent_whose_target_the_gene_does_not_provide_explains_nothing(self) -> None:
+        for to in ("", "weapon:fx_gun"):
+            with self.subTest(to=to), resolved_temp_dir() as root:
+                proof = make_proof(root, dependents=[{"from": "data/x.csv", "to": to, "grade": "reference", "loaded": "always"}])
+                rig, _ = boot_run(root, proof, "subtraction", "SUB-3C", [MENU], [FATAL_GUN])
+                self.assertEqual(evaluate(proof, "subtraction", rig, "SUB-3C")["verdict"], "FAIL")
+
     def test_an_id_inside_a_longer_id_is_not_named(self) -> None:
         with resolved_temp_dir() as root:
             proof = make_proof(root)
             longer = "12:00:01 dialog: 'Starsector' text: 'Fatal: Hullmod fx_tanks_mk2 not found!'"
             rig, _ = boot_run(root, proof, "subtraction", "SUB-4", [MENU], [longer])
             self.assertEqual(evaluate(proof, "subtraction", rig, "SUB-4")["verdict"], "FAIL")
+
+    def test_a_long_line_is_matched_whole_and_kept_short(self) -> None:
+        with resolved_temp_dir() as root:
+            proof = make_proof(root)
+            long_fatal = f"12:00:01 dialog: 'Starsector' text: 'Fatal: {'x ' * 200}Hullmod fx_tanks not found!'"
+            rig, _ = boot_run(root, proof, "subtraction", "SUB-4C", [MENU], [long_fatal])
+            result = evaluate(proof, "subtraction", rig, "SUB-4C")
+            self.assertEqual(result["boot_verdict"], BLOCKED)
+            self.assertLessEqual(len(result["fatal"][0]), 300)
+
+    def test_a_mod_error_is_judged_like_a_fatal(self) -> None:
+        cases = (("no fx_gun here", "FAIL"), ("hull mod fx_tanks is missing", "PASS"))
+        for message, verdict in cases:
+            with self.subTest(message=message), resolved_temp_dir() as root:
+                proof = make_proof(root)
+                rig, _ = boot_run(root, proof, "subtraction", "SUB-4B", [MENU, *mod_error(message)])
+                self.assertEqual(evaluate(proof, "subtraction", rig, "SUB-4B")["verdict"], verdict)
 
     def test_the_main_menu_with_no_fatal_is_booted(self) -> None:
         with resolved_temp_dir() as root:
@@ -157,25 +213,48 @@ class SubtractionTests(unittest.TestCase):
     def test_neither_the_main_menu_nor_a_fatal_is_unknown(self) -> None:
         with resolved_temp_dir() as root:
             proof = make_proof(root)
-            rig, _ = boot_run(root, proof, "subtraction", "SUB-6", ["5 [main] INFO  x.Y  - starting"])
+            rig, _ = boot_run(root, proof, "subtraction", "SUB-6", ["5 [main] INFO  x.Y  - starting"], loaded_line=False)
             self.assertEqual(evaluate(proof, "subtraction", rig, "SUB-6")["verdict"], "UNKNOWN")
 
     def test_a_donor_the_game_did_not_load_fails(self) -> None:
         with resolved_temp_dir() as root:
             proof = make_proof(root)
-            folder = "p9-fx_tanks-20261122-subtraction"
-            log = [f"607 [main] ERROR com.fs.starfarer.loading.ModManager  - Error loading mod from [..\\mods\\{folder}]",
+            log = [f"607 [main] ERROR com.fs.starfarer.loading.ModManager  - Error loading mod from [..\\mods\\{PROOF_NAME}-subtraction]",
                    '608 [main] ERROR com.fs.starfarer.loading.ModManager  - JSONObject["description"] not found.', MENU]
             rig, _ = boot_run(root, proof, "subtraction", "SUB-7", log)
             result = evaluate(proof, "subtraction", rig, "SUB-7")
             self.assertEqual((result["verdict"], result["boot_verdict"]), ("FAIL", "NOT_LOADED"))
+
+    def test_a_main_menu_without_the_launcher_reading_the_donor_fails(self) -> None:
+        with resolved_temp_dir() as root:
+            proof = make_proof(root)
+            rig, _ = boot_run(root, proof, "subtraction", "SUB-7B", [MENU], loaded_line=False)
+            self.assertEqual(evaluate(proof, "subtraction", rig, "SUB-7B")["boot_verdict"], "NOT_LOADED")
+
+    def test_another_enabled_mod_that_did_not_load_makes_it_unknown(self) -> None:
+        with resolved_temp_dir() as root:
+            proof = make_proof(root)
+            log = ["607 [main] ERROR com.fs.starfarer.loading.ModManager  - Error loading mod from [..\\mods\\lw_lazylib]",
+                   "608 [main] ERROR com.fs.starfarer.loading.ModManager  - bad json", MENU]
+            rig, _ = boot_run(root, proof, "subtraction", "SUB-7C", log, providers={"lw_lazylib": []})
+            result = evaluate(proof, "subtraction", rig, "SUB-7C")
+            self.assertEqual((result["verdict"], result["boot_verdict"]), ("UNKNOWN", "OTHER_NOT_LOADED"))
+
+    def test_a_run_without_a_dialog_log_cannot_pass(self) -> None:
+        for dialogs_fatal in (False, True):
+            with self.subTest(blocked=dialogs_fatal), resolved_temp_dir() as root:
+                proof = make_proof(root)
+                log = [MENU, *mod_error("hull mod fx_tanks is missing")] if dialogs_fatal else [MENU]
+                rig, _ = boot_run(root, proof, "subtraction", "SUB-8", log, dialogs=None)
+                result = evaluate(proof, "subtraction", rig, "SUB-8")
+                self.assertEqual((result["verdict"], result["boot_verdict"]), ("UNKNOWN", "NO_DIALOG_LOG"))
 
 
 class CarrierTests(unittest.TestCase):
     def test_a_loaded_carrier_the_probe_passes_passes_and_lists_what_the_probe_saw(self) -> None:
         with resolved_temp_dir() as root:
             proof = make_proof(root)
-            rig, _ = boot_run(root, proof, "carrier", "CAR-1", [MENU, CONTENT_IDS], [], config=_config(CARRIER, ["fx_ship"]))
+            rig, _ = boot_run(root, proof, "carrier", "CAR-1", [MENU, CONTENT_IDS], config=_config(CARRIER, ["fx_ship"]))
             result = evaluate(proof, "carrier", rig, "CAR-1")
             self.assertEqual((result["verdict"], result["member_verdict"]), ("PASS", "PASS"))
             # the probe checks hulls; it has no check of hull mods
@@ -197,6 +276,25 @@ class CarrierTests(unittest.TestCase):
             result = evaluate(proof, "carrier", rig, "CAR-3")
             self.assertEqual(result["verdict"], "FAIL")
             self.assertIn("1 Fatal", result["why"])  # judged on the Fatal itself, not only on the probe report's verdict
+
+    def test_a_carrier_the_game_did_not_load_or_read_fails(self) -> None:
+        error = [f"607 [main] ERROR com.fs.starfarer.loading.ModManager  - Error loading mod from [..\\mods\\{PROOF_NAME}-carrier]",
+                 '608 [main] ERROR com.fs.starfarer.loading.ModManager  - JSONObject["description"] not found.']
+        for log, loaded_line in ((error, True), ([], False)):
+            with self.subTest(loaded_line=loaded_line), resolved_temp_dir() as root:
+                proof = make_proof(root)
+                rig, _ = boot_run(root, proof, "carrier", "CAR-4", [*log, MENU, CONTENT_IDS], config=_config(CARRIER, []),
+                                  loaded_line=loaded_line)
+                result = evaluate(proof, "carrier", rig, "CAR-4")
+                self.assertEqual((result["verdict"], result["boot_verdict"]), ("FAIL", "NOT_LOADED"))
+
+    def test_a_carrier_without_the_main_menu_or_a_dialog_log_is_unknown(self) -> None:
+        for log, dialogs, boot in (([CONTENT_IDS], (), "NO_MAIN_MENU"), ([MENU, CONTENT_IDS], None, "NO_DIALOG_LOG")):
+            with self.subTest(boot=boot), resolved_temp_dir() as root:
+                proof = make_proof(root)
+                rig, _ = boot_run(root, proof, "carrier", "CAR-5", log, dialogs, config=_config(CARRIER, []))
+                result = evaluate(proof, "carrier", rig, "CAR-5")
+                self.assertEqual((result["verdict"], result["boot_verdict"]), ("UNKNOWN", boot))
 
 
 class BindingTests(unittest.TestCase):
@@ -223,7 +321,7 @@ class BindingTests(unittest.TestCase):
         with resolved_temp_dir() as root:
             proof = make_proof(root)
             rig, queue = boot_run(root, proof, "subtraction", "BIND-3", [MENU])
-            _json(queue / "p9-fx_tanks-20261122-subtraction" / "working" / "extra.json", {})
+            _json(queue / f"{PROOF_NAME}-subtraction" / "working" / "extra.json", {})
             with self.assertRaisesRegex(BootError, "not bound to the proof's subtraction copy"):
                 evaluate(proof, "subtraction", rig, "BIND-3")
 
@@ -234,6 +332,15 @@ class BindingTests(unittest.TestCase):
             with self.assertRaisesRegex(BootError, "no completion record"):
                 evaluate(proof, "subtraction", rig, "BIND-5")
 
+    def test_a_proof_whose_static_half_no_longer_passes_is_refused(self) -> None:
+        with resolved_temp_dir() as root:
+            proof = make_proof(root)
+            rig, _ = boot_run(root, proof, "subtraction", "BIND-6", [MENU])
+            static = json.loads((proof / "subtraction-proof.json").read_text(encoding="utf-8"))
+            _json(proof / "subtraction-proof.json", {**static, "verdict": "FAIL"})
+            with self.assertRaisesRegex(BootError, "not PASS"):
+                evaluate(proof, "subtraction", rig, "BIND-6")
+
     def test_a_run_is_evaluated_once(self) -> None:
         with resolved_temp_dir() as root:
             proof = make_proof(root)
@@ -241,6 +348,16 @@ class BindingTests(unittest.TestCase):
             evaluate(proof, "subtraction", rig, "BIND-4")
             with self.assertRaisesRegex(BootError, "evaluated for this proof before"):
                 evaluate(proof, "subtraction", rig, "BIND-4")
+
+    def test_a_failure_while_writing_removes_the_copies_so_the_run_can_be_evaluated_again(self) -> None:
+        with resolved_temp_dir() as root:
+            proof = make_proof(root)
+            rig, _ = boot_run(root, proof, "subtraction", "BIND-7", [MENU])
+            with mock.patch("bridgeforge.genome.evidence.header", side_effect=ValueError("bad header")):
+                with self.assertRaisesRegex(BootError, "could not write the evidence"):
+                    evaluate(proof, "subtraction", rig, "BIND-7")
+            self.assertFalse((proof / "boot" / "BIND-7").exists())
+            self.assertEqual(evaluate(proof, "subtraction", rig, "BIND-7")["verdict"], "PASS")
 
 
 class RecordRefusalTests(unittest.TestCase):
@@ -252,6 +369,13 @@ class RecordRefusalTests(unittest.TestCase):
             with self.assertRaisesRegex(ProbeGroupError, "gene boot copy"):
                 record_group(rig / "logs" / "REC-1.stdout.log", config, queue, rig, test_id="REC-1")
             self.assertFalse((queue / "_live").exists())  # refused before the run record
+
+    def test_archive_refuses_a_gene_boot_workspace(self) -> None:
+        with resolved_temp_dir() as root:
+            workspace = Path(stage(make_proof(root), "subtraction", root / "queue", make_rig(root))["workspace"])
+            with self.assertRaisesRegex(ArchiveError, "gene boot copy"):
+                archive_mod(workspace, root / "Done")
+            self.assertFalse((root / "Done").exists())
 
 
 class ConditionTests(unittest.TestCase):

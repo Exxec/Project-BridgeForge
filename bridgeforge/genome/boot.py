@@ -5,27 +5,33 @@ the gene alone in a carrier mod (`carrier`). Each copy's boot half is a live run
 (P1B-SUB2-20261120, P1B-CAR3-20261122) were staged and read by hand; this is that procedure as a command.
 
 - `stage` copies one half's work copy into a boot queue as a workspace (`<queue>/<proof>-<half>/working`) with a marker,
-  `GENE_BOOT_STAGED.json`, naming the proof, the half, the gene identity and the copy's tree hash. An older copy is moved to
+  `GENE_BOOT_STAGED.json`, naming the proof, the half, the gene identity and the copy's tree hash. The marker is written
+  before the copy, so even a copy that failed part-way is never taken for a revival. An older copy is moved to
   `<queue>/_replaced-<date>/`, never deleted. It refuses when the half's static proof did not pass, or the rig lacks a mod the
   gene needs. `probe-group plan --retest` and `install` then stage it as for any mod.
 - `evaluate` reads the run back. The run must be bound to the proof: its manifest names the half's mod, staged with exactly the
-  bytes of the proof's work copy, and the shared evaluator finds the log is this run's with nothing drifted. The verdict:
-  - carrier: PASS when the game loaded it (no `Error loading mod`, 93.65), the probe report passes it, and the log shows no
-    Fatal and no mod error. Each id the gene provides is listed as observed by the probe or not;
+  bytes of the proof's work copy, and the shared evaluator finds the log is this run's with nothing drifted. The game must
+  have read the copy (`Found mod`, and no `Error loading mod`, 93.65), and the window watcher must have watched (its
+  `<TESTID>.windows.txt`: a Fatal can be on screen only, P1B-SUB2-20261120). The verdict:
+  - carrier: PASS when it loaded, reached the main menu, the probe report passes it, and the log shows no Fatal and no mod
+    error. Each id the gene provides is listed as observed by the probe or not;
   - subtraction: PASS (`BOOTED`) when the donor loaded and reached the main menu with no Fatal and no mod error. Owner
     2026-11-20 ("Expected outcome"): when every Fatal and mod error names an id the gene provides, through a dependent the static
     proof recorded whose load condition held in this run, it is `BLOCKED_BY_DEPENDENT` and the gene still passes. Anything else
     fails it.
-  A run that shows neither the main menu nor a Fatal is UNKNOWN (P1B-SUB-20261120 stalled before the game's agents started).
+  What shows nothing either way is UNKNOWN: neither the main menu nor a Fatal (P1B-SUB-20261120 stalled before the game's
+  agents started), no dialog log, or another enabled mod that did not load.
 
   It copies the log, the dialog log and the manifest to `<proof>/boot/<TESTID>/` and writes `<proof>/boot-<half>-<TESTID>.json`
-  with the common evidence header (kind `gene-boot`). The static proofs are not changed.
+  with the common evidence header (kind `gene-boot`); a failure part-way removes the copies again. The static proofs are not
+  changed.
 
-A gene boot run is never recorded or archived: `probe-group record` refuses a workspace that carries the marker.
+A gene boot run is never recorded or archived: `probe-group record` and `archive` refuse a workspace that carries the marker.
 """
 from __future__ import annotations
 
 import json
+import re
 import shutil
 from datetime import date, datetime, timezone
 from pathlib import Path
@@ -35,10 +41,13 @@ STAGED_MARKER = "GENE_BOOT_STAGED.json"
 # The static proof each half boots: a carrier is a gene's (`gene prove`) or a gene set's (`gene prove-set`).
 HALVES = {"subtraction": ("subtraction-proof.json",), "carrier": ("isolation-proof.json", "set-isolation-proof.json")}
 BLOCKED, BOOTED = "BLOCKED_BY_DEPENDENT", "BOOTED"
-MESSAGE_CHARS = 300
+MESSAGE_CHARS = 300  # of each Fatal or error line kept in the evidence; lines are judged whole
 # A gene's provided kinds and the probe config list that checks that kind (probe_group's group_members); the probe has no
 # check of the other kinds, so their ids are never observed.
 PROBE_LISTS = {"hull": "hulls", "variant": "variants", "wing": "wings", "faction": "factions", "commodity": "commodities"}
+# RC7's launcher logs each mod folder whose mod_info it read: `launcher.ModManager - Found mod: <id> [<path>\mods\<folder>]`
+# (P034-TANIA-20261122, P1B-SUB2-20261120, P1B-CAR3-20261122 on Test1, read 2026-11-22). An id may hold spaces.
+_FOUND_MOD = re.compile(r"ModManager\s+-\s+Found mod: (?P<id>.+?) \[(?P<path>[^\]]+)\]\s*$")
 
 
 class BootError(ValueError):
@@ -56,7 +65,7 @@ def _read_json(path: Path, what: str) -> dict:
 
 
 def _proof_parts(proof: Path, half: str) -> tuple[dict, dict, Path]:
-    """(gene.json, the half's static proof, the half's work copy) of a proof folder."""
+    """(gene.json, the half's static proof, the half's work copy) of a proof folder whose static half passed."""
     if half not in HALVES:
         raise BootError(f"unknown half {half!r} (one of {', '.join(HALVES)})")
     proof = Path(proof)
@@ -68,6 +77,8 @@ def _proof_parts(proof: Path, half: str) -> tuple[dict, dict, Path]:
         raise BootError(f"{work} holds no mod_info.json: not a proof's work copy")
     if (static.get("gene") or {}).get("identity") != gene.get("identity"):
         raise BootError(f"{static_path} is about another gene than {proof / 'gene.json'}")
+    if static.get("verdict") != "PASS":
+        raise BootError(f"the {half} proof's static half reads {static.get('verdict')!r}, not PASS: there is nothing to boot")
     return gene, static, work
 
 
@@ -101,9 +112,8 @@ def stage(proof: Path, half: str, queue: Path, rig: Path, *, today: str | None =
     from bridgeforge.safeio import atomic_write_json
 
     proof = Path(proof).resolve()
-    gene, static, work = _proof_parts(proof, half)
-    if static.get("verdict") != "PASS":
-        raise BootError(f"the {half} proof's static half reads {static.get('verdict')!r}, not PASS: there is nothing to boot")
+    gene, _static, work = _proof_parts(proof, half)
+    mod_id = _mod_id(work)
     missing = sorted(set((gene.get("needs") or {}).get("mods") or []) - _rig_mod_ids(rig))
     if missing:
         raise BootError(f"the rig {rig} lacks mod(s) the gene needs: {', '.join(missing)}")
@@ -120,11 +130,12 @@ def stage(proof: Path, half: str, queue: Path, rig: Path, *, today: str | None =
             replaced = _move_aside(workspace, queue, today or date.today().isoformat())
         except (ArchiveError, OSError) as exc:
             raise BootError(f"cannot move the older {workspace} aside: {exc}") from exc
-    shutil.copytree(work, workspace / "working")
-    marker = {"schema_version": 1, "mode": "GENE_BOOT_STAGED", "proof": str(proof), "half": half, "mod_id": _mod_id(work),
+    marker = {"schema_version": 1, "mode": "GENE_BOOT_STAGED", "proof": str(proof), "half": half, "mod_id": mod_id,
               "gene": {"identity": gene["identity"], "schema_version": gene.get("schema_version")}, "tree_sha256": tree,
               "staged_at": datetime.now(timezone.utc).isoformat(timespec="seconds")}
-    atomic_write_json(workspace / STAGED_MARKER, marker, indent=2)
+    workspace.mkdir()
+    atomic_write_json(workspace / STAGED_MARKER, marker, indent=2)  # first: a copy that fails part-way is still marked
+    shutil.copytree(work, workspace / "working")
     return {**marker, "workspace": str(workspace), "replaced": str(replaced) if replaced else None}
 
 
@@ -167,17 +178,17 @@ def _condition_held(loaded: str, enabled: set[str]) -> bool:
     return False
 
 
-def _explained(lines: list[str], dependents: list[dict], enabled: set[str]) -> tuple[list[dict], list[str]]:
-    """([{line, dependents}], unexplained lines): a line is explained by the recorded dependents whose provided id it names, as
-    a whole token, and whose load condition held."""
+def _explained(lines: list[str], dependents: list[dict], enabled: set[str], provides: list[str]) -> tuple[list[dict], list[str]]:
+    """([{line, dependents}], unexplained lines): a line is explained by the recorded dependents whose target is an id the
+    gene provides, named in the line as a whole token, and whose load condition held."""
     from .dependents import _named
 
+    usable = [d for d in dependents if d.get("to") in provides and _condition_held(str(d.get("loaded", "")), enabled)]
     explained, unexplained = [], []
     for line in lines:
-        by = [f"{d['from']} -> {d['to']}" for d in dependents
-              if _named(line, str(d.get("to", "")).split(":", 1)[-1]) and _condition_held(str(d.get("loaded", "")), enabled)]
+        by = [f"{d['from']} -> {d['to']}" for d in usable if _named(line, str(d["to"]).split(":", 1)[-1])]
         if by:
-            explained.append({"line": line, "dependents": by})
+            explained.append({"line": line[:MESSAGE_CHARS], "dependents": by})
         else:
             unexplained.append(line)
     return explained, unexplained
@@ -194,43 +205,81 @@ def _observed(gene: dict, member: dict | None, config_lists: dict) -> dict[str, 
     return result
 
 
+def _found(text: str, folder: str, mod_id: str) -> bool:
+    """Did the launcher read this mod's folder (`Found mod: <id> [..\\mods\\<folder>]`)?"""
+    for line in text.splitlines():
+        match = _FOUND_MOD.search(line)
+        if match and match["id"] == mod_id and re.split(r"[\\/]", match["path"].rstrip("\\/"))[-1].lower() == folder.lower():
+            return True
+    return False
+
+
 def _log_facts(rig: Path, log: Path, folder: str, mod_id: str) -> dict:
     from bridgeforge.log_triage import triage_log
     from bridgeforge.probe.probe_record import _enabled_mod_ids, mod_load_failures
 
     triage = triage_log(log, mods_dir=rig / "mods")
     text = log.read_text(encoding="utf-8", errors="replace")
-    failures = [f for f in mod_load_failures(text, rig / "mods") if f["folder"].lower() == folder.lower() or f["mod_id"] == mod_id]
-    return {"main_menu": bool(triage["milestones"]["main_menu_reached"]), "load_failures": failures,
-            "fatal": [str(e.get("message", ""))[:MESSAGE_CHARS] for e in triage["fatal"]],
-            "mod_errors": [str(e.get("message", ""))[:MESSAGE_CHARS] for e in triage["mod_errors"]],
-            "enabled": _enabled_mod_ids(rig / "mods") or set()}
+    failures = mod_load_failures(text, rig / "mods")  # of enabled mods only
+    own = [f for f in failures if f["folder"].lower() == folder.lower() or f["mod_id"] == mod_id]
+    return {"main_menu": bool(triage["milestones"]["main_menu_reached"]), "found": _found(text, folder, mod_id),
+            "load_failures": own, "other_load_failures": [f for f in failures if f not in own],
+            "dialogs_watched": log.with_name(log.name.replace(".stdout.log", ".windows.txt")).is_file(),
+            "fatal": [str(e.get("message", "")) for e in triage["fatal"]],
+            "mod_errors": [str(e.get("message", "")) for e in triage["mod_errors"]],
+            # errors triage attributes to no mod (vanilla, libraries): reported, not judged, as `probe-group report` does
+            "other_errors": triage["counts"]["OTHER"], "enabled": _enabled_mod_ids(rig / "mods") or set()}
 
 
-def _judge_subtraction(facts: dict, static: dict) -> dict:
-    lines = facts["fatal"] + facts["mod_errors"]
-    explained, unexplained = _explained(lines, static.get("dependents") or [], facts["enabled"])
+def _not_loaded(facts: dict, what: str) -> tuple[str, str, str] | None:
+    """The verdict when the game did not read the copy, or the run shows nothing either way; None when it loaded."""
     if facts["load_failures"]:
-        verdict, boot, why = "FAIL", "NOT_LOADED", "the game did not load the subtracted donor"
+        return "FAIL", "NOT_LOADED", f"the game did not load the {what} (93.65)"
+    if not facts["found"]:
+        if facts["main_menu"] or facts["fatal"]:
+            return "FAIL", "NOT_LOADED", f"the launcher never logged `Found mod` for the {what}"
+        return "UNKNOWN", "NO_MAIN_MENU", "the log shows neither the main menu nor a Fatal"
+    return None
+
+
+def _judge_subtraction(facts: dict, static: dict, provides: list[str]) -> dict:
+    lines = facts["fatal"] + facts["mod_errors"]
+    explained, unexplained = _explained(lines, static.get("dependents") or [], facts["enabled"], provides)
+    outcome = _not_loaded(facts, "subtracted donor")
+    if outcome and outcome[0] == "FAIL":
+        verdict, boot, why = outcome
     elif unexplained:
         verdict, boot, why = "FAIL", "FAILED", f"{len(unexplained)} Fatal or error line(s) name no recorded dependent"
+    elif outcome:
+        verdict, boot, why = outcome
+    elif facts["other_load_failures"]:
+        folders = ", ".join(f["folder"] for f in facts["other_load_failures"])
+        verdict, boot, why = "UNKNOWN", "OTHER_NOT_LOADED", f"another enabled mod did not load ({folders})"
+    elif not facts["dialogs_watched"]:
+        verdict, boot, why = "UNKNOWN", "NO_DIALOG_LOG", "no dialog log: an on-screen Fatal would not have been seen"
     elif lines:
         verdict, boot, why = "PASS", BLOCKED, "every Fatal and error names a dependent the static proof recorded (owner 2026-11-20)"
     elif not facts["main_menu"]:
         verdict, boot, why = "UNKNOWN", "NO_MAIN_MENU", "the log shows neither the main menu nor a Fatal"
     else:
         verdict, boot, why = "PASS", BOOTED, "the donor without the gene reached the main menu with no Fatal and no mod error"
-    return {"verdict": verdict, "boot_verdict": boot, "why": why, "explained": explained, "unexplained": unexplained}
+    return {"verdict": verdict, "boot_verdict": boot, "why": why, "explained": explained,
+            "unexplained": [line[:MESSAGE_CHARS] for line in unexplained]}
 
 
 def _judge_carrier(facts: dict, member: dict | None) -> dict:
     member_verdict = (member or {}).get("verdict", "NOT_IN_REPORT")
-    if facts["load_failures"]:
-        verdict, boot, why = "FAIL", "NOT_LOADED", "the game did not load the carrier (93.65)"
+    outcome = _not_loaded(facts, "carrier")
+    if outcome and outcome[0] == "FAIL":
+        verdict, boot, why = outcome
     elif facts["fatal"] or facts["mod_errors"]:
         verdict, boot, why = "FAIL", "FAILED", f"{len(facts['fatal'])} Fatal and {len(facts['mod_errors'])} mod error line(s)"
+    elif outcome:
+        verdict, boot, why = outcome
     elif not facts["main_menu"]:
         verdict, boot, why = "UNKNOWN", "NO_MAIN_MENU", "the log shows neither the main menu nor a Fatal"
+    elif not facts["dialogs_watched"]:
+        verdict, boot, why = "UNKNOWN", "NO_DIALOG_LOG", "no dialog log: an on-screen Fatal would not have been seen"
     elif member_verdict != "PASS":
         verdict, boot, why = "FAIL", "FAILED", f"the probe report reads {member_verdict} for the carrier"
     else:
@@ -253,20 +302,31 @@ def _copy_run_files(rig: Path, test_id: str, target: Path) -> list[tuple[str, st
     return inputs
 
 
+def _judge(half: str, gene: dict, static: dict, facts: dict, rig: Path, log: Path, mod_id: str) -> dict:
+    from bridgeforge.probe.probe_record import group_report
+    from bridgeforge.run_manifest import CONFIG_RELATIVE
+
+    if half == "subtraction":
+        return _judge_subtraction(facts, static, list(gene.get("provides") or []))
+    config_path = rig / CONFIG_RELATIVE
+    config = _read_json(config_path, "the probe config") if config_path.is_file() else {}
+    member = group_report(log, config, mods_dir=rig / "mods")["members"].get(mod_id)
+    return {**_judge_carrier(facts, member), "provided": _observed(gene, member, (config.get("group_members") or {}).get(mod_id) or {})}
+
+
 def evaluate(proof: Path, half: str, rig: Path, test_id: str) -> dict:
     """Read the boot run `test_id` of the proof's `half` and write its evidence into the proof. Raises BootError, writing nothing,
     when the run is not bound to the proof's work copy or was evaluated before."""
-    from bridgeforge.probe.probe_record import group_report
-    from bridgeforge.run_manifest import CONFIG_RELATIVE, check_run_id
-    from bridgeforge.safeio import atomic_write_json
+    from bridgeforge.run_manifest import check_run_id
+    from bridgeforge.safeio import atomic_write_json, safe_rmtree
 
     from .evidence import header
 
     proof, rig = Path(proof).resolve(), Path(rig).resolve()
     check_run_id(test_id)
     gene, static, work = _proof_parts(proof, half)
-    out = proof / f"boot-{half}-{test_id}.json"
-    if out.exists() or (proof / "boot" / test_id).exists():
+    out, copies = proof / f"boot-{half}-{test_id}.json", proof / "boot" / test_id
+    if out.exists() or copies.exists():
         raise BootError(f"run {test_id} was evaluated for this proof before ({out.name}); a new run needs a new id")
     mod_id = _mod_id(work)
     manifest, entry, problems = _binding(rig, test_id, mod_id, work)
@@ -276,19 +336,16 @@ def evaluate(proof: Path, half: str, rig: Path, test_id: str) -> dict:
     # rig's are this run's own. P1B-CAR3-20261122 could not be judged after RevenantLib's test replaced _rig-genes' config.
     log = rig / "logs" / f"{test_id}.stdout.log"
     facts = _log_facts(rig, log, entry["folder"], mod_id)
-    if half == "subtraction":
-        judged = _judge_subtraction(facts, static)
-    else:
-        config_path = rig / CONFIG_RELATIVE
-        config = json.loads(config_path.read_text(encoding="utf-8")) if config_path.is_file() else {}
-        member = group_report(log, config, mods_dir=rig / "mods")["members"].get(mod_id)
-        judged = {**_judge_carrier(facts, member),
-                  "provided": _observed(gene, member, (config.get("group_members") or {}).get(mod_id) or {})}
-    inputs = _copy_run_files(rig, test_id, proof / "boot" / test_id)
-    made = header(BOOT_KIND, gene, root=proof, inputs=inputs, verdict=judged["verdict"])
-    record = {**made, "half": "boot", "boot_half": half, "test_id": test_id, "mod_id": mod_id, "manifest_id": manifest["manifest_id"],
-              "staged_sha256": entry["staged_sha256"], **{k: v for k, v in judged.items() if k != "verdict"},
-              "main_menu": facts["main_menu"], "load_failures": facts["load_failures"], "fatal": facts["fatal"],
-              "mod_errors": facts["mod_errors"]}
-    atomic_write_json(out, record, indent=2)
+    judged = _judge(half, gene, static, facts, rig, log, mod_id)
+    try:
+        made = header(BOOT_KIND, gene, root=proof, inputs=_copy_run_files(rig, test_id, copies), verdict=judged["verdict"])
+        record = {**made, "half": "boot", "boot_half": half, "test_id": test_id, "mod_id": mod_id,
+                  "manifest_id": manifest["manifest_id"], "staged_sha256": entry["staged_sha256"],
+                  **{k: v for k, v in judged.items() if k != "verdict"},
+                  **{k: facts[k] for k in ("main_menu", "found", "dialogs_watched", "load_failures", "other_load_failures", "other_errors")},
+                  "fatal": [m[:MESSAGE_CHARS] for m in facts["fatal"]], "mod_errors": [m[:MESSAGE_CHARS] for m in facts["mod_errors"]]}
+        atomic_write_json(out, record, indent=2)
+    except (OSError, ValueError) as exc:
+        safe_rmtree(copies, [proof / "boot"])  # this call's own copies, so the run can be evaluated again
+        raise BootError(f"could not write the evidence of run {test_id}: {exc}") from exc
     return {**record, "written": str(out)}
