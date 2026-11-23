@@ -83,6 +83,8 @@ What stays out:
   the core reports another build or a source is missing. The result is the same root hash either way.
 - `list [--kind K] [--anchor A] [--build B] [--licence L] [--history]`: the current records, read from the records
   themselves; `--history` adds those no source holds any more.
+- `alleles CORPUS --out PLAN [--exclude GLOB] [--quiet]`: plan only. For every mod root under the corpus, it lists which
+  banked anchors the root defines and which it only mentions, plus the zips and anything it could not read (slice 2).
 
 Walks over a corpus follow the long-running rule (progress lines, a checkpoint, `--quiet`) and read archives only
 through `zipsafe`.
@@ -95,8 +97,36 @@ through `zipsafe`.
      from a rebuild into an empty folder on Test1.
 2. **Alleles across the corpus.** "Every allele" needs a denominator: each corpus mod and version that defines a pilot's
    anchor id. Each is stored, or its refusal is recorded with the reason.
-   - Check what `corpus-index` already records before writing a walk.
+   - Check what `corpus-index` already records before writing a walk. *Checked 2026-11-23:* it is a full-text index
+     with no notion of definition, and no database of `Done/` exists. The census (`gene census`) counts items per kind
+     and keeps only an archive's working copy. Neither gives the denominator, so slice 2 scans for it.
    - It runs on Test1 as a file-only job.
+
+   Design, set with the advisor (2026-11-23):
+   - **2a, `gene bank alleles CORPUS --out PLAN`, plan only.** Nothing is put, because no command removes a
+     `sources.json` line.
+     - *Roots:* every folder holding `mod_info.json`. In a workspace, only `working/` and the roots under `original/`
+       count, never its `genes/`, `scratch/` or `reports/`. `_replaced-*` archives and originals are kept, since they
+       are the likeliest alleles.
+     - *Zips:* read only for their `mod_info.json`. Each is listed as a packaged copy of a folder row, or as an archive
+       only, not described.
+     - *The unit:* every anchor of the bank's current records. Acceptance counts the pilot anchors; hits on needed-gene
+       ids elsewhere are slice 3's lineage input.
+     - *Defines:* the describer's own tables. A copy describe would refuse still defines the id.
+     - *Mentions:* a whole-word byte search of every text file and jar class, listing "mention only" roots and what could
+       not be read. Misses are the dangerous error.
+     - *Errors:* anything other than an unreadable file is an error, counted per root.
+     - *Calibration:* over White_Legion's `In operation/`, the four pilot anchors give exactly the eight banked sources.
+   - **2b, putting the plan.**
+     - A refused anchor becomes a `sources.json` line plus an `entries.json` row with no records and the scrubbed reason.
+       `verify` accepts such a row, and `rebuild` reproduces it.
+     - A `Done/` working copy is folder kind `archive`. The existing source dicts are left alone, so the pilots' record
+       ids and ROOT do not change.
+     - The plan is put first into a scratch `--bank`, then into the real one.
+   - **Test1 becomes the bank's home.** `Done/` lives there, so once it holds a `Done/` source, a rebuild on White_Legion
+     refuses the missing source, as it should. Slice 2's rebuild check is in place against an empty folder, both on
+     Test1.
+   - **The plan names mod folders,** so it stays on the machine that made it. The roadmap records counts only.
 3. **Lineage, the licence report, and `atlas` over the bank.**
    - Lineage: blob hashes shared across mod ids.
    - Licence: each manifest's `licence` (the WP4 ledger).
