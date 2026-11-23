@@ -697,6 +697,25 @@ class SyncStaleFilesTests(unittest.TestCase):
         self.assertIn("moved 1 the working copy no longer has", said)
         self.assertIsNone(again)  # the rig copy now matches: the next sync has nothing to do
 
+    def test_a_path_that_differs_only_in_case_is_not_moved_aside(self) -> None:
+        # Review of #214: `Data/x.csv` in the rig and `data/x.csv` in the working copy are one file on Windows; moving the
+        # "extra" took away the file just copied, and every other sync lost it again.
+        from bridgeforge.probe.probe_group import sync_working_copy
+        from tests.support import write_text as _write
+
+        with resolved_temp_dir() as root:
+            working, target = self._copies(root)
+            (target / "data" / "weapons" / "decorative" / "gun.wpn").unlink()
+            weapons = target / "data" / "weapons"
+            (weapons / "gun.wpn").rename(weapons / "Gun.wpn")  # the same file name, another case
+            _write(weapons / "Gun.wpn", '{"old": 1}')
+            for _ in range(3):
+                sync_working_copy(working, target)
+            present = [p for p in weapons.iterdir() if p.name.lower() == "gun.wpn"]
+            held = (root / "rig" / "_stale-staged").exists()
+        self.assertTrue(present)  # the rig always has the file
+        self.assertFalse(held)    # and nothing was moved aside for it
+
     def test_a_new_rig_folder_is_copied_whole(self) -> None:
         from bridgeforge.probe.probe_group import sync_working_copy
 

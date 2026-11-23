@@ -819,6 +819,8 @@ unproven).
     reports what it moved ("moved N the working copy no longer has to ...").
   - **Before:** the drift count included those files, so every later sync reported drift again and never converged.
   - **Batches:** two syncs in one second get separate folders.
+  - **Case:** a rig path that differs from a shipped one only in case is the same file on Windows, so it is not
+    moved (review of #214: the rig lost and regained it on alternate syncs).
   - **Tests:** `tests/test_probe_group.py` `SyncStaleFilesTests`:
     - the stale file moved intact, and the next sync finds nothing to do;
     - a new rig folder copied whole;
