@@ -3041,6 +3041,19 @@ fixes of 93.28. 93.26-93.35 are that day's findings.
   in; failing that, spawn the reserves (`getReservesCopy()`, `spawnFleetMember(FleetMemberAPI, Vector2f, float, float)`).
   javap of RC7's starfarer.api.jar (2026-11-22) shows all three, and `SettingsAPI.getBattleSize()`. Pass condition: a
   `combat-deployment` line for every planned hull.
+  **Built 2026-11-22, probe 0.3.5; open until a live run passes.**
+  - **`BfProbeCombatPlugin`:**
+    - It raises each side's limit by 100000 through `modifyFlatMax("bf_probe_deploy_all", ...)` twice: at `init()`, before
+      the opening deployment, and when both sides are first seen.
+    - Each raise logs `combat-deploy-limit|INFO|owner=N|at <when>: max A -> B curr=C reserves=R`, so the live run shows which
+      raise brought the reserves in.
+    - At the end, `combat-reserves|WARN|owner=N|never deployed: <hull ids>` lists what stayed in reserve
+      (`FleetMemberAPI.getHullId()`, javap RC7).
+    - Rebuilt with `build-probe-mod` against RC7 (54 classes, class version 61); release copy 0.3.5.
+    - If the raised limit does not bring the reserves in, the fallback is to spawn them.
+  - **The report:** `probe_record.combat_undeployed` lists the planned hulls (the config's `hulls`) with no
+    `combat-deployment` line, and `probe-group report` prints `WARN combat: N of M planned hulls never deployed`. Coverage
+    is reported, not a verdict. Tests: `tests/test_probe_group.py` `CombatUndeployedTests`.
 - 93.64 (S) **A gate whose subject left Done/ had no state to close it.** bf-0b-15 (SEEKER Betelgeuse modules survive save
   and reload) tests SEEKER 0.3.0+bf.5's Betelgeuse and TWIG code. That archive moved to `Done/_replaced-2026-11-17/` when
   SEEKER 0.6.6 replaced it, and 0.6.6 has neither. The owner ruled 2026-11-19: "Close as superseded". `gates.json` allowed

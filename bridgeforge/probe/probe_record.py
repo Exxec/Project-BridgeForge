@@ -113,6 +113,20 @@ def combat_rounds(log_text: str) -> dict:
 
 
 _COMBAT_END = re.compile(r"BF-PROBE\|[^|]*\|combat-end\|[A-Z]+\|(?P<reason>[a-z-]+)\|(?P<detail>[^\r\n]*)")
+_COMBAT_DEPLOYMENT = re.compile(r"BF-PROBE\|[^|]*\|combat-deployment\|[A-Z]+\|[^|]*\|hull=(?P<hull>[^ |\r\n]+)")
+_COMBAT_ROUND = re.compile(r"BF-PROBE\|[^|]*\|combat-round\|")
+
+
+def combat_undeployed(log_text: str, config: dict) -> dict | None:
+    """The planned hulls (the probe config's `hulls`) that never logged `combat-deployment`, or None when no battle was planned
+    in the log. P034-BULTACH-20261122 deployed 67 of 108: the rest waited in reserve until the battle's time ran out (93.67).
+    A round that never started leaves its hulls here too."""
+    if not _COMBAT_ROUND.search(log_text):
+        return None
+    planned = [hull for hull in config.get("hulls") or [] if isinstance(hull, str)]
+    deployed = {match["hull"] for match in _COMBAT_DEPLOYMENT.finditer(log_text)}
+    return {"planned": len(planned), "deployed": sum(1 for hull in planned if hull in deployed),
+            "missing": sorted(hull for hull in planned if hull not in deployed)}
 
 
 # Greedy to the line's last `]`: a folder name may hold one (review of 93.65, 2026-11-20).
@@ -235,7 +249,7 @@ def group_report(log: Path, config: dict, mods_dir: Path | None = None, accepted
     return {"schema_version": SCHEMA_VERSION, "mode": "PROBE_GROUP_REPORT", "log": str(log),
             "content_ids_ran": seen_content, "fatal": triage["counts"]["FATAL"], "mod_errors": triage["counts"]["MOD-ERROR"],
             "members": verdicts, "content_parity": parity, "campaign_perf": perf, "unattributed": unattributed, "combat_filler_sides": filler_sides,
-            "combat_rounds": combat_rounds(log_text),
+            "combat_rounds": combat_rounds(log_text), "combat_undeployed": combat_undeployed(log_text, config),
             "optional_integration_classes": optional_integrations, "sweep_artefact_classes": sweep_artefacts,
             "note": "INCOMPLETE means the probe's content-ids check never ran (start a New Game and wait one in-game day)."}
 

@@ -7,7 +7,7 @@ from pathlib import Path
 from unittest import mock
 
 from bridgeforge.probe.probe_group import ProbeGroupError, bisect_group, dependency_version_conflicts, install_group, merge_configs, plan_groups
-from bridgeforge.probe.probe_record import combat_rounds, group_report
+from bridgeforge.probe.probe_record import combat_rounds, combat_undeployed, group_report
 from bridgeforge.probe.probe_config import build_probe_config
 from tests.support import link_dir, resolved_temp_dir
 
@@ -1031,6 +1031,34 @@ class CombatRoundsTests(unittest.TestCase):
                            encoding="utf-8")
             report = group_report(log, config)
         self.assertEqual(report["combat_rounds"]["missing"], [2])
+        self.assertEqual(report["members"]["mod_a"]["verdict"], "PASS")  # coverage is reported, not a verdict
+
+
+class CombatUndeployedTests(unittest.TestCase):
+    """93.67: P034-BULTACH-20261122 deployed 67 of its 108 planned hulls; the rest waited in reserve until time ran out."""
+
+    PREFIX = "9 [main] INFO  com.bridgeforge.probe.ProbeLog  - BF-PROBE|0.3.5|"
+
+    def _deployed(self, *hulls: str) -> str:
+        return "".join(f"{self.PREFIX}combat-deployment|INFO|{hull}|hull={hull} owner=0\n" for hull in hulls)
+
+    def test_planned_hulls_without_a_deployment_line_are_listed(self) -> None:
+        log = (f"{self.PREFIX}combat-round|INFO|round 1 of 1|hulls 1-3 of 3\n"
+               + self._deployed("ork_a", "ork_a_module_left", "ork_c"))  # a module is deployed but was never planned
+        undeployed = combat_undeployed(log, {"hulls": ["ork_a", "ork_b_Hull_skin", "ork_c"]})
+        self.assertEqual(undeployed, {"planned": 3, "deployed": 2, "missing": ["ork_b_Hull_skin"]})
+
+    def test_a_log_without_a_combat_round_plans_nothing(self) -> None:
+        self.assertIsNone(combat_undeployed(self._deployed("ork_a"), {"hulls": ["ork_a", "ork_b"]}))
+
+    def test_the_group_report_carries_and_prints_them(self) -> None:
+        with resolved_temp_dir() as root:
+            config = merge_configs([build_probe_config(_workspace(root / "q", "A", "mod_a", "hull_a"))])
+            log = root / "run.stdout.log"
+            log.write_text(CombatPerfTests.CONTENT + f"{self.PREFIX}combat-round|INFO|round 1 of 1|hulls 1-1 of 1\n",
+                           encoding="utf-8")
+            report = group_report(log, config)
+        self.assertEqual(report["combat_undeployed"], {"planned": 1, "deployed": 0, "missing": ["hull_a"]})
         self.assertEqual(report["members"]["mod_a"]["verdict"], "PASS")  # coverage is reported, not a verdict
 
 

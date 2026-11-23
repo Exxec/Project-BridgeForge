@@ -1,0 +1,1 @@
+- Probe 0.3.5 (93.67): each combat side's deployment limit is raised so reserves deploy before the battle's time runs out, with `combat-deploy-limit` and `combat-reserves` lines; `probe-group report` warns about planned hulls that never deployed.

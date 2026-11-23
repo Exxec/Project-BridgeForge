@@ -447,6 +447,10 @@ def _probe_report(args: argparse.Namespace, queue: Path, rig: Path) -> dict | in
         for number, end in enumerate(rounds.get("ended") or [], 1):
             if end["reason"] in ("side-wiped", "engine-ended"):  # 96.13: won early, so later-deployed hulls may not have fought
                 print(f"  combat: battle {number} ended early ({end['reason']}): {end['detail']}")
+        undeployed = result.get("combat_undeployed")
+        if undeployed and undeployed["missing"]:  # 93.67: every planned hull should fight, hidden or not
+            shown = ", ".join(undeployed["missing"][:10]) + (f" and {len(undeployed['missing']) - 10} more" if len(undeployed["missing"]) > 10 else "")
+            print(f"  WARN combat: {len(undeployed['missing'])} of {undeployed['planned']} planned hulls never deployed: {shown}")
     return result
 
 
