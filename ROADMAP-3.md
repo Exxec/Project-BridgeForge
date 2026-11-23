@@ -2549,7 +2549,8 @@ history as the closure benchmark, a cross-repository trace check, an early Java 
       the mod.
 
     After the fixes, the mutation check ran again: 20 mutants (the earlier 12 re-pointed, plus 8 for the review's fixes),
-    all caught.
+    all caught. Re-proved after the fixes: P1 to P4 and both sets give the same identities, carriers and verdicts, and no
+    subtraction copy has a load gap. Full suite: 3485 tests, OK (skipped=13); hermeticity PASS.
 
     Not changed, and recorded here:
     - A mod's override of a core style is not carried, so the carrier shows the vanilla look. This loses fidelity but
