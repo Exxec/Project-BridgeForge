@@ -1,0 +1,1 @@
+- A live run whose game window vanishes ends LIVE_STUCK at the stage in progress with the log's last lines, and `probe-group install` moves the rig's earlier saves aside (`--keep-saves` keeps them) so every run starts the same way (93.50).

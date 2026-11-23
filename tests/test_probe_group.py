@@ -358,6 +358,89 @@ class InstallTests(unittest.TestCase):
         self.assertEqual(enabled, ["lw_lazylib", "mod_a", "mod_c", "bridgeforge_probe"])
         self.assertEqual(sorted(config["group_members"]), ["mod_a", "mod_c"])
 
+    def _rig_with_saves(self, root: Path) -> tuple[Path, Path]:
+        queue = root / "q"
+        _workspace(queue, "A", "mod_a", "hull_a")
+        rig = _rig(root)
+        core = root / "core_real"
+        core.mkdir()
+        link_dir(core, rig / "starsector-core")
+        for name in ("save_Old_1", "save_Old_2"):
+            (rig / "saves" / name).mkdir(parents=True)
+            (rig / "saves" / name / "campaign.xml").write_text("<x/>", encoding="utf-8")
+        (rig / "saves" / "common").mkdir(parents=True, exist_ok=True)
+        (rig / "saves" / "common" / "keep.data").write_text("k", encoding="utf-8")
+        return queue, rig
+
+    def test_install_moves_earlier_saves_aside_and_keeps_common(self) -> None:
+        # SR7-LIVE-0985a-20261117's New Game read a save SR6 had left in the rig (93.50).
+        with resolved_temp_dir() as root:
+            queue, rig = self._rig_with_saves(root)
+            result = install_group(plan_groups(queue, rig), 1, queue, rig, install_probe=False)
+            left = sorted(p.name for p in (rig / "saves").iterdir())
+            moved_to = Path(result["saves_aside"]["to"])
+            moved = sorted(p.name for p in moved_to.iterdir())
+            kept = (rig / "saves" / "common" / "keep.data").is_file()
+            content = (moved_to / "save_Old_1" / "campaign.xml").read_text(encoding="utf-8")
+        self.assertEqual(left, ["common"])
+        self.assertTrue(kept)
+        self.assertEqual(moved, ["save_Old_1", "save_Old_2"])
+        self.assertEqual(result["saves_aside"]["moved"], ["save_Old_1", "save_Old_2"])
+        self.assertEqual(moved_to.parent.name, "_saves-moved")
+        self.assertEqual(content, "<x/>")  # moved, never deleted
+
+    def test_install_keeps_saves_when_asked(self) -> None:
+        with resolved_temp_dir() as root:
+            queue, rig = self._rig_with_saves(root)
+            result = install_group(plan_groups(queue, rig), 1, queue, rig, install_probe=False, keep_saves=True)
+            left = sorted(p.name for p in (rig / "saves").iterdir())
+        self.assertEqual(left, ["common", "save_Old_1", "save_Old_2"])
+        self.assertEqual(result["saves_aside"]["moved"], [])
+        self.assertFalse((rig / "_saves-moved").exists())
+
+    def test_a_linked_saves_folder_is_left_alone(self) -> None:
+        from bridgeforge.probe.probe_group import move_aside_saves
+
+        with resolved_temp_dir() as root:
+            owners = root / "owners_saves"
+            (owners / "save_Mine_1").mkdir(parents=True)
+            rig = root / "rig"
+            rig.mkdir()
+            link_dir(owners, rig / "saves")
+            result = move_aside_saves(rig)
+            still = (owners / "save_Mine_1").is_dir()
+        self.assertEqual(result["moved"], [])
+        self.assertIn("junction or link", result["left"])
+        self.assertTrue(still)
+
+    def test_only_real_save_folders_move(self) -> None:
+        # Review of #213: a `save_*` file, or a `save_*` entry that is a link, is not a game save of the rig's.
+        from bridgeforge.probe.probe_group import move_aside_saves
+
+        with resolved_temp_dir() as root:
+            rig = root / "rig"
+            (rig / "saves" / "save_Real_1").mkdir(parents=True)
+            (rig / "saves" / "save_note.txt").write_text("x", encoding="utf-8")
+            elsewhere = root / "elsewhere_save"
+            elsewhere.mkdir()
+            link_dir(elsewhere, rig / "saves" / "save_Linked_1")
+            result = move_aside_saves(rig)
+            left = sorted(p.name for p in (rig / "saves").iterdir())
+        self.assertEqual(result["moved"], ["save_Real_1"])
+        self.assertEqual(left, ["save_Linked_1", "save_note.txt"])
+
+    def test_two_batches_in_one_second_do_not_mix(self) -> None:
+        from bridgeforge.probe.probe_group import move_aside_saves
+
+        with resolved_temp_dir() as root:
+            rig = root / "rig"
+            (rig / "saves" / "save_A_1").mkdir(parents=True)
+            first = move_aside_saves(rig, stamp="T")
+            (rig / "saves" / "save_B_1").mkdir(parents=True)
+            second = move_aside_saves(rig, stamp="T")
+        self.assertNotEqual(first["to"], second["to"])
+        self.assertEqual((first["moved"], second["moved"]), (["save_A_1"], ["save_B_1"]))
+
     def test_install_enables_speedup_when_the_rig_has_it(self) -> None:
         with resolved_temp_dir() as root:
             queue = root / "q"
