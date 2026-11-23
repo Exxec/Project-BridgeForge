@@ -313,6 +313,14 @@ class CarrierTests(unittest.TestCase):
                 result = evaluate(proof, "carrier", rig, "CAR-5")
                 self.assertEqual((result["verdict"], result["boot_verdict"]), ("UNKNOWN", boot))
 
+    def test_nothing_is_observed_when_the_probe_never_ran(self) -> None:
+        # P2B-CAR-20261122 stalled at load, yet its evidence listed ten variants OBSERVED (advisor review 2026-11-23).
+        with resolved_temp_dir() as root:
+            proof = make_proof(root)
+            rig, _ = boot_run(root, proof, "carrier", "CAR-6", [MENU], [FATAL_TANKS], config=_config(CARRIER, ["fx_ship"]))
+            result = evaluate(proof, "carrier", rig, "CAR-6")
+        self.assertEqual(result["provided"], {"hull:fx_ship": "NOT_OBSERVED", "hullmod:fx_tanks": "NOT_OBSERVED"})
+
 
 class BindingTests(unittest.TestCase):
     def test_a_run_of_a_copy_that_is_not_the_proofs_is_refused_and_nothing_is_written(self) -> None:
