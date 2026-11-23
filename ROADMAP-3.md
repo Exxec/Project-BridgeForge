@@ -2860,6 +2860,11 @@ history as the closure benchmark, a cross-repository trace check, an early Java 
     - **Unmatched tags** are judged per kind: a fighters tag that no wing carries is flagged even when a hull carries it.
     - **The tag suspect** names the faction file.
     - **RC8-55** carries the review's javap.
+
+    After the fixes:
+    - the `gestalt` carrier is identical to the one DIAG-GESTALT-AFTER booted (228 / `30163b35745425be`), and P3's and
+      P4's carriers are unchanged;
+    - mutation check: 14 mutants, all caught.
 - 94.G3 **Gene bank**: content-addressed store, alleles across the corpus, lineage, licence state; RevenantLib distributes genes
   from vanished authors (GD-3). The store's payloads live under `data_root()`, like `Done/`, never in this public
   repository; only manifests of the owner's own or permitted content become committed fixtures (2026-11-19).
