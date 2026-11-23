@@ -67,6 +67,12 @@ def member_bytes(root: Path, what: str, path: str) -> bytes:
     raise BankError(f"{path}: no bank form for a member of kind {what!r}")
 
 
+def record_id(manifest: str, source: dict, build: str | None) -> str:
+    """A record's file name: one manifest may come from several sources (the same gene unchanged in two releases), and each
+    source keeps its own record."""
+    return _sha(json.dumps({"manifest": manifest, "source": source, "build": build}, sort_keys=True).encode("utf-8"))
+
+
 def _donor_kind(path: str) -> str:
     from bridgeforge.licence_ledger import member_file
 
@@ -95,8 +101,8 @@ class Bank:
         from bridgeforge.safeio import atomic_write_text
 
         (self.root / "records").mkdir(parents=True, exist_ok=True)
-        atomic_write_text(self.root / "records" / f"{record['manifest']}.json", json.dumps(record, indent=2, sort_keys=True) + "\n",
-                          newline="")
+        atomic_write_text(self.root / "records" / f"{record_id(record['manifest'], record['source'], record['build'])}.json",
+                          json.dumps(record, indent=2, sort_keys=True) + "\n", newline="")
 
     def store(self, gene: dict, source_root: Path, source: dict, build: str | None, refused: dict[str, str]) -> str:
         """Store one manifest, its member and donor-need blobs and its record; return the manifest hash."""
@@ -126,11 +132,12 @@ class Bank:
                   "needs_genes": sorted(gene["needs"].get("genes") or []),
                   "needs_refused": {need: refused[need] for need in gene["needs"].get("genes") or [] if need in refused},
                   "superseded_by": None}
-        for old_hash, old in self.records().items():  # same source, anchor and build: the new manifest supersedes the old
-            if (old_hash != manifest and old["superseded_by"] is None and old["source"] == source and old["anchor"] == record["anchor"]
+        new_id = record_id(manifest, source, build)
+        for old_id, old in self.records().items():  # same source, anchor and build: the new record supersedes the old one
+            if (old_id != new_id and old["superseded_by"] is None and old["source"] == source and old["anchor"] == record["anchor"]
                     and old["build"] == build):
-                self._write_record({**old, "superseded_by": manifest})
-        existing = self.records().get(manifest)
+                self._write_record({**old, "superseded_by": new_id})
+        existing = self.records().get(new_id)
         self._write_record({**record, "superseded_by": existing["superseded_by"]} if existing else record)
         return manifest
 
@@ -167,18 +174,21 @@ class Bank:
                 if path.is_file() and _sha(path.read_bytes()) != path.name.removesuffix(suffix):
                     problems.append(f"{folder}/{path.name} does not hash to its name")
         records = self.records()
-        for manifest, record in records.items():
+        for rid, record in records.items():
+            manifest = record["manifest"]
+            if rid != record_id(manifest, record["source"], record["build"]):
+                problems.append(f"record {rid[:12]} is not filed under its manifest, source and build")
             if not (self.root / "manifests" / manifest[:2] / f"{manifest}.json").is_file():
-                problems.append(f"record {manifest[:12]}: its manifest is missing")
+                problems.append(f"record {rid[:12]}: its manifest is missing")
             for path, digest in {**record["members"], **record["donor"]}.items():
                 if not (self.root / "blobs" / digest[:2] / digest).is_file():
-                    problems.append(f"record {manifest[:12]}: blob of {path} is missing")
+                    problems.append(f"record {rid[:12]}: blob of {path} is missing")
             for need in record["needs_genes"]:
                 if need in record["needs_refused"]:
                     continue
                 if not any(r["anchor"] == need and r["source"] == record["source"] and r["build"] == record["build"]
                            for r in records.values()):
-                    problems.append(f"record {manifest[:12]} ({record['anchor']}): needed gene {need} has no record from the same source")
+                    problems.append(f"record {rid[:12]} ({record['anchor']}): needed gene {need} has no record from the same source")
         stored = (self.root / "ROOT").read_text(encoding="utf-8").strip() if (self.root / "ROOT").is_file() else None
         if stored != self.root_hash():
             problems.append("ROOT does not recompute: run the command that last changed the bank again, or rebuild")
@@ -315,10 +325,10 @@ def run_bank_cli(args) -> int:
             for problem in problems:
                 print(f"  {problem}")
             return 1 if problems else 0
-        for manifest, record in sorted(target.records().items(), key=lambda kv: (kv[1]["anchor"], kv[0])):
+        for _rid, record in sorted(target.records().items(), key=lambda kv: (kv[1]["anchor"], kv[0])):
             if all(getattr(args, key) in (None, str(record.get(key))) for key in ("kind", "anchor", "build", "licence")):
-                state = f" superseded by {record['superseded_by'][:12]}" if record["superseded_by"] else ""
-                print(f"{manifest[:12]} {record['anchor']} {record['source']['mod_id']} {record['source']['mod_version']} "
+                state = f" superseded by record {record['superseded_by'][:12]}" if record["superseded_by"] else ""
+                print(f"{record['manifest'][:12]} {record['anchor']} {record['source']['mod_id']} {record['source']['mod_version']} "
                       f"{record['source']['folder']} {record['build']} {record['licence']}{state}")
         return 0
     except (BankError, GeneError, VendorPlanError, OSError) as exc:

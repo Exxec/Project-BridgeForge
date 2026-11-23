@@ -82,6 +82,22 @@ class BankTests(unittest.TestCase):
         self.assertIn(superseded[0]["superseded_by"], records)
         self.assertNotEqual(old["root"], Bank(root / "Genes").root_hash())
 
+    def test_one_manifest_from_two_sources_keeps_two_records(self) -> None:
+        # Found banking the pilots: records were filed by manifest alone, so an unchanged gene in a second release would have
+        # overwritten the first source's record.
+        with resolved_temp_dir() as root:
+            base, working, core, _ = _base(root)
+            twin = base / "In operation" / "Demo" / "original"
+            shutil.copytree(working, twin)
+            put(working, "hull:fx_ship", core, bank=root / "Genes", base=base)
+            put(twin, "hull:fx_ship", core, folder="original", bank=root / "Genes", base=base)
+            bank = Bank(root / "Genes")
+            records = bank.records()
+            manifests = [p for p in (root / "Genes" / "manifests").rglob("*.json")]
+            problems = bank.verify()
+        self.assertEqual((len(records), len(manifests), problems), (2, 1, []))
+        self.assertEqual({r["source"]["folder"] for r in records.values()}, {"working", "original"})
+
     def test_a_source_outside_the_data_root_and_a_core_of_another_build_are_refused(self) -> None:
         with resolved_temp_dir() as root:
             base, working, core, _ = _base(root)

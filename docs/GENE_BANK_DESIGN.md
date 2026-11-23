@@ -43,7 +43,8 @@ Genes/
   blobs/<sha[:2]>/<sha>          member and needs.donor bytes. Files are stored as bytes; json-entry values as canonical
                                   JSON, the way members are hashed.
   manifests/<mh[:2]>/<mh>.json    canonical gene.json bytes
-  records/<mh>.json               manifest hash, identity, kind, anchor, source (mod id, version, folder kind:
+  records/<id>.json               one per (manifest, source, build): the same manifest from two sources keeps two records.
+                                  Holds the manifest hash, identity, kind, anchor, source (mod id, version, folder kind:
                                   working/original/archive, the source's tree hash), core build, describer stamp,
                                   licence, links to evidence files by manifest hash, superseded_by
   index.json                      derived: by identity, anchor, kind, build and licence; rebuilt, never edited
