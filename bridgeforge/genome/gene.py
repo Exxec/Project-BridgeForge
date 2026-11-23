@@ -20,7 +20,9 @@ the identity.
 members a local-only path exception covers, and `decision`, which is LOCAL_ONLY whenever that list is not empty.
 
 Schema 4 (94.G2, 2026-11-19) names every kind G2 needs (`GENE_KINDS`); `describe` closes the content kinds and
-`combat-plugin` and, since P3 (2026-11-20), `star-system` (genome/campaign.py), and refuses the rest until their pilot.
+`combat-plugin` and, since P3 (2026-11-20), `star-system` (genome/campaign.py), since slice 10 `faction`, and since P4
+(2026-11-22) `custom-start`, a Nexerelin start whose whole registration file is a member (`custom_start_entry`); it refuses
+the rest until their pilot. A jar class brings its nested and anonymous classes (`_nested_classes`, P4).
 `needs.genes` (P3, additive within schema 4: optional, so earlier manifests stay valid) lists the genes of the same
 donor this one needs and does not carry, such as a star system's owning faction. Schema 3 (the same day) added one member kind, `json-entry`: a key of a JSON file, `<file>#<JSON Pointer>` such as
 `data/config/settings.json#/sa_lobster_tanks_growth_rate`, hashed as its parsed value in canonical JSON (genome/closure.py).
@@ -50,12 +52,20 @@ GENE_SCHEMA_VERSION = 4
 WITHDRAWN_VERSIONS = (1, 2, 3)  # the one list: contract.py and evidence.py import it
 MEMBER_KINDS = ("file", "csv-row", "jar-class", "json-entry")
 # Schema 4 (94.G2, 2026-11-19): every kind G2 needs, so G2 needs no further bump (advisor review). Kinds are named by how the
-# game registers them. `describe` closes the content kinds and `combat-plugin` (a key of settings.json's `plugins` map);
-# the others are refused with a clear message until their pilot closes them.
+# game registers them. `describe` closes the kinds in CLOSABLE_KINDS; the others are refused with a clear message until their
+# pilot closes them.
 CAMPAIGN_KINDS = ("faction", "star-system", "market", "industry", "condition", "ability", "rule", "combat-plugin",
                   "campaign-plugin", "custom-start")
 GENE_KINDS = (*KINDS, *CAMPAIGN_KINDS)
-CLOSABLE_KINDS = (*KINDS, "combat-plugin", "star-system", "faction")
+CLOSABLE_KINDS = (*KINDS, "combat-plugin", "star-system", "faction", "custom-start")
+# P4 (2026-11-22): a custom start is registered in this file, which only Nexerelin reads. javap of Nexerelin 0.12.2d and 0.12.3's
+# ExerelinCore.jar: CustomStartDefs.CONFIG_FILE is this path; its static init reads it with
+# SettingsAPI.getMergedJSONForMod(path, "nexerelin"), so every mod's copy merges into Nexerelin's and a mod without the file adds
+# nothing; per start it reads id, name, desc and className (getString) and requiredModId, difficulty, factionId, randomSector
+# (opt*). The class loads only when the new-game dialog builds its custom-start menu (Nex_NGCCustomStart.addCustomStartOptions
+# -> CustomStartDefs.validateCustomStart -> Class.forName) and runs on selection (loadCustomStart -> CustomStart.execute).
+CUSTOM_STARTS_FILE = "data/config/exerelin/customStarts.json"
+CUSTOM_START_REGISTRAR = "nexerelin"
 COLLECTED_FROM = ["vendor-plan"]
 # What the player sees each kind do: the phenotype a live run must observe (S3 makes these real obligations, G6).
 PHENOTYPE = {
@@ -167,6 +177,36 @@ def _jar_member(root: Path, member: str) -> dict:
     raise GeneError(f"{member}: the jar entry the closure names was not found in a readable jar of the mod")
 
 
+def _nested_classes(root: Path, members: list[dict]) -> list[dict]:
+    """The nested and anonymous classes (`Outer$Inner.class`, `Outer$1.class`) of the gene's jar classes, from the same jar,
+    that it does not hold yet. They are part of their outer class: javac writes them beside it and the JVM loads them when it
+    first uses them, but vendor-plan follows source imports, which never name them. P4 (2026-11-22): `bt_murtach_start$1`,
+    the Script the custom start's execute() adds, was missing, and so were 7 listener and enum classes in P3's set closure
+    (`ECE_FluxEMPHullMod$ECE_EMPStateDamageTakenListener`, `ECE_EngineController$Side`, ...), so its carrier lacked them."""
+    from bridgeforge.scan.scan_classfile import iter_class_files_in_jars
+
+    have = {m["path"] for m in members if m["what"] == "jar-class"}
+    outers: dict[str, list[str]] = {}
+    for path in sorted(have):
+        jar, _, entry = path.partition("!")
+        outers.setdefault(jar, []).append(entry[: -len(".class")])
+    found = []
+    for jar, stems in outers.items():
+        unreadable: list[str] = []
+        skipped: list[str] = []
+        for _path, name, data in iter_class_files_in_jars([Path(root) / jar], unreadable, skipped_entries=skipped):
+            # the longest outer first, so a class nested twice names its nearest member; `Outer$` alone is not nested
+            outer = max((stem for stem in stems if name.startswith(stem + "$") and len(name) > len(stem) + len("$.class")),
+                        key=len, default=None)
+            if outer is not None and f"{jar}!{name}" not in have:
+                found.append({"what": "jar-class", "path": f"{jar}!{name}", "sha256": hashlib.sha256(data).hexdigest(),
+                              "reason": f"a nested class of {outer.replace('/', '.')}"})
+        unread = unreadable + [entry for entry in skipped if any(stem + "$" in entry for stem in stems)]
+        if unread:  # a gene silently missing a nested class would boot into NoClassDefFoundError
+            raise GeneError(f"{jar}: the nested classes of its members could not all be read: {'; '.join(unread[:3])}")
+    return sorted(found, key=lambda m: m["path"])
+
+
 _PACKAGE_DECL = re.compile(r"^\s*package\s+([\w.]+)\s*;", re.MULTILINE)
 
 
@@ -220,6 +260,9 @@ def describe(mod: Path, anchor: str, *, vanilla_core: Path | None = None, policy
     if kind == "combat-plugin":
         plugin_class, registration = _combat_plugin(mod, ident)
         classes = [plugin_class]
+    elif kind == "custom-start":
+        start_class, registration = _custom_start(mod, ident)
+        classes = [start_class]
     elif kind == "star-system":
         from bridgeforge.genome.campaign import star_system
 
@@ -229,7 +272,7 @@ def describe(mod: Path, anchor: str, *, vanilla_core: Path | None = None, policy
         seeds = [anchor]
     plan, campaign = _closed_plan(mod, anchor, seeds, classes, vanilla_core, policy_path)
     root = Path(plan["provider"])
-    if kind not in ("combat-plugin", "star-system") and anchor not in plan["closure_ids"]:
+    if kind not in ("combat-plugin", "star-system", "custom-start") and anchor not in plan["closure_ids"]:
         raise GeneError(f"{anchor} is not defined by {root} (missing: {', '.join(plan['missing']) or 'nothing'})")
     members = ([registration["member"]] if registration else []) + campaign["members"]
     loaded = _loaded_classes(root)
@@ -251,6 +294,7 @@ def describe(mod: Path, anchor: str, *, vanilla_core: Path | None = None, policy
             raise GeneError(f"vendor-plan named a part of an unknown kind: {entry['what']!r}")
         members.append({**member, "reason": member.pop("reason", None) or entry["reason"]})
     members = list({(m["what"], m["path"]): m for m in members}.values())  # a jar class reached twice is one member
+    members += _nested_classes(root, members)
     from bridgeforge.genome.closure import SETTINGS_FILE, extend, mods_needed
 
     extra = extend(root, members, vanilla_core, [closure_id.split(":", 1)[1] for closure_id in plan["closure_ids"]])
@@ -267,13 +311,20 @@ def describe(mod: Path, anchor: str, *, vanilla_core: Path | None = None, policy
     licence = _licence(plan["licence"], info, [m["path"] for m in members], policy_path)
     dependencies = sorted(d["id"] for d in info.get("dependencies") or [] if isinstance(d, dict) and isinstance(d.get("id"), str))
     registrations = [registration["element"]] if registration else system["registrations"] if system else []
+    needed_mods = mods_needed(root, members, dependencies)
+    if kind == "custom-start":
+        # A regulated gene (FEATURE_GENOME_ROADMAP P4): it exists only when Nexerelin reads the file, and its class extends
+        # Nexerelin's CustomStart. Bultach Coalition declares no Nexerelin, so neither mods_needed nor a carrier would have it.
+        needed_mods = sorted({*needed_mods, CUSTOM_START_REGISTRAR})
+        conditions = [*conditions, {"kind": "mod-enabled", "subject": CUSTOM_START_REGISTRAR,
+                                    "evidence": f"only {CUSTOM_START_REGISTRAR} reads {CUSTOM_STARTS_FILE} (CustomStartDefs, javap)"}]
     gene = {
         "schema": GENE_SCHEMA, "schema_version": GENE_SCHEMA_VERSION,
         "identity": identity(kind, members),
         "kind": kind, "anchors": [anchor], "provides": sorted({anchor, *plan["closure_ids"], *campaign["provides"]}),
         "members": members,
         "needs": {"vanilla": sorted(set(plan["provided_by_vanilla"]) | set(extra["vanilla"]) | set(campaign["vanilla"])),
-                  "mods": mods_needed(root, members, dependencies),
+                  "mods": needed_mods,
                   "genes": [g for g in campaign["genes"] if g != anchor]},
         "registrations": registrations, "conditions": conditions, "persistent_state": _saved_state(system, campaign, members),
         "build": {"game_version": info.get("gameVersion"), "mod_version": _version_text(info.get("version"))},
@@ -345,7 +396,9 @@ def _code_members(root: Path, plan: dict) -> list[dict]:
             # so resolve the jar's path in the mod. Before P3 (2026-11-20) a class with no source under src/ was skipped
             # silently and its literals named nothing.
             found.append(_jar_member(root, entry["path"]))
-    return found
+    # Review of P4: a nested class's literals and campaign rows count as the gene's code too (an anonymous Script may name
+    # an id its outer class does not), so the closure follows them.
+    return found + _nested_classes(root, found)
 
 
 def _combat_plugin(mod: Path, key: str) -> tuple[str, dict]:
@@ -362,6 +415,48 @@ def _combat_plugin(mod: Path, key: str) -> tuple[str, dict]:
     member = {"what": "json-entry", "path": path, "sha256": value_sha256(plugin_class),
               "reason": "the plugin's registration in settings.json's plugins map"}
     return plugin_class.strip(), {"member": member, "element": {"locus": path, "statement": plugin_class.strip()}}
+
+
+def custom_start_entry(root: Path, ident: str) -> dict:
+    """The one start a mod's customStarts.json registers, which must be `ident`. Raises GeneError otherwise.
+
+    The gene takes the whole file as its member: the start is an element of the `starts` array, and the gene contract pins an
+    array element as an invalid json-entry (fixture invalid-json-entry-array-element.json), so a keyed element member would
+    change what the sister repositories pin. A file holding more than one start, or any key besides `starts`, is refused
+    until a pilot needs it (P4, 2026-11-22: Bultach Coalition's holds one). Read leniently: Bultach's has trailing commas."""
+    from bridgeforge.scan.scanner import _load_lenient_json_file
+
+    path = Path(root) / CUSTOM_STARTS_FILE
+    if not path.is_file():
+        raise GeneError(f"custom-start:{ident}: {path} does not exist")
+    data = _load_lenient_json_file(path)
+    if data is None:
+        raise GeneError(f"custom-start:{ident}: {CUSTOM_STARTS_FILE} cannot be read as JSON")
+    if not isinstance(data, dict):
+        raise GeneError(f"custom-start:{ident}: {CUSTOM_STARTS_FILE} is not a JSON object")
+    starts = data.get("starts")
+    if not isinstance(starts, list) or sorted(data) != ["starts"] or len(starts) != 1 or not isinstance(starts[0], dict):
+        held = f"{len(starts)} start(s)" if isinstance(starts, list) else "no starts list"
+        others = sorted(k for k in data if k != "starts")
+        raise GeneError(f"custom-start:{ident}: {CUSTOM_STARTS_FILE} holds {held}" + (f" and other keys ({', '.join(others)})"
+                        if others else "") + "; a custom-start gene takes the whole file, so only a file with exactly one start "
+                        "and nothing else closes (the contract has no array-element member)")
+    start = starts[0]
+    if start.get("id") != ident:
+        raise GeneError(f"custom-start:{ident}: {CUSTOM_STARTS_FILE} registers {start.get('id')!r}, not {ident!r}")
+    if not isinstance(start.get("className"), str) or not start["className"].strip():
+        raise GeneError(f"custom-start:{ident}: its entry names no className (Nexerelin reads it with getString)")
+    return start
+
+
+def _custom_start(mod: Path, ident: str) -> tuple[str, dict]:
+    """(the start's class, its registration) for `custom-start:<id>`: the whole customStarts.json is the member."""
+    from bridgeforge.vendor_plan import _mod_root
+
+    root = _mod_root(mod)
+    start_class = custom_start_entry(root, ident)["className"].strip()
+    member = {**_file_member(root, CUSTOM_STARTS_FILE), "reason": "the start's registration, read only by Nexerelin"}
+    return start_class, {"member": member, "element": {"locus": CUSTOM_STARTS_FILE, "statement": start_class}}
 
 
 def _licence(mod_licence: dict, info: dict, member_paths: list[str], policy_path: Path | None) -> dict:

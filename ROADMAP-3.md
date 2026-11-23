@@ -2371,6 +2371,81 @@ history as the closure benchmark, a cross-repository trace check, an early Java 
   - **Tests:** `tests/test_gene_boot.py`, 37 tests on synthetic proofs and bound runs. Mutation-checked with
     `mutate_batch.py`: the first 18 mutants all caught; after the review, 30, of which 2 survived (a `Found mod` line of
     another id, and the main-menu branch behind the load check) until two tests were added, then all 30 caught.
+  **Slice 18 (P4) built 2026-11-22: `custom-start` genes, and a jar class brings its nested classes.** Bultach Coalition's
+  custom start, a regulated gene: it exists only when Nexerelin loads it.
+  - **Evidence (javap of Nexerelin 0.12.2d and 0.12.3's `ExerelinCore.jar`):**
+    - `CustomStartDefs.CONFIG_FILE` is `data/config/exerelin/customStarts.json`. Its static init reads it with
+      `SettingsAPI.getMergedJSONForMod(path, "nexerelin")`, so each mod's copy merges into Nexerelin's, and a mod without the
+      file adds nothing. That makes removing the file from a subtraction copy safe.
+    - Per start it reads `id`, `name`, `desc` and `className` with `getString`, and `requiredModId`, `difficulty`,
+      `factionId` and `randomSector` with `opt*`.
+    - The class loads only when the new-game dialog builds its custom-start menu
+      (`Nex_NGCCustomStart.addCustomStartOptions` -> `CustomStartDefs.validateCustomStart` -> `Class.forName`). It runs on
+      selection (`loadCustomStart` -> `CustomStart.execute`).
+  - **`describe custom-start:<id>`:**
+    - The whole registration file is a member. The start is an element of the `starts` array, and the gene contract pins an
+      array element as an invalid json-entry (fixture `invalid-json-entry-array-element.json`). So a file holding more than
+      one start, or any other key, is refused; the contract and its pin (1345f51a) are unchanged.
+    - The file is read leniently: Bultach's has trailing commas.
+    - The start's class seeds the closure, as a combat plugin's does.
+    - `needs.mods` gains `nexerelin`, and `conditions` gains `mod-enabled`/`nexerelin`. Bultach declares no Nexerelin, so
+      neither `mods_needed` nor a carrier would have had it.
+    - The carrier resolution check knows a start: the carrier's file registers it and the carrier holds its class.
+  - **Nested classes:** a jar class brings its nested and anonymous classes from the same jar (`_nested_classes`).
+    - Where a mod ships its source, vendor-plan follows the source's imports, which never name them.
+    - `bt_murtach_start$1`, the `Script` its `execute()` adds, was missing. So were 7 classes of P3's set closure
+      (`ECE_FluxEMPHullMod$ECE_EMPStateDamageTakenListener`, `ECE_EngineController$Side` and five more), so P3's set
+      carrier lacked them.
+    - P1, P2 and P3's anchor identities are unchanged (bb64ad41, 89e207d1, 3ebc89de). P3's set carrier becomes
+      `gene_carrier_93f4646e00d1` (326 members, was 319; still PASS).
+  - **Bultach (local, read only):** `custom-start:murtachStart` describes with 85 members, including 7 nested classes;
+    static isolation PASS.
+    - The static subtraction FAILs on one leak: `data.scripts.utils.bultach_utils`, a utility class the start's ship
+      closure takes and other donor code imports.
+    - The cause is the boundary question below, not the custom-start code.
+  - **Open, the owner's call: does the starting ship belong to the start?** The start's code passes
+    `ork_murtach_CDL-01` to `NGCAddStartingShipsByFleetType.generateFleetFromVariantIds`, a use call. By P2's precedent (a
+    combat plugin's spawned variants are its gene), the ship's closure is a member.
+    - Described alone, that variant closes over 76 members and 14 ids: the hull, 5 hull mods, 1 ship system and 4
+      weapons.
+    - Its static subtraction lists 177 dependents (169 references) in 109 files: 57 hull files and 48 variant files. The
+      most named are weapon `ork_rotary_pd` (49), hull mod `ork_redfasta` (45) and `bt_shieldArching` (40).
+    - So subtracting the start would take faction-wide parts out of the donor.
+    - P3's precedent (a star system's faction is `needs.genes`) would keep the ship a gene of its own, which the start needs.
+  - **Boot limits:** the probe has no check that a start is offered. A carrier boot can show at most that Nexerelin read
+    the file and nothing broke. The class loads only in the custom-start menu, which a probe run does not open.
+  - **Tests:** `tests/test_gene_custom_start.py`:
+    - the start gene: the file, the class, the ship its code names, the Nexerelin need and condition;
+    - the four refusals, and a missing file;
+    - the proofs: the file leaves the donor and the carrier depends on Nexerelin;
+    - carrier resolution;
+    - `_nested_classes`;
+    - a jar start class with an anonymous class and its source under `src/`.
+
+    Mutation-checked: 13 mutants. One survived: `describe` adding the nested classes was untested, because a jar class
+    without source is followed through its bytecode, which names its anonymous class. All 13 were caught once the test
+    shipped its source under `src/`, as Bultach does.
+  - **Independent review:** no critical or high finding. Fixed, with tests:
+    - `_nested_classes` now walks through `scan_classfile.iter_class_files_in_jars` (the duplication audit's
+      `jar-class-walk` rule). A nested class that cannot be read stops the gene.
+    - Nested classes are code too: `_code_members` includes them, so their literals are followed.
+    - `Outer$.class` is not nested, and a class nested twice names its nearest outer member.
+    - An unreadable or non-object `customStarts.json` says so.
+
+    Identities after the fixes: P1-P3 anchors unchanged, P4 `ffd69b5e`, P3's set carrier `gene_carrier_93f4646e00d1`.
+  **P2's and P3's boots, 2026-11-22 (Test1, `_rig-genes`, `gene boot` from slice 17; P2 and P3 re-proved on Test1 with
+  main's code, identities equal to White_Legion's).**
+  - **P2B-SUB-20261122,** P2's subtracted donor: PASS, BOOTED (main menu, no Fatal, no mod error).
+  - **P2B-CAR-20261122 and P3B-CAR-20261122,** P2's carrier and P3's set carrier (`gene_carrier_92b783705cff`, built
+    before slice 18): FAIL, the same Fatal at load. `ResourceLoaderState.initSpecStore` threw an NPE because
+    `getHullStyle()` returned null.
+    - The carriers' hulls use `TANIA_ASTEROID` and `ECE_TECH`, styles defined only in each donor's
+      `data/config/hull_styles.json`, which no carrier holds.
+    - **Next (G2):** a hull's `style` names a hull style. A mod-defined style travels with the gene as a json-entry
+      (an object key, so the contract allows it).
+    - A style other donor hulls also use must stay in the subtraction copy: it is needed and shared, not owned. Design
+      with the advisor first.
+    - P4's carrier has the same gap.
 - 94.G3 **Gene bank**: content-addressed store, alleles across the corpus, lineage, licence state; RevenantLib distributes genes
   from vanished authors (GD-3). The store's payloads live under `data_root()`, like `Done/`, never in this public
   repository; only manifests of the owner's own or permitted content become committed fixtures (2026-11-19).
