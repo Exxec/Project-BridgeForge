@@ -4,6 +4,7 @@ import com.fs.starfarer.api.characters.PersonAPI;
 import com.fs.starfarer.api.combat.BaseEveryFrameCombatPlugin;
 import com.fs.starfarer.api.combat.CombatEngineAPI;
 import com.fs.starfarer.api.combat.ShipAPI;
+import com.fs.starfarer.api.fleet.FleetMemberAPI;
 import com.fs.starfarer.api.input.InputEventAPI;
 
 import java.util.HashSet;
@@ -35,6 +36,60 @@ public class BfProbeCombatPlugin extends BaseEveryFrameCombatPlugin {
     @Override
     public void init(CombatEngineAPI engine) {
         ProbeLog.start("combat");
+        raiseDeploymentLimits(engine, "init");
+    }
+
+    // 0.3.5 (ROADMAP-3 93.67): every planned hull must fight, but a battle deploys only up to each side's deployment limit and
+    // the rest wait in reserve. P034-BULTACH-20261122 put 60 hulls in a round and 34 deployed, all in the first 1.6 s; the
+    // battle ended at combatSeconds with ships still in reserve. So each side's limit is raised past any fleet the probe builds,
+    // through CombatFleetManagerAPI.modifyFlatMax(String, int) (javap of RC7's starfarer.api.jar 2026-11-22): at init, before
+    // the opening deployment, and again when both sides are first seen. Each raise is logged with the side's strength and
+    // reserves, so the next live run shows which one brought the reserves in.
+    private static final String LIMIT_SOURCE = "bf_probe_deploy_all";
+    private static final int LIMIT_BONUS = 100000;
+    private boolean limitsRaisedInBattle = false;
+
+    // Review of 0.3.5: an exception escaping a combat plugin is a Fatal dialog (SK13-1), and one in finish() would leave the
+    // battle running with no END, so both helpers catch everything and log it, as trackLaunches does.
+    private static void raiseDeploymentLimits(CombatEngineAPI engine, String when) {
+        for (int owner = 0; owner <= 1; owner++) {
+            try {
+                com.fs.starfarer.api.combat.CombatFleetManagerAPI manager = engine == null ? null : engine.getFleetManager(owner);
+                if (manager == null) {
+                    ProbeLog.emit("combat-deploy-limit", ProbeLog.STATUS_WARN, "owner=" + owner, "at " + when + ": no fleet manager");
+                    continue;
+                }
+                int before = manager.getMaxStrength();
+                manager.modifyFlatMax(LIMIT_SOURCE, LIMIT_BONUS);  // keyed by source: a second call replaces the first
+                List<FleetMemberAPI> reserves = manager.getReservesCopy();
+                ProbeLog.emit("combat-deploy-limit", ProbeLog.STATUS_INFO, "owner=" + owner,
+                        "at " + when + ": max " + before + " -> " + manager.getMaxStrength() + " curr=" + manager.getCurrStrength()
+                                + " reserves=" + (reserves == null ? 0 : reserves.size()));
+            } catch (Throwable t) {
+                ProbeLog.emit("combat-deploy-limit", ProbeLog.STATUS_WARN, "owner=" + owner,
+                        "at " + when + ": " + t.getClass().getName() + ": " + t.getMessage());
+            }
+        }
+    }
+
+    /** Each side's reserves when the battle ends, by hull id: planned hulls that never deployed (93.67). */
+    private static void reportReserves(CombatEngineAPI engine) {
+        for (int owner = 0; owner <= 1; owner++) {
+            try {
+                com.fs.starfarer.api.combat.CombatFleetManagerAPI manager = engine.getFleetManager(owner);
+                List<FleetMemberAPI> reserves = manager == null ? null : manager.getReservesCopy();
+                StringBuilder hulls = new StringBuilder();
+                if (reserves != null) {
+                    for (FleetMemberAPI member : reserves) {
+                        hulls.append(hulls.length() == 0 ? "" : ",").append(member == null ? "?" : member.getHullId());
+                    }
+                }
+                ProbeLog.emit("combat-reserves", hulls.length() == 0 ? ProbeLog.STATUS_INFO : ProbeLog.STATUS_WARN, "owner=" + owner,
+                        hulls.length() == 0 ? "none left" : "never deployed: " + hulls);
+            } catch (Throwable t) {
+                ProbeLog.emit("combat-reserves", ProbeLog.STATUS_WARN, "owner=" + owner, t.getClass().getName() + ": " + t.getMessage());
+            }
+        }
     }
 
     private void logNewShips(CombatEngineAPI engine) {
@@ -199,10 +254,12 @@ public class BfProbeCombatPlugin extends BaseEveryFrameCombatPlugin {
 
     private void finish(CombatEngineAPI engine, String reason) {
         ended = true;
+        logNewShips(engine);  // review of 0.3.5: a ship first seen on the last frame still gets its deployment line
         ProbeLog.emit("combat-perf", runaway ? ProbeLog.STATUS_WARN : ProbeLog.STATUS_INFO, "combat",
                 "frames=" + frames + " avgFrameMs=" + (frames == 0 ? 0 : Math.round(sumFrameMs / frames * 10) / 10.0)
                         + " worstFrameMs=" + Math.round(worstFrameMs) + " peakHulks=" + peakHulks + " peakShips=" + peakShips);
         reportLaunches();
+        reportReserves(engine);
         ProbeLog.emit("combat-summary", ProbeLog.STATUS_INFO, "combat", "ships logged=" + loggedShips.size());
         // Why the battle ended and who was left (96.13): a side wiped out or the engine's own end is a battle won early.
         ProbeLog.emit("combat-end", runaway ? ProbeLog.STATUS_WARN : ProbeLog.STATUS_INFO, reason,
@@ -237,6 +294,11 @@ public class BfProbeCombatPlugin extends BaseEveryFrameCombatPlugin {
         String reason = endReason(engine);
         if (reason != null) {
             finish(engine, reason);
+            return;
+        }
+        if (!limitsRaisedInBattle && seenPlayer && seenEnemy) {
+            limitsRaisedInBattle = true;
+            raiseDeploymentLimits(engine, "both sides seen");
         }
     }
 }
