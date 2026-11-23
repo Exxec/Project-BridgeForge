@@ -65,6 +65,50 @@ def add_parser(subcommands) -> None:
     check_cmd.add_argument("--gene", type=Path, required=True, help="the gene.json the evidence is about")
     check_cmd.add_argument("--root", type=Path, help="the folder the inputs' paths are relative to (a mod or workspace); without it "
                                                      "the inputs are not re-hashed")
+    boot_cmd = gene_sub.add_parser("boot", help="the boot halves of a gene's proofs (94.G2): stage a half's work copy for a live run "
+                                                "on the test rig, then read the run back into the proof as evidence")
+    boot_sub = boot_cmd.add_subparsers(dest="boot_command", required=True)
+    stage_cmd = boot_sub.add_parser("stage", help="copy a half's work copy into a boot queue as a workspace with a marker; "
+                                                  "`probe-group plan --retest` and `install` then stage it on the rig")
+    evaluate_cmd = boot_sub.add_parser("evaluate", help="judge a boot run of a half against the proof, copy its logs into the proof "
+                                                        "and write boot-<half>-<TESTID>.json; a gene boot run is never recorded")
+    for command in (stage_cmd, evaluate_cmd):
+        command.add_argument("proof", type=Path, help="the proof folder `gene prove` or `gene prove-set` wrote")
+        command.add_argument("half", choices=("subtraction", "carrier"), help="which work copy: the donor without the gene, or the carrier")
+        command.add_argument("--rig", type=Path, required=True, help="the test rig")
+    stage_cmd.add_argument("--queue", type=Path, required=True, help="the boot queue (a folder of workspaces, apart from In operation)")
+    evaluate_cmd.add_argument("test_id", help="the run id the boot ran under")
+    evaluate_cmd.add_argument("--json", action="store_true")
+
+
+def _run_boot(args: argparse.Namespace) -> int:
+    import json
+
+    from .boot import BootError, evaluate, stage
+
+    try:
+        if args.boot_command == "stage":
+            result = stage(args.proof, args.half, args.queue, args.rig)
+        else:
+            result = evaluate(args.proof, args.half, args.rig, args.test_id)
+    except (BootError, OSError) as exc:
+        print(f"bridgeforge: {exc}", file=sys.stderr)
+        return 2
+    if args.boot_command == "stage":
+        moved = f"; the older copy moved to {result['replaced']}" if result["replaced"] else ""
+        print(f"Staged {args.half} of gene {result['gene']['identity'][:16]} as {result['workspace']}{moved}")
+        print(f"Next: probe-group plan --queue {args.queue} --rig {args.rig} --retest {result['workspace']} --write <plan>")
+        return 0
+    if args.json:
+        print(json.dumps(result, indent=2))
+    else:
+        print(f"{args.half} boot {args.test_id}: {result['verdict']} ({result['boot_verdict']}): {result['why']}")
+        for row in result.get("unexplained") or []:
+            print(f"  unexplained: {row}")
+        for ref, seen in sorted((result.get("provided") or {}).items()):
+            print(f"  {ref}: {seen}")
+        print(f"Written: {result['written']}")
+    return 0 if result["verdict"] == "PASS" else 1
 
 
 def _run_evidence(args: argparse.Namespace) -> int:
@@ -140,6 +184,8 @@ def run_cli(args: argparse.Namespace) -> int:
         return _run_census(args)
     if args.gene_command == "evidence":
         return _run_evidence(args)
+    if args.gene_command == "boot":
+        return _run_boot(args)
     if args.gene_command == "contract":
         return _run_contract(args)
     if args.gene_command == "trace":
