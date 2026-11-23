@@ -975,7 +975,8 @@ unproven).
   report's own run config (93.29), mission-list reading (93.37) and the run's own save (93.38) in `probe-group smoke|live|record`,
   so `bridgeforge-state/live-wrappers/` can retire.
   **Direct start done 2026-11-19; live confirmation on Test1 pending.** The pins (93.28), the report's run config (93.29), the
-  mission list (93.37) and the run's save (93.38) were already in BridgeForge. The wrappers' remaining job was the direct start,
+  mission list (93.37) and the run's save (93.38) were already in BridgeForge (2026-11-23: of 93.29, only `live` and `record`
+  bind the run's own config; `probe-group report` still reads the rig's, so 93.29 is reopened). The wrappers' remaining job was the direct start,
   done by patching BridgeForge at run time. It is built in now:
   - `bridgeforge/live/direct_start.py`. `DirectStart(resolution, client_top)` gives:
     - the game's JAVA_TOOL_OPTIONS (`-DlaunchDirect=true -DstartRes=WxH -DstartFS=false -DstartSound=true`), added to any
@@ -1064,6 +1065,8 @@ unproven).
   **Owner 2026-11-22:** (e) parked ("For everything else I will follow your recommendations."): one working rig; parked until
   a new machine or game build.
   **(g) Done (verified 2026-11-23):** `live_run` reads the probe's `combat-round|INFO|round N of M` line (`ROUND_LINE`) and records stages `combat-1` to `combat-M` (`tests/test_live_run.py`); **(h) Done (verified 2026-11-23):** `revive --draft-report` passes its providers to the report draft (93.36; `tests/test_revive.py` `test_the_report_draft_resolves_libraries_where_the_scan_does_and_in_named_providers`).
+  **Closed 2026-11-23 (owner, roadmap reassessment: "Close superseded/obsolete").** (b): it duplicates 93.29, which is reopened.
+  **Closed 2026-11-23 (owner, roadmap reassessment: "Cull low-value"): culled.** (d): every ARCHIVE_NOTE already lists the changes since the previous archive (item 70).
 - 95.13 (S) **target-impact points at `relink`.** The three RELINK mods (AoTD Vaults of Knowledge 5.0.7, Broken Star, Nightcross)
   and Sunrider share one member: `StarSystemGenerator.addStableLocations(StarSystemAPI, int)` returns a `List` on RC7.
   `bridgeforge relink` already recompiles return-type-only calls from shipped or decompiled source, unedited; target-impact's next
@@ -2831,6 +2834,7 @@ fixes of 93.28. 93.26-93.35 are that day's findings.
   **Owner 2026-11-22:** parked ("For everything else I will follow your recommendations."): the skills work around it.
 - 93.8 **Pre-flight before clicks.** User logged on and unlocked, expected resolution, no other Starsector/java process
   (`who-locks`), rig not held by another run manifest; today all by hand.
+  **Parked 2026-11-23 (owner, roadmap reassessment: "Park Exotica + minor items").**
 - 93.9 **Launchers that travel with the rig.** `run-j25-direct.bat` hard-codes `_rig\jdk-25...`; a new rig works only by borrowing
   it. Resolve the JDK relative to the rig or from one shared JDK location.
   **Owner 2026-11-22:** parked ("For everything else I will follow your recommendations."): one working rig; parked until a
@@ -2951,6 +2955,7 @@ fixes of 93.28. 93.26-93.35 are that day's findings.
 - 93.29 **A report reads its own run's probe config.** `probe-group report` uses the rig's current config, so group 3's report after
   `install 4` named Tania instead of KoC (2026-11-17). Keep the config, or its hash, with the run manifest and read that.
   **Closed 2026-11-19 (roadmap review): superseded by 95.4.**
+  **Reopened 2026-11-23 (owner, roadmap reassessment): LIVE-001 is not fixed.** probe-group report still reads the rig's current probe config, not the run's own: `cmd_probe_group._probe_report` loads `<rig>/saves/common/<CONFIG_FILE>` (checked 2026-11-23). `live` and `record` bind the run manifest; `report` does not.
 - 93.30 **Scenario testbed (owner design 2026-11-17).** Hidden mission factions whose fleets the code builds by hand (Tania's Blood
   Trail and Frost Fire: `createEmptyFleet` then `addFleetMember("tania_blood_stork_main_Death_Special")`, spawned by
   `tania_mission_unlocker_per_rep` at WELCOMING/FRIENDLY standing) cannot be exercised by `faction-fleet-gen`. Owner: "start a new
@@ -3960,6 +3965,7 @@ their results.
 - 90.5 Open (design step 1 rest): per-build behaviour-fact states (CARRIED/RECHECK/PROVEN) classified by `target-bump`.
   **Owner 2026-11-22:** kept queued after the G series ("I want to be able to port mods to future updates specifically
   abandoned mods.").
+  **Owner 2026-11-23 (roadmap reassessment):** 90.5 now also carries 82.4's scope (STATIC/OBSERVED/VALIDATED status, an applicability predicate and invalidation conditions for recorded facts and rulings).
 - Tests: `tests/test_target_bump.py` (10: registry, fingerprint refusal, status kept, token resolution in paths/strings/lists,
   bump end to end with checkpoint removal, catalogue join, retarget plan and apply).
 
@@ -4052,6 +4058,7 @@ approved for now set in roadmap").** Each entry names the hand work it replaces.
   record; both of today's archives were extracted by hand and NGO was blocked by a desktop.ini.
 - 88.6 87.11's CSV layout check plus a `fix` that re-maps rows written in a reference core's layout by column name,
   refusing when a dropped column holds a value (hand script for NGO's ship_systems.csv, 2026-10-26).
+  **Parked 2026-11-23 (owner, roadmap reassessment: "Park Exotica + minor items").** It waits for a second mod with the same CSV layout problem (item 88's header).
 - 88.7 `test_guard` fails fast with "environment incomplete" when a declared dependency (psutil) is missing, instead of
   running into 141 import errors and replacing `bridgeforge-state/last-suite.json` with that result.
 - 88.8 **Done 2026-10-26.** The project `.venv` has `setuptools` 84.2.1 (`uv pip install --python .venv/Scripts/python.exe
@@ -4059,8 +4066,10 @@ approved for now set in roadmap").** Each entry names the hand work it replaces.
 - 88.9 `bridgeforge ci-local --linux`: the WSL recipe (vendored manylinux wheels, tracked-file tarball, git repo,
   `set -e` and literal paths) as a command, run before pushing; the S branch passed every local check and failed 17
   tests on Ubuntu CI.
+  **Closed 2026-11-23 (owner, roadmap reassessment: "Cull low-value"): culled.** A local copy of Ubuntu CI, which itself caught the 17 failures the entry names.
 - 88.10 A "maintainer RC" workspace kind for third-party test builds (Exotica 2.1.1-RC4): no archive, the outputs are a
   diagnosis report and a test build, and `probe-group plan` keeps it out of revival groups.
+  **Parked 2026-11-23 (owner, roadmap reassessment: "Park Exotica + minor items").** Exotica tooling, from the 2.1.1-RC4 test build.
 - 88.11 Merge order: the S branch carries all of B0-B6; item 87 merges on top of it with three import fixes and a
   regeneration, done and verified in `integration/s-series-with-87` (87 affected tests OK). Merge S first, then that
   branch, rather than item 87 onto main directly.
@@ -4077,6 +4086,7 @@ approved for now set in roadmap").** Each entry names the hand work it replaces.
   2.1.x. LunaLib's inline functions need `-jvm-target 17`, and `-language-version 1.9` (the K1 frontend) matches code written in
   the IDE. Unit tests whose mocks implement an older API are left out. Errors are compared with the unpatched checkout, so
   library drift (4 baseline javac errors from LazyLib 3.0 hiding `DrawableString.setColor`) is told apart from breakage.
+  **Parked 2026-11-23 (owner, roadmap reassessment: "Park Exotica + minor items").** Exotica tooling, from the #76 Refit-screen sessions.
 - 88.14 The script sandbox refuses `java.lang.reflect` in mod code ("File access and reflection are not allowed to scripts",
   EXO-MANUAL-20261027F; a fix that used it never ran). Add the RC8_BEHAVIOUR row, and have `delegate-method` and
   `patch-jar-class` refuse a helper class whose constant pool names `java/lang/reflect/*` or `java/io/File`; the safe form is
@@ -4085,12 +4095,15 @@ approved for now set in roadmap").** Each entry names the hand work it replaces.
 - 88.15 `save-slots SAVE [SAVE2]`: per fleet member and per module slot, the mod tags (a prefix such as `$$EXOTICA$$`) and
   hull mods from a campaign.xml, and the difference between two saves. The saves were the decisive evidence in every #76 run;
   each was read with a hand script (`save_slots.py`).
+  **Parked 2026-11-23 (owner, roadmap reassessment: "Park Exotica + minor items").** Exotica tooling, from the #76 Refit-screen sessions.
 - 88.16 An `-Interactive` session copies its evidence when the game closes: the save folder(s) written during the session
   (campaign.xml and .bak), the stdout log and the triage, into the workspace's `reports/.../evidence/<TESTID>/`. Done by hand
   after each of seven runs.
+  **Parked 2026-11-23 (owner, roadmap reassessment: "Park Exotica + minor items").** Exotica tooling, from the #76 Refit-screen sessions.
 - 88.17 Manual-run protocol: a checklist names the build (jar sha), starts from New Game per build, and records the starting
   state. Runs D-G "reproduced" an AlphaSubcore bug only because they started from a save that already carried it; the
   maintainer's build from New Game was clean (run H).
+  **Parked 2026-11-23 (owner, roadmap reassessment: "Park Exotica + minor items").** Exotica tooling, from the #76 Refit-screen sessions.
 - 88.18 Deferred: a Refit-screen driver that records the owner's clicks once (fixed resolution and ship) and replays them per
   build with screenshot checks, so before/after runs need no person. Module positions and LunaLib panels make it fragile.
   **Closed 2026-11-19 (roadmap review): culled.** Deferred as fragile (a Refit-screen click replay); the probe and scenarios cover the same ground.
@@ -4101,6 +4114,7 @@ approved for now set in roadmap").** Each entry names the hand work it replaces.
 - 88.20 Fast Rendering launchers set `-XX:+ShowMessageBoxOnError`. The box outlives the killed java (owner becomes csrss) and blocks
   every click of later runs; the watcher does not list it (two false LIVE_STUCK at new-game, CTL30-J28FR). Detect and record its
   text, press No, and refuse to start while one is open. The scratch driver did this with EnumWindows and BM_CLICK.
+  **Parked 2026-11-23 (owner, roadmap reassessment: "Park Exotica + minor items").**
 - 88.21 A total conversion that replaces `mission_list.csv` can never bind a combat run: `install` adds the probe's row, so the staged
   hash differs from the candidate (ICBF2C-J25 REFUSED). bf.2 needed a second run on exact bytes with no combat expected. Let the
   manifest name that one probe-row change, or add combat evidence that carries the staged difference openly.
@@ -4171,6 +4185,7 @@ built by delegating eight method bodies to a Java helper (`In operation/Exotica-
   13 PASS/0 FAIL/1 SKIP, while RC3-fix2 (EXO-RC3-LIVE-20261026) fails the two predicted checks (identical-module
   clobbering, prefix-sibling bleed). Results in the RC4 workspace's `working/reports/REVIVAL_REPORT.md`. Still pending:
   the owner's hands-on refit session (`docs/LOCAL_HANDOFF.md`, "Exotica 2.1.1-RC4").
+  **Parked 2026-11-23 (owner, roadmap reassessment: "Park Exotica + minor items").** Exotica RC4 work.
 - 87.8 **Done 2026-10-26.** `intake`'s publish rename waits about a minute (backoff capped at 8 s) instead of ~14 s. Exotica RC4
   (8 MB) and New Galactic Order (35 MB) both failed with "Access is denied" after the old retries and passed on an immediate
   rerun of the same bytes, as a first antivirus scan of new bytes would (the Yunru pack hit it on 2026-10-04). Test:
@@ -4250,8 +4265,10 @@ built yet; LIVE TEST NOT PERFORMED.
 - 85.3 Workspace brief: one page per workspace (versions, changed files, open findings, accepted baselines, past live runs,
   earlier reviews and decisions such as reports/ASTRA_LIVE_REVIEW.md), printed before any investigation. Done when the EPTA
   Alicerce/narcepolis question would have been answered from the brief.
+  **Closed 2026-11-23 (owner, roadmap reassessment: "Cull low-value"): culled.** A convenience page over records that already exist one by one.
 - 85.4 Crash intake: given a player's starsector.log and enabled_mods.json, name the failing mod and stack, match it to a
   workspace and propose the gate that reproduces it. Done when a recorded crash log is matched to its workspace and gate.
+  **Closed 2026-11-23 (owner, roadmap reassessment: "Cull low-value"): culled.** `log-triage` already sorts a Starsector log into FATAL, MOD-ERROR and known noise.
 - Harness fixes from the same batch: BUGS.md LIVE-001 (report attribution), LIVE-002 (total conversions and the combat
   stage), LIVE-003 (pre-patcher drift), LIVE-004 (stale extras in rig copies).
 
@@ -4288,6 +4305,8 @@ refactor (B3 at least), because T0 depends on the package layout. Nothing below 
 - T6 Provenance and permission. Builds a provenance record for every transplanted file: source mod, version, file hash,
   author and licence. Reuses release_policy.json and the archive gate; without the author's permission the result stays
   LOCAL_ONLY. Done when the archive gate refuses a transplant with missing provenance.
+
+**Closed 2026-11-23 (owner, roadmap reassessment: "Close superseded/obsolete").** Superseded by item 94, the feature genome track (G1-G7), which carries the same goal with proofs.
 
 **83. Structural refactor across the repos (owner-approved 2026-10-22).** Reorganisation only, no behaviour change: BridgeForge's
 flat 291-module package into subpackages, `fixers.py` split, docs/roadmaps consolidated, command audit and grouping with aliases,
@@ -4360,11 +4379,13 @@ conclusions.
   workflow generalize). Stopping condition per investigation, e.g. Templar is complete when the report identifies the
   relevant Crusade implementations, explains the apparent feature changes, lists unresolved differences and ties each
   needed runtime test to an existing gate. No need to explain every class.
+  **Closed 2026-11-23 (owner, roadmap reassessment: "Close superseded/obsolete").** Both pilot cases were decided on 2026-10-20 (77.18: the Crusade re-created, SEEKER's twig accepted as re-created), and recorded removals (77.19) now keep intended drops out of the sweep.
 - P1 82.4 Knowledge promotion: extend existing records (R4 standing rulings, the RC8 behaviour facts, REMOVALS,
   exemplars) with status STATIC / OBSERVED / VALIDATED, an applicability predicate, supporting evidence, counterexamples
   and invalidation conditions, so the question "does this still apply here?" can be answered. The statuses are not a
   ladder: an API-signature claim can be VALIDATED from authoritative static evidence; a fleet-spawning claim needs
   runtime evidence. VALIDATED means a defined acceptance test, including negative cases, within a declared scope.
+  **Merged into 90.5 2026-11-23 (owner, roadmap reassessment).**
 - P2 82.5 Runtime scheduling: research experiments are gates in `gates.json` (needs.scenario), so `board
   --live-pending` batches them with revival gates in the same rig sessions.
   **Closed 2026-11-19 (roadmap review): already built.** `gates.py` takes `scenario` needs.
@@ -4409,6 +4430,7 @@ conclusions.
   installs (0.95.1a, 0.96a, 0.97a); then run `api-diff` once per step to RC8 and let `research report` and `atlas
   migrations --old-api/--new-api` use the results, so migration proposals rest on the authoritative API change, not
   only on mod-pair co-occurrence.
+  **Parked 2026-11-23 (owner, roadmap reassessment: "Park Exotica + minor items").**
 - Prohibited: a research conclusion never turns into a migration rule automatically. Sequence: research finding ->
   validated pattern (conditions) -> migration candidate (can it safely guide an intervention?) -> approved deterministic
   rule (explicit approval, safety checks, regression evidence). Learn API patterns from other mods, never copy their code
@@ -4501,6 +4523,7 @@ PERFORMED until the next rig session):
   against it, closing "one Workshop copy loaded in game" and the capacity recompute question in one run.
   **Closed 2026-11-19 (roadmap review): culled.** A VoidSmith feature; belongs in that repository's plan.
 - 79.4 Duel, raid and capacity sub-mods: the same manifest echo, done marker and scenario format as the main probe.
+  **Closed 2026-11-23 (owner, roadmap reassessment: "Cull low-value"): culled.** Consistency work for side mods; the main probe already has all three (78.1, 78.4, 78.6).
 - 79.5 Project Go assurance import: read the new record blocks (fingerprint, content parity, scenario, exercised) as
   gate evidence; a HOLLOW member never passes CAMPAIGN.
   **Closed 2026-11-19 (roadmap review): culled.** A Project Go feature; belongs in that repository's plan.
@@ -4526,6 +4549,7 @@ removed upstream in 0.9.9e together with its `submarkets.csv` row, so the Templa
 newer base, not by a BridgeForge change. Owner decision pending: re-create it for RC8 (like the Crusade, a separate
 `jars/` class plus the data row) or accept the upstream removal. `TEM_Radiated` (the Irradiated World condition) was
 removed the same way and has no gameplay worth restoring unless a world uses it.
+**Owner 2026-11-23: kept queued** (after the G series).
 
 **77.16 Dropped-feature sweep across the queue (2026-10-20, report-only).** `scan_port.dropped_features(old, new)` was run
 against each workspace's `original/` download (308 of 316 had one; local report in the session scratch,
@@ -4550,6 +4574,8 @@ strip/remove wording, 200 with nothing. Reviewed so far:
   (31, decided), Ironclads (4 classes, 25 rules), SEEKER (5), Better Deserving S-mods (4), Mirfak Parcel Service (4),
   AI-War (2), Blackrock Drive Yards (2 settings), Maelstrom Imperium Unofficial Expansion (2). Not yet run before
   `archive`; strip and fold emission into REMOVALS.json waits for the code that applies a strip or retires a folded mod.
+
+**Owner 2026-11-23: kept queued** (after the G series).
 
 **Automation, gap coverage and hand-work reduction (proposed 2026-10-20, owner: "if there is further automation, gap
 coverage or things to make hand work easier please add to roadmap").** Each closes a gap this session hit by hand.
@@ -4628,6 +4654,7 @@ roadmap line, add a rig step), printing what it changed. Unticked boxes do nothi
 **77.21 Natural exit everywhere.** `tools/bf-test.ps1 launch` and `boot_test` still end the game with `taskkill /T /F`;
 route them through `exit_observation` so every live record can carry NATURAL/KILLED, not only `probe-group live
 --natural-exit`.
+**Closed 2026-11-23 (owner, roadmap reassessment: "Cull low-value"): culled.** `probe-group live` already records a natural exit (78.6, `graceful_exit.py`).
 
 **77.22 Evidence queue and rig-session planner.** `board --live-pending` gathers every LIVE PENDING / NOT_RUN gate from
 BridgeForge, Salvor, VoidSmith, SPW and Project Go status files (via a small machine-readable gate list per repo, R7),
@@ -4696,6 +4723,7 @@ real-mod acceptance or runtime-record change is included.
 ## Proposed ideas (2026-10-06, owner asked for per-project ideas; proposed, not approved) (continued)
 
 70. **Hardening BridgeForge overall (owner 2026-10-12: 'plan any possible hardening').** **Partly implemented; original plan: `docs/HARDENING_PLAN.md`.** Grounded in measurements (cli.main() is 2,852 lines; 182 non-atomic `write_text` sites against one atomic writer; 47 delete sites; 186 workspace accepted-finding baselines; ruff checks only syntax and pyflakes) and in the defect classes of 2026-10-11/12: shared generated launcher files and an agent flag after the main class, `merge_configs` silently dropping keys, accepted baselines hiding Zorg's port bugs, archives not tied to the tested files, stale Atlas cache key, predictions treated as findings. Five phases: H1 small and high value (atomic writes, guarded deletes, launcher self-test, config contract tests, baseline hygiene, archive guard, rig control, known-failure baseline), H2 (split cli.py and scanner.py behind golden snapshots, lint and types, untrusted-input limits, test reliability), H3 evidence discipline (prediction ledger, live ledger, roadmap-lint, base-rate checks), H4 portability (line endings, long paths, pip-audit, snapshots), H5 agent guardrails. Four owner decisions listed in the plan.
+    **Archive note 2026-11-23 (owner, roadmap reassessment):** items 70-75 are history from the 2026-10 hardening and planning phase; their open parts live in later items, except item 74's pending live acceptance, which stays open in item 74.
     - 70 progress 2026-10-12 (H1.1, H1.2, H1.4, H1.5, H1.6, plus regression findings): `bridgeforge/safeio.py` (`atomic_write_text/json`, `safe_rmtree/safe_unlink` refusing paths outside the stated roots, the roots themselves and links out of them); 11 state writers use it (mod changelog, group config, enabled_mods, workspace manifest, baselines, archive note, group plan) and 12 tree deletes (3 left, in escalation and java_matrix); `tests/test_safeio_ratchet.py` with `tests/safeio_baseline.json` lets bare `write_text` (171 left, was 182) and `shutil.rmtree` only shrink. `tests/test_probe_contract.py`: every probe config key Python writes is read by `ProbeConfig.java` (or listed Python-only), every key it reads is written, `merge_configs` keeps every member key, setup kinds match both sides. `bridgeforge/baseline_audit.py`: baselines carry a stamp (mod version, date) and per-key reasons; `baseline-audit` lists OK/STALE_VERSION/UNSTAMPED/NO_BASELINE (real queue: 189 unstamped, 124 none); `baseline-accept` re-stamps with a written reason; `archive_gate` refuses a stale or unstamped baseline unless `reports/SHIPPED_CHANGES.json` has a written `baseline` reason (owner decision 2026-10-12). `archive_mod` writes `Changes since the previous archive` (files and, inside changed jars, classes) into every ARCHIVE_NOTE (the live-result-current gate, 36.11, already covered 'shipped files are the tested ones'). Regression pass REG-20261012 findings: with mission-fleets and class-sweep now merged into group configs, their FAIL lines had no owner and whole groups read UNCLEAR; group_members now carries missions and classes, summary lines are skipped, a class-sweep NoClassDefFoundError naming a disabled well-known library (Console Commands, LunaLib, MagicLib, LazyLib, Radar) is an optional integration, not a failure, and `probe-group regress --rejudge SOURCE` re-judges saved logs with no game. Real results so far: Aivon-Republic's missions name two variants that do not exist (aiv_marabeth_standard, aiv_rostell_FS). Tests: `tests/test_safeio.py`, `test_safeio_ratchet.py`, `test_probe_contract.py`, `test_baseline_audit.py`, `test_archive.py`, `test_probe_group.py`, `test_regress.py`.
     - 70 H1.3 and H1.8 built 2026-10-12: `env_check.verify_rig_launchers` reads what every rig launcher really passes to java and fails `java-matrix setup` on `agent-after-main-class` (a `-javaagent` after the main class is an application argument), `prepatcher-not-last-agent`, `argfile-missing`, `prep-launcher-without-agent`, `plain-launcher-with-agent` and `argfile-shared-between-variants`; `env-check` now counts only agents before the main class and resolves `%RT%` argument files for a relative launcher path (it did not). `tests/known_failures.json` + `test_guard`: a known environmental failure (`test_child_with_cwd_inside_target_is_found`, expires 2026-11-12, reason recorded) no longer fails the full run, a second failure, an expired entry or an unnamed failure still does, a now-passing entry is reported, and `--suite-line` names it. Tests: `tests/test_launcher_selftest.py`, `tests/test_test_guard.py`.
     - 70 H3.2 and H3.3 built 2026-10-12: `bridgeforge live-ledger [--mod M] [--attention]` reads the existing run records (`In operation/_live/*.json`) and regression passes (`_regress/*.json`) into one list per mod (last PASS with version, last run, mods whose latest run was not a PASS); `bridgeforge roadmap-lint` fails when a ROADMAP item marked Done names no test file, `Tests:` line, live test id or docs/ evidence file (329 items; 3 given evidence, 1 stub tolerated in `tests/roadmap_lint_baseline.json`, which may only shrink). Tests: `tests/test_live_ledger.py`, `tests/test_roadmap_lint.py`.
@@ -4747,23 +4775,35 @@ real-mod acceptance or runtime-record change is included.
 **Update 2026-10-18: DOC-001 fixed** (`3304c1d1`): `archive --refresh` and `probe-group record --archive --refresh` move the old archive to `Done/_replaced-<date>/<Mod>[-N]` and restore it if the new write fails (`tests/test_archive_preserves.py`, 5 tests, plus the group-path assertion in `tests/test_probe_group.py`). Not yet exercised on a real `Done/` archive: the first real refresh is the check. The paragraph above is kept as the record of what the audit found.
 
 76. **Bounded execution and analysis reuse (S2; owner 2026-10-18: 'add to roadmap. Anything else like this we can improve or add?').** **Plan only:** `docs/EXECUTION_EFFICIENCY_PLAN.md`. Extend existing `revive-queue --jobs` and Java matrix `--parallel`, not a new distributed platform. E1 measures bottlenecks/resources; E2 reuses content/context-bound facts and recomputes affected work; E3 runs independent analysis under bounded resource/write ownership; E4 integrates cancellation, input-bound resume and bottleneck reporting. S1 supplies case identities, ownership and serial timing; S2 owns throughput delivery. Compare serial/cold/warm/parallel results and recovery controls before changing defaults; preserve qualification, owner review and live limits. Proposed adjacent improvements are analysis reuse, selective recomputation, backpressure, duplicate-work coalescing and observable recovery. No application implementation, expanded live concurrency or new policy is authorized by this planning entry.
+    **Closed 2026-11-23 (owner, roadmap reassessment: "Close superseded/obsolete").** Superseded: S2 gates nothing since 2026-11-17 (item 97), and its reuse and parallel work is queued as 95.7 (scan cache) and 95.9 (parallel scanning).
 
 77. **Recommendations after items 73 and 75 (2026-10-18; owner: "take a look at roadmaps and add recommendations as well as long term recommendations").** **Proposed, not approved; nothing here is scheduled.** Grounded in the state recorded in `docs/ROADMAP_STATUS.md` (items 73/75 implemented offline, every live gate pending) and the proposed S1-S4 strategy (`docs/STRATEGIC_ROADMAP.md`, `docs/VISION.md`); it does not change that strategy or any owner decision.
     - **Near term, in order (turn offline work into evidence):**
       - 77.1 **R1 live proof first** (`docs/LOCAL_HANDOFF.md` 0b item 1). Acceptance now fails closed without a bound run, so until one bound run passes and one edited candidate is refused, no new archive can be accepted. This is the single most valuable next hour of rig time.
+        **Closed 2026-11-23 (owner, roadmap reassessment: "Close superseded/obsolete").** Bound runs are now routine: live runs read `run-manifest check` ACCEPTABLE, and drifted ones are refused at record (93.41, 93.60).
       - 77.2 **Register the queue** (`finding-stats --rescan-stale --vanilla-core ...`, 0b item 2) and publish the first authoritative counts as CURRENT / STALE / UNKNOWN buckets. Every later measure (unlocks, review burden, auto-open reasons) depends on fresh, fingerprinted scans.
+        **Closed 2026-11-23 (owner, roadmap reassessment: "Close superseded/obsolete").** Never approved or scheduled (item 77's header); `target-bump` has since measured the whole queue on the new target (90.2).
       - 77.3 **Small code follow-ups** that unblock the sister projects: `manifest.java_version` and `process_exit_code` in run records (Project Go's runtime gates); accept Project Go's new schema-v1 unit kinds and fields, or agree a schema 2 with Go and shared conformance fixtures; a public installed-mods function for Salvor; a hard timeout for `test_locks` so a hung `open_files()` fails instead of stalling a suite (`docs/ROADMAP_STATUS.md`, cross-project follow-ups).
+        **Closed 2026-11-23 (owner, roadmap reassessment: "Close superseded/obsolete").** Built: run records carry `java_version` and `process_exit_code`, `save_doctor.installed_mods` is Salvor's provider, and the lock-test timeout and translation-schema slice are done (the 2026-10-19 entries on this page).
       - 77.4 **Owner decisions waiting:** whether `revive` should try REVIEW-only fixers (B1 guards, B4 preset merge) before packeting; a command and approval flow for B6 weapon-row drafts; whether to build B3's detach-before-save template now that F2 finds 29 compiled cases.
+        **Closed 2026-11-23 (owner, roadmap reassessment: "Close superseded/obsolete").** A list of owner questions, not work; item 73's status entry keeps the open ones (B1/B4 before packeting, B3 not built).
       - 77.5 **First revision through `revise prepare` -> bound live run -> `revise finalize`**, on Zorg bf.10 or EPTA 2.1.3+bf.2 (item 74), with the R6 save-upgrade scenario for Zorg. That one run exercises R1, R5 and R6 together and closes item 74.
+        **Closed 2026-11-23 (owner, roadmap reassessment: "Close superseded/obsolete").** Never approved or scheduled (item 77's header); copied-save upgrades are queued as 97.1, and item 74 keeps its own open steps.
       - 77.6 **Release 0.4.0 after 77.1-77.5.** Source is 0.3.0 with 300+ commits since `v0.3.0` and no GitHub release for it; 0.4.0 is warranted by items 73/75, but tag it only once R1 has live evidence. Salvor pins `bridgeforge>=0.3,<0.4`: widen its range in the same change, after its provider contract test passes on 0.4.0.
+        **Closed 2026-11-23 (owner, roadmap reassessment: "Close superseded/obsolete").** v0.4.0 was tagged and published on 2026-11-17 (96.4), and Salvor now pins `bridgeforge>=0.4,<0.5`.
       - 77.7 **Local agent hygiene.** Agents work in a git worktree, never in the main checkout; run `agent-diff-check` before merging; leave no untracked scripts in the checkout (the 2026-10-18 leftovers made the pre-commit hook fail for every commit there). Keep every document under 64k tokens, paged with next-page notes (owner 2026-10-18; `ROADMAP.md` and VoidSmith's work log were split that day).
+        **Closed 2026-11-23 (owner, roadmap reassessment: "Close superseded/obsolete").** A standing rule, not work: agents use worktrees, and `agent-diff-check` (70) and `hygiene` (77.13) are built.
     - **Long term, by proposed release:**
       - 77.8 **S1, reproducible revival case.** Build the case record on what now exists: R1 manifests (what ran), R2 registry (what was scanned), the escalation ledger and rulings (what was decided), R5 journals (what shipped). The gap is one object that ties them per mod version; `docs/ARCHITECTURE_GAPS.md` G1/G2 describe it. Measure S1 by "a second person can replay why this archive is what it is".
         **Done 2026-10-25 for the owner-accepted bounded S1 scope** (owner: "Approve the controlled repair pilot"; "Accept the bounded S1 baseline"). [S1 completion review](docs/S1_COMPLETION_REVIEW.md) records artifact-only independent agent resume, requalification, correct stale-evaluator refusal, fresh local archive/exact retry, and current P3-P6 refusal controls. The exact-subject controlled comment-encoding repair has review PASS and full javac/RC8 Janino PASS (1/1), with executable code unchanged; unrelated whole-mod findings remain refused. Owner review time is "not measured", retained as NOT_MEASURED in the accepted baseline. Tests: `tests/test_case_identity.py`, `tests/test_case_workspace.py`, `tests/test_case_qualification.py`, `tests/test_case_operations.py`, `tests/test_case_cli.py`; fresh guarded suite 2,717 tests, OK (12 unchanged skips), hermeticity PASS. No production code or safety baseline changed in closeout; prior whole-case failures, save upgrades/publication and S2-S4 gates remain separate.
       - 77.9 **S2, bounded production lane.** Item 76's measured parallelism plus item 73's metrics: track review minutes per mod, false-positive and refusal rates per check and fixer, and promotion of recurring agent fixes, not just cleared finding counts. A fixer or check that never fires on real data, or always refuses, should be retired or narrowed. **2026-10-25 continuation:** opt-in pure-parsing reuse measured on the approved eight training cases, three rounds/96 equal complete responses; approximately 8.9% first-scan/28.0% repeated-scan reduction, with measured memory tradeoff and unchanged defaults. Owner 2026-10-25: "Accept the opt-in tradeoff", for this local parsing slice only. Guarded 2,723 tests/12 skips PASS, 83.1469862% coverage; isolated wheel checks PASS. See `docs/S2_ANALYSIS_REUSE.md`. Subsequent private serial/two-worker portfolio trial: three equal/preserved rounds, 43.2% median elapsed reduction, narrow cancel/crash/context/altered-response/existing-lock controls PASS; `docs/S2_PORTFOLIO_TRIAL.md`. Production portfolio/resource/recovery integration, governed recipe promotion and overall S2 acceptance remain open; defaults unchanged.
+        **Closed 2026-11-23 (owner, roadmap reassessment: "Close superseded/obsolete").** Superseded: S2 gates nothing since 2026-11-17, and its remaining work is queued as ordinary items in item 97.
       - 77.10 **S3, behaviour and upgrade qualification.** Make R6 scenarios and soak runs routine for every revision that touches campaign state; grow `docs/RC8_BEHAVIOUR.md` only from observed runs; give the probe a startup marker that echoes the manifest id (R1 slice 2, not built) so log identity stops depending on paths and timestamps.
+        **Closed 2026-11-23 (owner, roadmap reassessment: "Close superseded/obsolete").** Superseded: S3 gates nothing since 2026-11-17 (its remaining work is in item 97), and the probe's manifest-id echo is built (78.1).
       - 77.11 **S4, supportable kit.** Prove a restore on a second machine with R8 before any cutover (item 64); move the rig harness behind a documented, scripted setup so the live gates are not tied to one workstation; keep the agent contract (`AGENTS.md`) and `CLAUDE.md` current with each release.
+        **Closed 2026-11-23 (owner, roadmap reassessment: "Close superseded/obsolete").** Superseded: the owner parked S4 on 2026-11-17 (S4.1-S4.4, item 97).
       - 77.12 **One evidence model across the four projects.** BridgeForge's run records, RC8 behaviour rows and translation method are already consumed by Project Go, Salvor and VoidSmith. Version those contracts (run record, translation schema, save-module API), give each a shared fixture that both sides test against, and change them only in both repositories at once. That is what keeps the sister tools from drifting apart as each grows.
+        **Closed 2026-11-23 (owner, roadmap reassessment: "Close superseded/obsolete").** Superseded: CI's `shared-fixtures` job compares the shared fixtures with Project Go byte for byte (77.23), and item 94 adds sister conformance tests per phase (D3).
 
 <!-- page-nav:start -->
 > End of the last page.
