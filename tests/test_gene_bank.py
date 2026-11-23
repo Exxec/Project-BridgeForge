@@ -82,6 +82,17 @@ class BankTests(unittest.TestCase):
         self.assertIn(superseded[0]["superseded_by"], records)
         self.assertNotEqual(old["root"], Bank(root / "Genes").root_hash())
 
+    def test_a_source_that_changed_after_describe_is_refused(self) -> None:
+        from bridgeforge.genome.bank import source_entry
+        from bridgeforge.genome.gene import describe
+
+        with resolved_temp_dir() as root:
+            base, working, core, _ = _base(root)
+            gene = describe(working, "hull:fx_ship", vanilla_core=core)
+            _write(working / "data" / "hulls" / "fx_ship.ship", json.dumps({"hullId": "fx_ship", "style": "FX_STYLE", "changed": 1}))
+            with self.assertRaisesRegex(BankError, "do not hash to the manifest's sha256"):
+                Bank(root / "Genes").store(gene, working, source_entry(working, "working", base), BUILD, {})
+
     def test_one_manifest_from_two_sources_keeps_two_records(self) -> None:
         # Found banking the pilots: records were filed by manifest alone, so an unchanged gene in a second release would have
         # overwritten the first source's record.
