@@ -82,6 +82,9 @@ def add_parser(subcommands) -> None:
     stage_cmd.add_argument("--queue", type=Path, required=True, help="the boot queue (a folder of workspaces, apart from In operation)")
     evaluate_cmd.add_argument("test_id", help="the run id the boot ran under")
     evaluate_cmd.add_argument("--json", action="store_true")
+    from .bank import add_bank_parser
+
+    add_bank_parser(gene_sub)
 
 
 def _run_boot(args: argparse.Namespace) -> int:
@@ -190,6 +193,10 @@ def run_cli(args: argparse.Namespace) -> int:
         return _run_evidence(args)
     if args.gene_command == "boot":
         return _run_boot(args)
+    if args.gene_command == "bank":
+        from .bank import run_bank_cli
+
+        return run_bank_cli(args)
     if args.gene_command == "contract":
         return _run_contract(args)
     if args.gene_command == "trace":

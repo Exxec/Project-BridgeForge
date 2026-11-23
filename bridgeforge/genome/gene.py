@@ -140,15 +140,20 @@ def keyed_rows(root: Path, table: str) -> dict[str, dict[str, str]]:
     return rows
 
 
-def _row_member(root: Path, entry_path: str) -> dict:
+def row_cells(root: Path, entry_path: str) -> dict[str, str]:
+    """The cells of the csv-row member `table [id]` that its hash covers (the gene bank stores the same bytes, 94.G3)."""
     table, _, rest = entry_path.partition(" [")
     ident = rest.rstrip("]")
     row = keyed_rows(root, table).get(ident)
     if row is None:
         raise GeneError(f"{table} has no row {ident!r} although the closure names it")
     # Only named, non-empty cells, trimmed: cells past the header (DictReader's None key) are not part of the row the game reads.
-    cells = {column.strip(): value.strip() for column, value in row.items()
-             if isinstance(column, str) and column.strip() and isinstance(value, str) and value.strip()}
+    return {column.strip(): value.strip() for column, value in row.items()
+            if isinstance(column, str) and column.strip() and isinstance(value, str) and value.strip()}
+
+
+def _row_member(root: Path, entry_path: str) -> dict:
+    cells = row_cells(root, entry_path)
     return {"what": "csv-row", "path": entry_path, "sha256": hashlib.sha256(json.dumps(cells, sort_keys=True).encode("utf-8")).hexdigest()}
 
 

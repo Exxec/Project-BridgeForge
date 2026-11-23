@@ -14,6 +14,8 @@ docs/PERFORMANCE_WORKBENCH_DESIGN.md
 # Local revival inputs, candidates, completed builds, and generated evidence.
 /In operation/
 /Done/
+# The gene bank (94.G3, docs/GENE_BANK_DESIGN.md): payloads of other authors' mods, never in this repository.
+/Genes/
 /artifacts/
 /.bridgeforge-push-worktree/
 /config/
