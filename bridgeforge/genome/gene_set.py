@@ -191,6 +191,14 @@ def _anchor_missing(carrier: Path, anchor: str, index, campaign) -> str | None:
         if not isinstance(plugin_class, str):
             return "the carrier's settings.json registers no plugin under that key"
         return None if _class_present(index, plugin_class.strip()) else f"the carrier holds no class {plugin_class.strip()}"
+    if kind == "custom-start":  # P4: the carrier's customStarts.json registers it and the carrier holds its class
+        from bridgeforge.genome.gene import custom_start_entry
+
+        try:
+            start_class = custom_start_entry(carrier, ident)["className"].strip()
+        except GeneError as exc:
+            return str(exc)
+        return None if _class_present(index, start_class) else f"the carrier holds no class {start_class}"
     if kind in CAMPAIGN_CSV:
         return None if ident in campaign.rows.get(kind, {}) else f"no {CAMPAIGN_CSV[kind]} row {ident} in the carrier"
     if kind in CAMPAIGN_JSON:
