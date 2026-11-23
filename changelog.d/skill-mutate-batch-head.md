@@ -1,0 +1,1 @@
+- `bridgeforge-pr` skill: `scripts/mutate_batch.py` reuses a CAUGHT or MISSED verdict only at the commit it ran at, so a test committed since is used.
