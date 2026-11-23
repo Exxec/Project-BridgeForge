@@ -21,6 +21,9 @@ from pathlib import Path
 from types import SimpleNamespace
 
 PHASE_KEYS = ("phaseHighlight", "phaseDiffuse")
+# The core's own phase system (RC7 `data/shipsystems/phasecloak.system`, RC8-51). Used when no core is given, so a hull with a
+# PHASE shield and the vanilla cloak still takes its glows (review of slice 21: without it the closure dropped them).
+VANILLA_PHASE_SYSTEMS = {"phasecloak": ("_glow1", "_glow2")}
 
 
 def light_index(root: Path | None) -> SimpleNamespace:
@@ -77,8 +80,9 @@ def hull_facts(ident: str, indexes: list, _depth: int = 0) -> dict | None:
             base = hull_facts(str(spec.get("baseHullId") or ""), indexes, _depth + 1)
             if base is None:
                 return None
-            hints = (base["hints"] | _hints(" ".join(map(str, spec.get("addHints") or [])))) - _hints(
-                " ".join(map(str, spec.get("removeHints") or [])))
+            # The game's skin loader removes hints, then adds them (review of slice 21, javap of ShipHullSpecLoader).
+            hints = (base["hints"] - _hints(" ".join(map(str, spec.get("removeHints") or [])))) | _hints(
+                " ".join(map(str, spec.get("addHints") or [])))
             sprite = spec.get("spriteName")
             system = spec.get("systemId")
             return {**base, "sprite": sprite if isinstance(sprite, str) and sprite else base["sprite"],
@@ -107,4 +111,4 @@ def phase_sprite_paths(ident: str, indexes: list, systems: dict[str, tuple[str, 
     return sorted(found.items())
 
 
-__all__ = ["PHASE_KEYS", "hull_facts", "is_phase", "light_index", "phase_sprite_paths", "phase_systems"]
+__all__ = ["PHASE_KEYS", "VANILLA_PHASE_SYSTEMS", "hull_facts", "is_phase", "light_index", "phase_sprite_paths", "phase_systems"]

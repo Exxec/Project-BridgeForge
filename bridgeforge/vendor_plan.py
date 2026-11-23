@@ -22,7 +22,7 @@ from pathlib import Path
 from bridgeforge.scan.scanner import _load_lenient_json_file, _parse_class_file, _read_csv_rows_lenient, iter_class_files_in_jars
 from bridgeforge.file_hash import sha256_file as _sha256  # 96.5 A10
 from bridgeforge.game_csv import game_rows
-from bridgeforge.phase_sprites import phase_sprite_paths, phase_systems
+from bridgeforge.phase_sprites import VANILLA_PHASE_SYSTEMS, phase_sprite_paths, phase_systems
 
 SCHEMA_VERSION = 1
 KINDS = ("hullmod", "weapon", "wing", "hull", "variant", "shipsystem")
@@ -99,6 +99,12 @@ def _animation_frames(spec: dict, queue, key: str) -> None:
                 queue(f"{prefix}{frame:0{len(digits)}d}{suffix}", f"{key} {field} frame {frame} of numFrames {frames}")
 
 
+def _phase_sprite_files(ident: str, key: str, source: "_Index", vanilla: "_Index") -> list[tuple[str, str, str]]:
+    """Queue entries for the images the game derives from phase hull `ident`'s sprite (RC8-51, 94.G2 slice 21)."""
+    return [("file", path, f"{key} phase sprite: {why} (RC8-51)")
+            for path, why in phase_sprite_paths(ident, [source, vanilla], source.phase_systems(vanilla))]
+
+
 class _Index:
     """What one mod folder defines, keyed the way the game resolves it."""
 
@@ -115,6 +121,7 @@ class _Index:
         self.system = _specs(root, "data/shipsystems", "*.system", "id") if present else {}
         self.sources: dict[str, Path] = {}
         self.jar_classes: dict[str, tuple[str, object]] = {}
+        self._phase: dict[str, tuple[str, str]] | None = None
         if present:
             # Every .java in the mod: loose scripts under data/ and a jar's own source (commonly src/),
             # so a jar class whose source ships with the mod is vendored as source.
@@ -126,6 +133,13 @@ class _Index:
                 info = _parse_class_file(data)
                 if info is not None and info.this_class:
                     self.jar_classes.setdefault(info.this_class.replace("/", "."), (f"{Path(jar).name}!{member}", info))
+
+    def phase_systems(self, vanilla: "_Index") -> dict[str, tuple[str, str]]:
+        """The phase systems of this mod and `vanilla` (RC8-51), read once, at the first hull that asks."""
+        if self._phase is None:
+            known = phase_systems([self, vanilla])
+            self._phase = known if vanilla.root is not None else {**VANILLA_PHASE_SYSTEMS, **known}
+        return self._phase
 
     def defines(self, kind: str, ident: str) -> bool:
         if kind == "variant":
@@ -178,14 +192,6 @@ def vendor_plan(provider: Path, ids: list[str], *, target: Path | None = None, v
 
     def add(what: str, path: str, reason: str) -> None:
         include.setdefault(f"{what}:{path}", {"what": what, "path": path, "reason": reason})
-
-    systems: list[dict] = []  # phase systems (RC8-51), read once, at the first hull
-
-    def phase_sprites(ident: str, key: str) -> None:
-        if not systems:
-            systems.append(phase_systems([source, vanilla]))
-        for path, reason in phase_sprite_paths(ident, [source, vanilla], systems[0]):
-            queue.append(("file", path, f"{key} phase sprite: {reason} (RC8-51)"))
 
     def need_id(kind: str, ident: str, why: str) -> None:
         if isinstance(ident, str) and ident.strip():
@@ -298,7 +304,7 @@ def vendor_plan(provider: Path, ids: list[str], *, target: Path | None = None, v
                         need_id("weapon", ident_, f"{key} builtInWeapons")
                     for ident_ in spec.get("builtInWings") or []:
                         need_id("wing", ident_, f"{key} builtInWings")
-                    phase_sprites(ident, key)
+                    queue += _phase_sprite_files(ident, key, source, vanilla)
                 if kind == "variant":
                     need_id("hull", spec.get("hullId", ""), f"{key} hullId")
                     for field in ("hullMods", "permaMods", "sMods"):

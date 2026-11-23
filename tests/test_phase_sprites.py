@@ -140,7 +140,40 @@ class RuleTests(unittest.TestCase):
         self.assertEqual(paths, ["graphics/ships/fx_ghost_m1.png", "graphics/ships/fx_ghost_m2.png"])
 
 
+    def test_a_skin_listing_phase_in_both_hint_lists_keeps_it(self) -> None:
+        # The game's skin loader removes hints first, then adds them (review of slice 21).
+        skins = {"fx_base.ship": _ship("fx_base", "graphics/ships/fx_base.png"),
+                 "fx_both.skin": {"baseHullId": "fx_base", "skinHullId": "fx_both", "removeHints": ["PHASE"], "addHints": ["PHASE"],
+                                  "spriteName": "graphics/ships/fx_both.png"}}
+        systems = {"fx_dive": {"id": "fx_dive", "phaseHighlight": "_glow1", "phaseDiffuse": "_glow2"}}
+        with resolved_temp_dir() as root:
+            mod = _mod(root, "Base,fx_base,fx_dive,,FRONT,\n", skins, systems=systems)
+            indexes = [light_index(mod), light_index(_core(root))]
+            both = [p for p, _ in phase_sprite_paths("fx_both", indexes, phase_systems(indexes))]
+        self.assertEqual(both, ["graphics/ships/fx_both_glow1.png", "graphics/ships/fx_both_glow2.png"])
+
+
 class ClosureAndLoadTests(unittest.TestCase):
+    def test_without_a_core_the_vanilla_cloak_s_suffixes_still_apply(self) -> None:
+        # Review of slice 21: with no core the closure never learned phasecloak's suffixes and dropped the glows.
+        with resolved_temp_dir() as root:
+            mod = _mod(root, "Ghost,fx_ghost,emp,phasecloak,PHASE,\n", {"fx_ghost.ship": _ship("fx_ghost", "graphics/ships/fx_ghost.png")},
+                       files=("graphics/ships/fx_ghost.png", "graphics/ships/fx_ghost_glow1.png", "graphics/ships/fx_ghost_glow2.png"))
+            plan = vendor_plan(mod, ["hull:fx_ghost"])
+        files = {e["path"] for e in plan["include"] if e["what"] == "file"}
+        self.assertTrue({"graphics/ships/fx_ghost_glow1.png", "graphics/ships/fx_ghost_glow2.png"} <= files)
+
+    def test_a_hull_the_check_cannot_judge_fails_closed(self) -> None:
+        ships = {"fx_diver.ship": _ship("fx_diver", "graphics/ships/fx_diver.png"),
+                 "fx_plain.ship": _ship("fx_plain", "graphics/ships/fx_plain.png"),
+                 "fx_orphan.skin": {"baseHullId": "nowhere_hull", "skinHullId": "fx_orphan"}}
+        with resolved_temp_dir() as root:
+            carrier = _mod(root, "Diver,fx_diver,lib_dive,,NONE,PHASE\nPlain,fx_plain,lib_other,,FRONT,\n", ships,
+                           files=("graphics/ships/fx_diver.png", "graphics/ships/fx_plain.png"))
+            gaps = load_gaps(carrier, _core(root))
+        self.assertEqual(sorted((g["finding"], g["hull"]) for g in gaps),
+                         [("hull-phase-unresolved", "fx_diver"), ("hull-phase-unresolved", "fx_orphan")])  # fx_plain is no phase hull
+
     def test_the_closure_takes_the_mod_s_phase_sprites_and_reports_one_nobody_has(self) -> None:
         with resolved_temp_dir() as root:
             mod = _mod(root, "Ghost,fx_ghost,emp,phasecloak,PHASE,\n", {"fx_ghost.ship": _ship("fx_ghost", "graphics/ships/fx_ghost.png")},
