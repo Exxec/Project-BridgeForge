@@ -54,14 +54,28 @@ class LoadGapTests(unittest.TestCase):
                                                   "graphics/damage/decals.png"])
 
 
+def _styled_hull_mod(root):
+    mod = root / "mod"
+    _write(mod / "mod_info.json", json.dumps({"id": "demomod", "name": "Demo", "version": "1.0", "gameVersion": "0.98.5a-RC7"}))
+    _write(mod / "data" / "hulls" / "ship_data.csv", "name,id\nShip,fx_ship\n")
+    _write(mod / "data" / "hulls" / "fx_ship.ship", json.dumps({"hullId": "fx_ship", "style": "FX_STYLE"}))
+    _write(mod / HULL_STYLES, json.dumps({"FX_STYLE": {"shieldRingColor": [1, 2, 3, 255]}}))
+    return mod
+
+
 class ProofTests(unittest.TestCase):
+    def test_a_gene_set_whose_carrier_lacks_a_style_fails(self) -> None:
+        from bridgeforge.genome.gene_set import prove_set
+
+        with resolved_temp_dir() as root:
+            result = prove_set(_styled_hull_mod(root), "hull:fx_ship", root / "set", vanilla_core=_core(root), quiet=True)
+            proof = json.loads((root / "set" / "set-isolation-proof.json").read_text(encoding="utf-8"))
+        self.assertEqual((result["verdict"], result["load_gaps"]), ("FAIL", 1))
+        self.assertEqual(proof["load_gaps"][0]["finding"], "hull-style-undefined")
+
     def test_a_hull_gene_whose_style_the_carrier_lacks_fails_isolation(self) -> None:
         with resolved_temp_dir() as root:
-            mod = root / "mod"
-            _write(mod / "mod_info.json", json.dumps({"id": "demomod", "name": "Demo", "version": "1.0", "gameVersion": "0.98.5a-RC7"}))
-            _write(mod / "data" / "hulls" / "ship_data.csv", "name,id\nShip,fx_ship\n")
-            _write(mod / "data" / "hulls" / "fx_ship.ship", json.dumps({"hullId": "fx_ship", "style": "FX_STYLE"}))
-            _write(mod / HULL_STYLES, json.dumps({"FX_STYLE": {"shieldRingColor": [1, 2, 3, 255]}}))
+            mod = _styled_hull_mod(root)
             prove(mod, "hull:fx_ship", root / "proofs", vanilla_core=_core(root))
             isolation = json.loads((root / "proofs" / "isolation-proof.json").read_text(encoding="utf-8"))
         self.assertEqual(isolation["verdict"], "FAIL")
