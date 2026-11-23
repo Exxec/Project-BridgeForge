@@ -2607,7 +2607,12 @@ history as the closure benchmark, a cross-repository trace check, an early Java 
     - the closure's member and missing image;
     - the load gap, with the core's copy counted;
     - a hull gene's proof carrying its glows;
-    - the shared-glow leak.
+    - the shared-glow leak;
+    - a mod's system replacing the core's of the same id;
+    - a skin that removes the `PHASE` hint.
+
+    Mutation-checked: 14 mutants, five of them taken from the javap facts. Two survived (a mod's system id losing to the
+    core's; `removeHints` ignored) until the last two tests were added; then all were caught.
 - 94.G3 **Gene bank**: content-addressed store, alleles across the corpus, lineage, licence state; RevenantLib distributes genes
   from vanished authors (GD-3). The store's payloads live under `data_root()`, like `Done/`, never in this public
   repository; only manifests of the owner's own or permitted content become committed fixtures (2026-11-19).
