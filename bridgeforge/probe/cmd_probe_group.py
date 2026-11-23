@@ -444,6 +444,9 @@ def _probe_report(args: argparse.Namespace, queue: Path, rig: Path) -> dict | in
             slices = ", ".join(f"round {r} (hulls {h})" for r, h in zip(rounds["missing"], rounds["missing_hulls"]))
             print(f"  WARN combat: {slices} of {rounds['planned']} never started a battle (battles fought rounds "
                   f"{', '.join(map(str, rounds['started'])) or 'none'}); those hulls were not in combat")
+        for number, end in enumerate(rounds.get("ended") or [], 1):
+            if end["reason"] in ("side-wiped", "engine-ended"):  # 96.13: won early, so later-deployed hulls may not have fought
+                print(f"  combat: battle {number} ended early ({end['reason']}): {end['detail']}")
     return result
 
 

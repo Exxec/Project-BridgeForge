@@ -105,8 +105,14 @@ def combat_rounds(log_text: str) -> dict:
         elif last is not None:
             started.append(last)
     missing = [number for number in range(1, planned + 1) if number not in started]
+    # Probe 0.3.4 (96.13): why each battle ended and who was left; "side-wiped" and "engine-ended" are battles won early.
+    ended = [{"reason": m["reason"], "detail": m["detail"]} for m in _COMBAT_END.finditer(log_text)]
     # A round the game never defined (a run stopped in an earlier round) has no hull range in the log.
-    return {"planned": planned, "started": started, "missing": missing, "missing_hulls": [hulls.get(number, "?") for number in missing]}
+    return {"planned": planned, "started": started, "missing": missing, "missing_hulls": [hulls.get(number, "?") for number in missing],
+            "ended": ended}
+
+
+_COMBAT_END = re.compile(r"BF-PROBE\|[^|]*\|combat-end\|[A-Z]+\|(?P<reason>[a-z-]+)\|(?P<detail>[^\r\n]*)")
 
 
 # Greedy to the line's last `]`: a folder name may hold one (review of 93.65, 2026-11-20).

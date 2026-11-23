@@ -991,7 +991,19 @@ class CombatRoundsTests(unittest.TestCase):
     def test_probe_0_3_2_fought_round_one_twice_and_never_round_two(self) -> None:
         # G1-LIVE3: round 1 started and ended, the game defined round 2 after the battle, the restart defined round 1 again.
         rounds = combat_rounds(self._log("1/2/1-60", "START", "END", "2/2/61-113", "1/2/1-60", "START", "END"))
-        self.assertEqual(rounds, {"planned": 2, "started": [1, 1], "missing": [2], "missing_hulls": ["61-113"]})
+        self.assertEqual(rounds, {"planned": 2, "started": [1, 1], "missing": [2], "missing_hulls": ["61-113"], "ended": []})
+
+    def test_probe_0_3_4_says_why_each_battle_ended(self) -> None:
+        # 96.13: P962SA2-LIVE-0985a-20261119's frigate won early and the probe wrote no END; 0.3.4 says why it ended.
+        prefix = "9 [main] INFO  com.bridgeforge.probe.ProbeLog  - BF-PROBE|0.3.4|"
+        log = self._log("1/2/1-60", "START") + (
+            f"{prefix}combat-end|INFO|side-wiped|t=12s player=sa_frigate enemy=none\n"
+            + self._log("END", "2/2/61-105", "START")
+            + f"{prefix}combat-end|INFO|time|t=60s player=a,b enemy=c\n" + self._log("END"))
+        rounds = combat_rounds(log)
+        self.assertEqual(rounds["ended"], [{"reason": "side-wiped", "detail": "t=12s player=sa_frigate enemy=none"},
+                                           {"reason": "time", "detail": "t=60s player=a,b enemy=c"}])
+        self.assertEqual(rounds["missing"], [])
 
     def test_a_restart_that_started_nothing_leaves_its_round_out(self) -> None:
         # SR3-LIVE-0985a-20261117: round 2 was defined after the battle and no battle followed.
@@ -1009,7 +1021,7 @@ class CombatRoundsTests(unittest.TestCase):
         self.assertEqual((rounds["started"], rounds["missing"]), ([1, 2], []))
 
     def test_a_log_without_combat_plans_nothing(self) -> None:
-        self.assertEqual(combat_rounds("nothing\n"), {"planned": 0, "started": [], "missing": [], "missing_hulls": []})
+        self.assertEqual(combat_rounds("nothing\n"), {"planned": 0, "started": [], "missing": [], "missing_hulls": [], "ended": []})
 
     def test_the_group_report_carries_the_rounds(self) -> None:
         with resolved_temp_dir() as root:

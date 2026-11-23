@@ -1,0 +1,1 @@
+- Probe 0.3.4 writes a battle's END lines when the game ends combat itself or one side is wiped out, with a `combat-end` line naming the reason and the ships still alive; `probe-group report` shows a battle that ended early (96.13). Item 93.49 is closed: its stall was the harness's short combat wait, fixed by 93.62.
