@@ -1063,6 +1063,7 @@ unproven).
   `test_render_shortens_obfuscated_member_names_and_the_json_keeps_them`).
   **Owner 2026-11-22:** (e) parked ("For everything else I will follow your recommendations."): one working rig; parked until
   a new machine or game build.
+  **(g) Done (verified 2026-11-23):** `live_run` reads the probe's `combat-round|INFO|round N of M` line (`ROUND_LINE`) and records stages `combat-1` to `combat-M` (`tests/test_live_run.py`); **(h) Done (verified 2026-11-23):** `revive --draft-report` passes its providers to the report draft (93.36; `tests/test_revive.py` `test_the_report_draft_resolves_libraries_where_the_scan_does_and_in_named_providers`).
 - 95.13 (S) **target-impact points at `relink`.** The three RELINK mods (AoTD Vaults of Knowledge 5.0.7, Broken Star, Nightcross)
   and Sunrider share one member: `StarSystemGenerator.addStableLocations(StarSystemAPI, int)` returns a `List` on RC7.
   `bridgeforge relink` already recompiles return-type-only calls from shipped or decompiled source, unedited; target-impact's next
@@ -1114,7 +1115,7 @@ unproven).
 **Review and decisions D1-D4 (2026-11-17):** FEATURE_GENOME_ROADMAP.md section 14. G1 starts after item 96 (D1),
 no GUI or multi-game platform (D2), sister conformance tests when their phase starts (D3), BridgeForge stays Salvor's
 save-diagnosis provider (D4); work packages WP0-WP7 in the order recorded there.
-**Approved strategy addition (GD-1); in progress since 2026-11-19** (owner: "then begin G series after that"; G1's WP1-WP4
+**Approved strategy addition (GD-1); in progress since 2026-11-19** (owner: "then begin G series after that"; G1's WP1-WP6
 done, below). Design, decisions, estimate and sister entries:
 [docs/FEATURE_GENOME_ROADMAP.md](docs/FEATURE_GENOME_ROADMAP.md). Ids: phases 94.G1-94.G7, decisions GD-1-GD-5,
 refinements GR-1-GR-6 (approved 2026-11-17: one pinned gene.json contract with conformance tests, a gene census before G2,
@@ -1339,6 +1340,7 @@ history as the closure benchmark, a cross-repository trace check, an early Java 
 
     Mutation-checked: dropping the writer exclusion, nested crediting, the self-exclusion, the `save/` limit or the
     `read_mod_info` exclusion each fails a test.
+  **94.G1 Done (verified 2026-11-23):** WP1 to WP6 are each Done 2026-11-19 above (`bridgeforge/genome/gene.py`, `contract.py`, `trace.py` and `sisters.py`, `bridgeforge/licence_ledger.py`, `genome/evidence.py`, `bridgeforge/duplication_audit.py`; `tests/test_gene.py`, `test_gene_contract.py`, `test_gene_trace.py`, `test_licence_ledger.py`, `test_gene_evidence.py`, `test_duplication_audit.py`).
   **GR-2 Done 2026-11-19** (the gene census, before G2).
   - `bridgeforge gene census CORPUS --write OUT` (`bridgeforge/genome/census.py`) counts, per mod:
     - feature kinds: the six content tables, variants, factions, industries, market conditions, abilities and `rules.csv`
@@ -2562,6 +2564,7 @@ fixes of 93.28. 93.26-93.35 are that day's findings.
   line, Eridani's translated rules lines, crafted descriptions present in the codex.
 - 93.11 **AI-replacement compat set.** The owner runs AI Tweaks, and the module/spawned-ship captain crash is AI-replacement specific
   (RC8 report pending confirmation); a standard compat set with it turns that risk into a tested one.
+  **Partly built (verified 2026-11-23):** `bridgeforge/compat_sets/standard.json` includes `aitweaks` (`tests/test_compat_sets.py`); left: a run on RC7 with that set.
 - 93.12 **Paired before/after runs.** The same probe scenario on the RC8 rig with the original mod and on the 0.98.5a rig with the
   revived one, diffed (`behavior-diff` exists; nothing pairs the runs).
   **Owner 2026-11-22:** parked ("For everything else I will follow your recommendations."): it doubles every run for little
@@ -2595,6 +2598,7 @@ fixes of 93.28. 93.26-93.35 are that day's findings.
   there (`Preferences.userRoot().node("/com/fs/starfarer").get("serial", null)`, javap 2026-11-17), and both the launcher and the
   direct start (93.21) check it. `rig-doctor` and `smoke`/`live` check that the value exists (never read out, print or copy it)
   and refuse at once with the remedy: start the launcher on that machine once and enter the key.
+  **Done (verified 2026-11-23):** `rig-doctor` checks that the licence key is stored, without reading it (`bridgeforge/rig/rig_doctor.py` `_check_launcher_prefs`, built under 93.28; `tests/test_rig_prefs.py`).
 - 93.21 **Start the game without the launcher.** RC7's `StarfarerLauncher.main` checks the system property `launchDirect`; when
   it is set and the stored key validates, it starts the game at `startRes` (`WxH`), `startFS` and `startSound` and never builds
   the launcher (javap 2026-11-17; RC8's jar has the same four names in the same classes, not disassembled). The launcher's own
@@ -3655,23 +3659,28 @@ A dual target through `mod_info.json` alone is not possible for mods that break:
   is `checkIfInPopulatedSystem`. Content: no hull, weapon, wing, hull mod or ship system removed; 115 story and dev `rules.csv`
   ids removed; new `ship_data.csv` columns `parts/dmod`, `salary`, `salMult`; `settings.json` drops
   `factionCommissionStipendPerLevel` and gains a `rules` list of rule files and about 180 `ext_*` keys.
+  **Done (verified 2026-11-23):** the measurement is recorded above and `api-diff` (`bridgeforge/api_diff.py`, registered in `cli_commands.py`) is built; the output files are local and were not re-read.
 - 89.2 Built `target-impact OLD_CORE NEW_CORE [roots] --write DIR`: per mod, what fails on the new core and not the old (jar
   linkage, interface contracts, dropped call forms; data: rule ids a mod overrides that were removed, replaced CSVs lacking new
   columns, settings keys read and removed), with progress and a checkpoint. First run (471 mod folders in `Done/` and
   `In operation/`, before the data layer): BREAKS 36, RELINK 4, CLEAN 431; `Done/` archives: 10 break, 2 need a relink.
   `tests/test_target_impact.py`.
+  **Done (verified 2026-11-23):** `target-impact` is built (`bridgeforge/target_impact.py`; `tests/test_target_impact.py`).
 - 89.3 Gated rules (applied only when the target core's own API jar lacks the old member and has the new one):
   `new ShipAIConfig()` -> `(null)` (RC8's defaults exactly, both sources), `isBeingIgnored()` -> `(false)`,
   `Misc.getOfficerSalary(p)` -> `(p, Misc.isMercenary(p), false, false)` and `(p, b)` -> `(p, b, false, false)`; the
   `rc8-signature-changed` check and fixer pass the core (`TargetGatedRewriteTests`).
+  **Done (verified 2026-11-23):** the target-gated rules are built, `TargetGatedRewriteTests` in `tests/test_signature_rewrites.py` (`test_newer_target_flags_and_rewrites_each_dropped_form`, `test_rc8_target_leaves_the_old_forms_alone`, `test_no_target_core_means_no_gated_rule`).
 - 89.4 Finding `jar-call-signature-changed` (auto, REVIEW) and fixer: the same calls rewritten in jar bytecode (ASM
   `append-constant-argument`, a fresh constant pool so no stale Methodref remains for linkage); `jar-linkage-unresolved` no longer
   repeats them. Polaris Prime's and RevenantLib's jars rewrite as expected (dry run); the test runs the rewritten class with
   `-Xverify:all` (`tests/test_jar_call_rewrites.py`).
+  **Done (verified 2026-11-23):** finding `jar-call-signature-changed` and its jar-bytecode fixer exist (`bridgeforge/jar_call_rewrites.py`, ASM `append-constant-argument`); `tests/test_jar_call_rewrites.py` `test_scan_fix_rescan_and_run_on_the_new_core` rewrites and runs the class.
 - 89.5 Finding `forwarding-class-method-missing` (auto, REVIEW) and fixer: a class implementing a game interface by forwarding to
   one field gets forwards for the methods the target added and loses `@Override` on methods no supertype has any more. RevenantLib's
   `dl_DroneAPI` compiles against 0.98.5a after it and 89.3 (6 forwards, 1 call, 1 `@Override`; scratch copy, working copy untouched)
   (`tests/test_forwarding_methods.py`).
+  **Done (verified 2026-11-23):** finding `forwarding-class-method-missing` and its fixer exist (`bridgeforge/forwarding_methods.py`); `tests/test_forwarding_methods.py` `test_scan_fix_and_compile_on_the_new_core` compiles the result on the new core.
 - 89.6 Fixes: `linkage._resolve` walked a constructor up to `Object.<init>()V`, so a removed no-argument constructor was never
   reported; `linkage` reads jar entries with `zipsafe.read_limited` and indexes `txw2-3.0.2.jar`; `compile-check` built the full
   provider index for every mod with dependencies (74 of AI-War's 130 s), now ids map to folders from `mod_info.json`, cached;
@@ -3697,6 +3706,7 @@ A dual target through `mod_info.json` alone is not possible for mods that break:
 - 89.10 Measured 2026-11-15: a replaced CSV missing columns is tolerated. Ironclads replaces three data CSVs lacking 13-17 of RC8's
   columns each and was LIVE_VALIDATED on RC8, so `target-impact` lists `replace-lacks-new-columns` as information (no REVIEW verdict
   by itself) and no blank-column fixer was added (it would change nothing).
+  **Done (verified 2026-11-23):** `bridgeforge/target_impact.py` lists `replace-lacks-new-columns` in `INFORMATIONAL` (no verdict by itself) and no fixer exists, as decided (`tests/test_target_impact.py`).
 - 89.11 **Done 2026-11-15.** `target-impact` writes a worklist: per mod that breaks, the next steps in order (the gated `fix`
   commands with the new core, a relink through `jar-packets`/`patch-jar-class`, a hand port, a review) and `fixers_only` when the
   gated fixers alone clear it, with a count in the report. Also fixed: the ASM and AST helpers were cached by source hash only, so a
@@ -3756,6 +3766,7 @@ approved for now set in roadmap").** Each entry names the hand work it replaces.
   EXO-MANUAL-20261027F; a fix that used it never ran). Add the RC8_BEHAVIOUR row, and have `delegate-method` and
   `patch-jar-class` refuse a helper class whose constant pool names `java/lang/reflect/*` or `java/io/File`; the safe form is
   MethodHandles with the reflect objects typed as Object (how Exotica's RefitButtonAdder does it).
+  **Partly built (verified 2026-11-23):** the RC8-40 row is in `docs/RC8_BEHAVIOUR.md`, `bridgeforge/scan/scan_jarchecks.py` flags a jar class naming `java/lang/reflect/*`, `java/io/File` or `java/nio/file/*`, and `bridgeforge/rebuild_jar.py` refuses one; left: the same refusal in `delegate-method` and `patch-jar-class` (`bridgeforge/delegate_method.py`, `bridgeforge/bytecode/jar_patch.py`), which have none.
 - 88.15 `save-slots SAVE [SAVE2]`: per fleet member and per module slot, the mod tags (a prefix such as `$$EXOTICA$$`) and
   hull mods from a campaign.xml, and the difference between two saves. The saves were the decisive evidence in every #76 run;
   each was read with a hand script (`save_slots.py`).
@@ -3771,6 +3782,7 @@ approved for now set in roadmap").** Each entry names the hand work it replaces.
 - 88.19-88.23 below come from the Ironclads v.11+bf.2 runs of 2026-10-30 (RC8-41, RC8-42). Proposed, not started.
 - 88.19 `live --save-reload` calls a reload LIVE_DONE at the compare line, before the load ends: ICBF2-J28FR's Fatal came 243 ms
   later, was reported as LIVE_DONE, and `log-triage` said FATAL=0. Stay up after the compare line and fail on a dialog.
+  **Done (verified 2026-11-23):** completed under 88.22 (PR #215): `save_reload_run.drive_reload` stays up `RELOAD_SETTLE_SECONDS` after the compare line and fails on a dialog, a Fatal line or an exit (`tests/test_save_fingerprint.py` `DriveTests`).
 - 88.20 Fast Rendering launchers set `-XX:+ShowMessageBoxOnError`. The box outlives the killed java (owner becomes csrss) and blocks
   every click of later runs; the watcher does not list it (two false LIVE_STUCK at new-game, CTL30-J28FR). Detect and record its
   text, press No, and refuse to start while one is open. The scratch driver did this with EnumWindows and BM_CLICK.
@@ -4002,6 +4014,7 @@ See [completion evidence](docs/REFACTOR_B3_COMPLETION.md) and [stack](docs/REFAC
 Owner review/merge, B4-B6 and all live gates remain open; LIVE TEST NOT PERFORMED.
 
 B4/B5 checkpoint 2026-10-23: owner chose to retain the current CLI; grouping/deprecations declined. B5 fast/slow unittest CI partitions implemented and locally validated; [evidence](docs/REFACTOR_B5_TEST_SPEED.md). Owner review/merge, hosted CI and B6 remain open.
+**Done (verified 2026-11-23):** BridgeForge phases B0-B6 are on `main`: the package is split into subpackages (`bridgeforge/atlas/`, `escalation/`, `genome/`, `probe/`, `research/`, `save/`, `scan/` and others), `ARCHITECTURE.md` and `docs/REFACTOR_B6_CLOSEOUT.md` exist, and the "Owner review/merge ... remain open" lines above were written before the merges; the Project Go GUI split (Project-Go #11) and the VoidSmith split (Project-VoidSmith #14) are merged; Salvor's S1 import update was not re-checked here.
 
 **82. Research that serves revivals: consolidate, compare, promote (owner-approved 2026-10-21).** Not a new research
 architecture. S1 stays the critical path; runtime evidence is the limiting resource. Guiding rule: every research
@@ -4013,6 +4026,7 @@ conclusions.
   `research report FEATURE --case WORKSPACE --question TEXT`. Answers: what feature, which mods implement it and how,
   which similarities/differences are supported, which conclusions remain hypotheses, which experiment (or existing gate)
   would resolve the important unknowns. Every claim carries STATIC / OBSERVED / VALIDATED and its evidence location.
+  **Done (verified 2026-11-23):** `research report FEATURE --case WORKSPACE --question TEXT` is built (`bridgeforge/research/research_report.py`, `cmd_research.py`; `tests/test_research_report.py`).
 - P0 82.2 Evidence reconciliation before any merge of code: the report consumes Atlas (census, exemplars, migrations)
   and the D-series (archaeology, behavior-map, hypotheses, probe-baseline/behavior-diff) independently and tabulates
   agreement: both detect (corroborating static evidence, not independent validation: same code), Atlas only
@@ -4025,6 +4039,7 @@ conclusions.
     and `gates.load_gates`. Missing inputs are listed with the producing command; archaeology is built in memory (about 25 s per tree)
     unless `--no-build`. A root-level `reports/` folder of a tree is BridgeForge's own output and is excluded from concept evidence.
     First pilot (Templar Crusade, 82.3 groundwork): `bridgeforge-state/research/templar-crusade/` (git-ignored).
+  **Done (verified 2026-11-23):** `bridgeforge/research/research_reconcile.py` tabulates the four categories (`both-agree`, `atlas-only`, `dseries-only`, `both-different`) and notes that agreement is not validation (`tests/test_research_report.py`).
 - P1 82.3 Active-case pilots: Templar Crusade first (removed vs replaced vs redistributed vs re-created: the
   semantic-classification problem behind the dropped-feature false positives), then SEEKER station modules (does the
   workflow generalize). Stopping condition per investigation, e.g. Templar is complete when the report identifies the
@@ -4046,9 +4061,11 @@ conclusions.
   a question touches into git-ignored `bridgeforge-state/research/<case>/decompiled/<jar-sha256>/`, records the jar hash
   and Vineflower version, and quotes the relevant methods. Bytecode stays authoritative; decompiled Java is a derived
   reading aid (STATIC), never evidence of runtime behaviour, never copied into a mod.
+  **Done (verified 2026-11-23):** `bridgeforge/research/research_decompile.py` decompiles the classes a report touches into the git-ignored cache and quotes methods (`tests/test_research_report.py`).
 - P2 82.8 Method link: run Vineflower with bytecode-source mapping so each decompiled line range maps to the
   `class#method descriptor` that `bytecode-inspect` and Atlas use; a finding made in readable code points at the exact
   bytecode method, and vice versa.
+  **Done (verified 2026-11-23):** `bridgeforge/research/research_methods.py` maps decompiled line ranges to `class#method descriptor` both ways (`lookup_line`, `lookup_identity`; `tests/test_research_diff.py`).
 - P2 82.9 Readable version diffs: for a migration pair, diff the decompiled text only of methods whose bytecode changed
   (`bytecode-diff` decides what changed; the decompiled diff explains it). No second decompiler (CFR) until two readings
   of one method disagree in a way that matters; Recaf stays a manual tool.
@@ -4061,6 +4078,7 @@ conclusions.
     and diffs only their decompiled text. Tests: `tests/test_research_diff.py`. Limits found: a constructor Vineflower hides, or a method without a
     line table, is UNMAPPED; a compiler or debug-info change shows as a bytecode change whose decompiled text is identical (SAME_TEXT) or differs in
     local variable names only.
+  **Done (verified 2026-11-23):** `research diff OLD NEW` (`bridgeforge/research/research_diff.py`) diffs only methods whose bytecode changed (`tests/test_research_diff.py`).
 - P1 82.10 Release inventory as a command: `corpus releases ROOT...` scans folders and .zip/.7z/.rar archives for
   mod_info.json, writes releases.csv and RELEASES.md (copies per mod id, versions, game versions, forum thread and repo
   links from .version files) and a pairs queue for `atlas migrations --pairs-from`. Replaces the 2026-10-22 one-off
@@ -4086,19 +4104,27 @@ conclusions.
 - 80.1 **Built offline, merged (#41, #47, #51, #53); live pending where it needs the rig.** Merge-friendly changes: `changelog.d/` fragments assembled at release (no PR edits CHANGELOG.md); generated files
   (CLI golden, COMMANDS.md, CHECKS.md) regenerated on conflict or by CI; pre-push runs the cross-cutting tests (probe
   contract, safeio ratchet, docs index, CLI golden) plus the tests of touched modules; a `merge-train` command.
+  **Done (verified 2026-11-23):** changelog fragments (`changelog.d/`), `bridgeforge/merge_train.py` (`merge-train`) and the merge driver for generated files exist (`tests/test_merge_train.py`); the live part stays as written above.
 - 80.2 **Built offline, merged (#43); live pending where it needs the rig.** Rig-session planner: `board --live-pending` gathers pending live gates from every repo, groups them by rig
   configuration and prints one session plan with commands; results are written back as PASS/FAIL/NOT_TESTED (with 79.7).
+  **Done (verified 2026-11-23):** `board --live-pending` is built (`bridgeforge/gates.py` `live_pending_plan`, `cmd_archive.py`; `tests/test_gates.py`).
 - 80.3 **Built offline, merged (#45); live pending where it needs the rig.** Archive gate wired: `archive` and `revise finalize` run dropped-features, content parity and the orphaned-backup
   check and refuse unexplained drops; a passing live run with probe 0.3.x offers `archive --refresh`.
+  **Done (verified 2026-11-23):** `bridgeforge/archive_checks.py` (`pre_archive_checks`) runs the dropped-feature sweep, content parity and the orphaned-backup check from `archive` and `revise finalize`, and `archive --refresh` exists.
 - 80.4 **Built offline, merged (#44); live pending where it needs the rig.** `decision apply DRAFT` (77.20): ticked boxes become baseline keys, REMOVALS entries, roadmap lines and rig steps.
+  **Done (verified 2026-11-23):** `bridgeforge/decision.py` `apply_draft` applies ticked boxes (accept findings, record removals, schedule a roadmap line, add a rig step); `tests/test_decision.py`.
 - 80.5 **Built in Salvor, merged (Project-Salvor PR #7); first nightly pin PR not yet observed.** Pin autopilot: Salvor tests nightly against BridgeForge main and opens a pin-bump PR when green; shared-fixture
   drift with Project Go turns blocking once Project Go updates.
+  **Done (verified 2026-11-23):** Salvor's pin autopilot has run: the Salvor repository merged bot-opened pin-bump PRs from branch `bot/bridgeforge-pin` (#23 on 2026-11-19, #24 on 2026-11-23) after fixing the workflow (#22, #28); the "not yet observed" in the header above is out of date.
 - 80.6 **Built offline, merged (#43); live pending where it needs the rig.** Status generated from `gates.json` per repo (R7): status tables and the rig plan come from it; a lint fails CI when
   a status doc contradicts it.
+  **Done (verified 2026-11-23):** status generated from `gates.json` and a lint for contradictions are built (`bridgeforge/gates.py` `lint_gates`; `tests/test_gates.py`).
 - 80.7 **Built offline, merged (#46); live pending where it needs the rig.** Review triage: VoidSmith's 726 calibration rows and BridgeForge's escalation packets grouped by the reason they
   wait, so one decision clears a group.
+  **Done (verified 2026-11-23):** `escalation triage` is built (`bridgeforge/escalation/escalation_triage.py` `triage`; `tests/test_escalation_triage.py`).
 - 80.8 **Built offline, merged (#48); live pending where it needs the rig.** Agent hygiene preflight (77.13): untracked code, unexpected edits to tracked files and broken builds listed before an
   agent session ends or a commit is made.
+  **Done (verified 2026-11-23):** `hygiene` is built (`bridgeforge/hygiene.py`; `tests/test_hygiene.py`).
 - 80.9 **Built (PR pending merge, pairs with Project Go H3); hosted CI proof is this PR's own run.** Real-manifest contract check (2026-10-22): next to the shared-fixture comparison, CI imports
   an actual coverage manifest exported by Project Go from a fixture mod, so a producer change that breaks the consumer
   fails CI instead of being found by hand.
@@ -4110,13 +4136,18 @@ glean more research").** Read-only over the player's installed mods and any fold
 `corpus-index` and `provider-index`; every result is labelled STATIC (what code references, not what runs).
 - 81.1 **Built offline, merged (#42); live pending where it needs the rig.** API usage census: which RC8 API classes/methods each mod's jars and loose scripts call; `api how SYMBOL` links an
   `api-diff` removal to the replacements working mods use, with example files.
+  **Done (verified 2026-11-23):** `atlas api-usage` and `api how` are built (`bridgeforge/atlas/atlas_census.py`, `bridgeforge/api_how.py`; `tests/test_atlas_census.py`).
 - 81.2 **Built offline, merged (#50); live pending where it needs the rig.** Migration mining: where two versions of a mod exist, cluster the API replacements between them into candidate
   rewrite rules with a count of independent mods (R4 needs three before a ruling).
+  **Done (verified 2026-11-23):** `atlas migrations` is built (`bridgeforge/atlas/atlas_migrations.py`; `tests/test_atlas_migrations.py`).
 - 81.3 **Built offline, merged (#42); live pending where it needs the rig.** Save-risk census: persistent-data keys, scripts added on every load (duplicate-script risk), readResolve, transient
   fields, per mod.
+  **Done (verified 2026-11-23):** `atlas save-risk` is built (`bridgeforge/atlas/atlas_census_save.py`; `tests/test_atlas_census.py`).
 - 81.4 **Built offline, merged (#42); live pending where it needs the rig.** Library census: LazyLib, MagicLib, GraphicsLib and other library calls and the versions they need.
+  **Done (verified 2026-11-23):** `atlas libraries` is built (`bridgeforge/atlas/atlas_census_libs.py`; `tests/test_atlas_census.py`).
 - 81.5 **Built offline, merged (#50); live pending where it needs the rig.** Feature exemplar index: working implementations of raids/FGIs, intel, custom entities, rings, station modules,
   for recreation work.
+  **Done (verified 2026-11-23):** `atlas exemplars` is built (`bridgeforge/atlas/atlas_exemplars.py`; `tests/test_atlas_census.py`).
 
 **Hygiene review 2026-10-19 (owner: "perform hygiene check then check roadmap for any worthwhile additions. implement if able then commit/push").** Item 77.3's lock-test timeout is implemented: the three live psutil scans query only their real fixture PIDs in a disposable subprocess with a 30-second timeout; fixture-child shutdown also has a deadline and kill/reap fallback. A regression verifies timeout propagation as a failure. Focused validation: 11 tests pass. This bounds test execution, not the production `who-locks` command, and supplies no game evidence. See `tests/test_locks.py`.
 
@@ -4163,6 +4194,7 @@ PERFORMED until the next rig session):
   **Closed 2026-11-19 (roadmap review): culled.** An SPW feature; belongs in that repository's plan.
 - 79.7 **Built offline, merged (#49); live pending where it needs the rig.** Rig harness: one launcher path (probe-group live, bf-test.ps1, boot-test) with the same manifest, exit and
   done-marker handling, instead of three.
+  **Done (verified 2026-11-23):** one launcher path is built (`bridgeforge/launch.py`, used by `boot-test` and `probe-group live`; `tools/bf-test.ps1` calls it; `tests/test_one_launcher.py`); the rig-live part stays as written above.
 
 **Owner follow-ups 2026-10-20 ("add both to roadmap. We should reassess other mods to see if they dropped any features").**
 
@@ -4171,6 +4203,7 @@ packet, and `scan --write-baseline` accepts every current finding at once. The T
 acceptance had to add its three keys by hand with `baseline.finding_dict_baseline_key`. Add `baseline-accept-finding
 <workspace> <FINDING_ID[:FILE_PART[:EVIDENCE_PART]]> --reason` that adds only the matching keys, writes the reason to
 `reports/ESCALATION_REVIEW.md` like `escalation accept`, and refuses when nothing or more than the named findings match.
+**Done (verified 2026-11-23):** `bridgeforge/baseline_accept_finding.py` (`baseline-accept-finding`) is built; it refuses no match and a short reason (`tests/test_baseline_accept_finding.py`).
 
 **77.15 Templars Requisitions submarket (proposed recreation).** `TEM_MarketPlugin` ("Requisitions": the Templar
 requisitions center, a MilitarySubmarketPlugin with Templar-only stock and commission rules) existed in 0.9.8f and was
@@ -4210,6 +4243,7 @@ coverage or things to make hand work easier please add to roadmap").** Each clos
 mod's whole `rules.csv` was missing. Extend the probe's `content-ids` milestone to count what the game loaded per mod
 (rules triggers, hulls, weapons, wings, industries, conditions, submarkets, planets/systems added) and compare with
 counts taken from the candidate's `working/` data before launch; a shortfall FAILs the run with the missing ids.
+**Done (verified 2026-11-23):** `bridgeforge/live/live_content_parity.py` (`expected_content`, `parity_findings`) compares per-kind counts of what the game loaded with the working copy's data (`tests/test_live_content_parity.py`).
 
 **77.18 Archive content parity.** `archive-preflight` compares the archive's file list with `working/` and with
 `original/` (by sub-folder for multi-mod packs): a data or script file in `original/` and absent from the archive needs a
@@ -4268,11 +4302,13 @@ archives; each confirmed loss becomes a BUGS.md entry.
 **77.19 Recorded removals.** Strip plans, RevenantLib folds, renamed ids and upstream removals (Templars 0.9.9e) write one
 line each to `reports/REMOVALS.json` (item, reason, decision source). The dropped-feature sweep (77.16), archive parity
 (77.18) and the escalation sheet read it, so intended removals stop showing and unexplained ones stand out.
+**Partly built (verified 2026-11-23):** `bridgeforge/removals.py` writes and reads `reports/REMOVALS.json`; the dropped-feature sweep, archive parity (`content_parity.py`) and the archive gate (`archive_checks.py`) read it (`tests/test_file_removals.py`); left: the escalation sheet does not read it directly.
 
 **77.20 Apply an owner decision draft.** Decisions are drafted as Markdown with checkboxes and then applied by hand
 (baseline keys, the reason in ESCALATION_REVIEW.md, ROADMAP_STATUS and LOCAL_HANDOFF lines). `decision apply DRAFT`
 reads the ticked boxes from a structured block in the draft and performs the matching actions (77.14 accept, schedule a
 roadmap line, add a rig step), printing what it changed. Unticked boxes do nothing.
+**Done (verified 2026-11-23):** `bridgeforge/decision.py` (`decision apply`) is built (`tests/test_decision.py`; 80.4).
 
 **77.21 Natural exit everywhere.** `tools/bf-test.ps1 launch` and `boot_test` still end the game with `taskkill /T /F`;
 route them through `exit_observation` so every live record can carry NATURAL/KILLED, not only `probe-group live
@@ -4282,33 +4318,40 @@ route them through `exit_observation` so every live record can carry NATURAL/KIL
 BridgeForge, Salvor, VoidSmith, SPW and Project Go status files (via a small machine-readable gate list per repo, R7),
 groups them by rig configuration (install, Java, launcher, LunaLib, enabled set) and prints one session checklist with
 the exact commands. Today the checklist is assembled by hand from five roadmaps.
+**Done (verified 2026-11-23):** `board --live-pending` is built (`bridgeforge/gates.py` `live_pending_plan`; `tests/test_gates.py`; 80.2).
 
 **77.23 Shared fixtures stay identical and line-ending proof.** The runtime-context fixture hash failed on Ubuntu CI
 because the Windows working copy had CRLF. Mark hashed fixture trees `-text` in `.gitattributes` (both here and in
 Project Go), and add a CI job that fetches Project Go at a pinned commit and fails when the shared
 `fixtures/translation-conformance` and `fixtures/runtime-context` differ by a byte.
+**Partly built (verified 2026-11-23):** `.gitattributes` marks `fixtures/runtime-context/**` and `fixtures/translation-conformance/**` `-text`, and CI job `shared-fixtures` compares them byte for byte with Project Go (`tests/test_shared_fixtures.py`); left: the job checks out Project Go's `main`, not a pinned commit, and Project Go's own `.gitattributes` was not checked here.
 
 **77.24 Post-write verification for every backing-up writer.** FIX-001's guard (a written file must exist with the planned
 bytes, else stop with the backup kept) applies to `relink`, `patch-jar-class`, `translate-apply`, `revise finalize` and
 archive staging too; one shared helper in `safeio` and a ratchet test like the safe-write one.
+**Partly built (verified 2026-11-23):** `safeio.verify_written` and `verify_removed` exist and are used by `apply_fix`, `patch-jar-class`, the jar batch copy-back, `translate-apply`, `revise finalize` and archive staging (`tests/test_writer_verification.py`); left: the ratchet test that fails when a backing-up writer skips the check.
 
 **77.25 Pre-commit lints what is committed.** The pre-commit hook runs `ruff check .` over the whole folder, so untracked
 agent scratch blocks unrelated commits (2026-10-20 needed `.gitignore` entries). Lint the staged and tracked files in the
 hook and leave whole-directory lint to 77.13's preflight report. Also track `tools/precommit-check.ps1` and
 `tools/prepush-check.ps1`: `/tools/*.ps1` ignores them, so worktrees and fresh clones get hooks that call a missing script.
+**Done (verified 2026-11-23):** `tools/precommit-check.ps1` lints the staged Python files only, and `tools/precommit-check.ps1` and `tools/prepush-check.ps1` are tracked.
 
 **77.26 Test hermeticity: reference-rig manifests.** `test_shadow_triage...test_without_a_reference_core_the_fixer_behaves_as_before`
 passes in a fresh worktree and fails in the owner's checkout, because `reference_rigs.reference_core_for_game_version`
 reads the repository's local, ignored reference-rig manifests. Tests must pass `repo_root` (or a fixture root) so local
 rigs cannot change their result; the suite's existing "Test hermeticity FAIL" check should catch this class.
+**Done (verified 2026-11-23):** `tests/test_shadow_triage.py` `test_without_a_reference_core_the_fixer_behaves_as_before` passes `repo_root`, so local rig manifests cannot change its result.
 
 **77.27 Hand removals leave a record (FIX-001's cause).** Files moved into hand-made `scratch/removed/` folders
 (All the Domain Drones' repaired rules.csv, Aivon's special_items.csv, Yellowjackets' tpc.wpn) carry no reason, so a
 mistaken move shipped. Add `remove WORKSPACE PATH --reason` that moves the file to `scratch/removed/<date>/`, writes a
 `REMOVALS.json` entry (77.19) and refuses when the path is a data file the mod's own content references without a
 replacement; `fixer-backup-orphaned`'s sibling check flags any `scratch/removed/` file without a REMOVALS entry.
+**Done (verified 2026-11-23):** `bridgeforge/hand_remove.py` (`remove WORKSPACE PATH --reason`) moves the file, writes a `files` entry and refuses a referenced file; scanner finding `removed-without-record` flags an unrecorded `scratch/removed/` file (`tests/test_file_removals.py`).
 
 **77.13 Proposed hygiene preflight (S4 supportability; scope/design still pending).** This audit found 21 Ruff errors in pre-existing untracked agent scripts, including syntax errors, while the isolated tracked checkout passed Ruff. Add a read-only preflight that reports tracked modifications, untracked code, ignored local evidence, interpreter/dependency availability and separate tracked-tree versus whole-directory lint results. It must never delete/move files, suppress whole-directory failures, stage unrelated work, or traverse private mod/save inputs. Reuse Git's file inventory and Ruff rather than inventing a second linter. Validate on synthetic dirty/untracked/ignored fixtures, filenames with spaces and Unicode, and missing tools; unavailable checks report INCOMPLETE. A future cleanup needs explicit file-level scope. This supports item 77.7's worktree rule without discarding agent work or hiding failing scripts.
+**Done (verified 2026-11-23):** `bridgeforge/hygiene.py` (`hygiene`) is built, read-only, with tracked and whole-folder ruff kept apart (`tests/test_hygiene.py`; 80.8).
 
 ## Translation-schema slice of 77.3 (owner continuation, 2026-10-19)
 
