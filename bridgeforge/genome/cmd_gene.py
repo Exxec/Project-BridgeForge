@@ -56,6 +56,9 @@ def add_parser(subcommands) -> None:
                                                                 "mod); a checkpoint sits beside it while running")
     set_cmd.add_argument("--vanilla-core", type=Path, required=True, help="starsector-core, for vanilla needs and the scans")
     set_cmd.add_argument("--quiet", action="store_true", help="no per-gene progress lines on stderr")
+    set_cmd.add_argument("--provider-root", type=Path, action="append", default=[],
+                         help="a mods/ folder holding the carrier's declared dependencies: their styles, sounds and files count "
+                              "as present in the carrier check (repeatable)")
     evidence_cmd = gene_sub.add_parser("evidence", help="evidence files about a gene (WP5): check that one carries the common header and is "
                                                         "about this gene as it stands")
     evidence_sub = evidence_cmd.add_subparsers(dest="evidence_command", required=True)
@@ -162,7 +165,8 @@ def _run_prove_set(args: argparse.Namespace) -> int:
     from .proof import ProofError
 
     try:
-        result = prove_set(args.mod, args.anchor, args.out, vanilla_core=args.vanilla_core, quiet=args.quiet)
+        result = prove_set(args.mod, args.anchor, args.out, vanilla_core=args.vanilla_core, quiet=args.quiet,
+                           provider_roots=args.provider_root)
     except (ProofError, GeneError, VendorPlanError, OSError) as exc:
         print(f"bridgeforge: {exc}", file=sys.stderr)
         return 2

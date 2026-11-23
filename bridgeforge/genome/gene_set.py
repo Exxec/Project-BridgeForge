@@ -231,7 +231,8 @@ def _manifest_name(number: int, anchor: str) -> str:
     return f"{number:03d}-{kind}-{re.sub(r'[^A-Za-z0-9_.-]', '_', ident)[:80]}.json"
 
 
-def prove_set(mod: Path, anchor: str, out: Path, *, vanilla_core: Path | None, quiet: bool = False) -> dict:
+def prove_set(mod: Path, anchor: str, out: Path, *, vanilla_core: Path | None, quiet: bool = False,
+              provider_roots: list[Path] | None = None) -> dict:
     """Write the anchor's gene.json, each carried manifest under closure/, the set carrier under work/carrier and
     set-isolation-proof.json into `out` (a new or empty folder outside the repository)."""
     from bridgeforge.models import TargetProfile
@@ -272,9 +273,12 @@ def prove_set(mod: Path, anchor: str, out: Path, *, vanilla_core: Path | None, q
     isolation = classify_isolation(scan_mod(root, TargetProfile(), vanilla_core),
                                    scan_mod(work / "carrier", TargetProfile(), vanilla_core), allowed)
     unresolved = unresolved_in_carrier(work / "carrier", genes)
-    from bridgeforge.genome.carrier_load import load_gaps
+    from bridgeforge.genome.carrier_load import dependency_folders, load_gaps
 
-    gaps = load_gaps(work / "carrier", vanilla_core)  # slice 19: what the game needs to load the carrier (RC8-49)
+    # Slice 19: what the game needs to load the carrier (RC8-49); slice 22 review: a declared dependency's styles, sounds and
+    # files count, as in `gene prove` (a set whose hulls use a library's engine style failed without them).
+    deps = dependency_folders([Path(p) for p in provider_roots or []], carrier_gene["needs"]["mods"])
+    gaps = load_gaps(work / "carrier", vanilla_core, deps)
     verdict = "FAIL" if isolation["failures"] or refused or unresolved or gaps else "PASS"
     buckets, not_carried = suspect_buckets(genes)
     anchor_gene = genes[anchor]

@@ -119,6 +119,65 @@ class DonorNeedTests(unittest.TestCase):
         self.assertTrue({("need", ENGINE_STYLES), ("need", SOUNDS)} <= {(i["role"], i["path"]) for i in isolation["inputs"]})
 
 
+class ReviewTests(unittest.TestCase):
+    """The independent review of slice 22 (2026-11-23)."""
+
+    def test_a_missile_s_engine_style_is_carried_but_never_a_gap(self) -> None:
+        missile = {"id": "fx_missile", "engineSlots": [{"style": "CUSTOM", "styleId": "FX_ENGINE"}, {"style": "BARE_MISSILE"}]}
+        with resolved_temp_dir() as root:
+            mod = _mod(root)
+            _write(mod / "data" / "weapons" / "fx_missile.proj", json.dumps(missile))
+            needs = donor_needs(mod, [{"what": "file", "path": "data/weapons/fx_missile.proj"}], _core(root))
+            carrier = root / "carrier"
+            _write(carrier / "data" / "weapons" / "fx_missile.proj", json.dumps(missile))
+            gaps = combat_gaps(carrier, [_core(root)])
+        self.assertIn("data/config/engine_styles.json#/FX_ENGINE", needs["donor"])
+        self.assertIn("engine style BARE_MISSILE: no engine_styles.json defines it (RC8-52)", needs["missing"])
+        self.assertEqual(gaps, [])  # a missing missile style is not shown to be Fatal
+
+    def test_csv_rows_and_json_entries_name_sounds_too(self) -> None:
+        with resolved_temp_dir() as root:
+            mod = _mod(root)
+            _write(mod / "data" / "campaign" / "abilities.csv", "name,id,uiOn\nAbility,fx_ability,fx_cue\n")
+            _write(mod / "data" / "config" / "settings.json", json.dumps({"fxSound": {"loop": "fx_engine"}}))
+            needs = donor_needs(mod, [{"what": "csv-row", "path": "data/campaign/abilities.csv [fx_ability]"},
+                                      {"what": "json-entry", "path": "data/config/settings.json#/fxSound"}], _core(root))
+        self.assertEqual([d for d in needs["donor"] if d.startswith(SOUNDS)],
+                         ["data/config/sounds.json#/fx_cue", "data/config/sounds.json#/fx_engine"])
+
+    def test_a_style_sound_gap_the_donor_already_has_does_not_fail_the_subtraction(self) -> None:
+        # The gap names the styles file, not the first hull using the style, so removing that hull does not move it.
+        with resolved_temp_dir() as root:
+            mod = _mod(root, slots=[])
+            _write(mod / HULL_STYLES, json.dumps({"FX_STYLE": {"shieldRaiseSet": "lib_sound"}}))
+            result = prove(mod, "hull:fx_other", root / "proofs", vanilla_core=_core(root))
+            subtraction = json.loads((root / "proofs" / "subtraction-proof.json").read_text(encoding="utf-8"))
+        self.assertEqual((subtraction["load_gaps"], result["verdicts"]["subtraction-proof"]), ([], "PASS"))
+
+    def test_a_commented_out_play_call_is_not_played(self) -> None:
+        with resolved_temp_dir() as root:
+            carrier = root / "carrier"
+            _write(carrier / "data" / "scripts" / "fx_Effect.java",
+                   'class X {\n // sp.playUISound("ghost_ping", 1f, 1f);\n /* sp.playSound("ghost_fire", 1f, 1f, a, b); */ }\n')
+            gaps = combat_gaps(carrier, [_core(root)])
+        self.assertEqual(gaps, [])
+
+    def test_a_set_proof_counts_a_declared_dependency_s_engine_style(self) -> None:
+        from bridgeforge.genome.gene_set import prove_set
+
+        with resolved_temp_dir() as root:
+            mod = _mod(root, slots=[{"style": "CUSTOM", "styleId": "LIB_FLARE"}])
+            info = json.loads((mod / "mod_info.json").read_text(encoding="utf-8"))
+            _write(mod / "mod_info.json", json.dumps({**info, "dependencies": [{"id": "libmod"}]}))
+            library = root / "mods" / "libmod"
+            _write(library / "mod_info.json", json.dumps({"id": "libmod", "name": "Lib", "version": "1"}))
+            _write(library / ENGINE_STYLES, json.dumps({"LIB_FLARE": {"type": "GLOW"}}))
+            core = _core(root)
+            alone = prove_set(mod, "hull:fx_ship", root / "alone", vanilla_core=core, quiet=True)
+            with_library = prove_set(mod, "hull:fx_ship", root / "with", vanilla_core=core, quiet=True, provider_roots=[root / "mods"])
+        self.assertEqual((alone["load_gaps"], with_library["load_gaps"]), (1, 0))
+
+
 class CarrierCheckTests(unittest.TestCase):
     def test_undefined_engine_styles_style_sounds_and_played_sounds_are_gaps(self) -> None:
         with resolved_temp_dir() as root:

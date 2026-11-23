@@ -3675,6 +3675,7 @@ one carrier for a gene and every gene its needs name, in turn, with its static i
 | `--out` OUT | required | a new or empty folder outside the repository (it holds copies of the mod); a checkpoint sits beside it while running |
 | `--vanilla-core` VANILLA_CORE | required | starsector-core, for vanilla needs and the scans |
 | `--quiet` | - | no per-gene progress lines on stderr |
+| `--provider-root` PROVIDER_ROOT | repeatable | a mods/ folder holding the carrier's declared dependencies: their styles, sounds and files count as present in the carrier check (repeatable) |
 
 ## gene evidence
 

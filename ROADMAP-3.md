@@ -2695,6 +2695,30 @@ history as the closure benchmark, a cross-repository trace check, an early Java 
     a core sound carried) until their test was added; then all were caught. Recorded: a mod that re-defines a core
     engine style or sound id keeps the core's in the carrier. That loses fidelity, as with hull styles, and the carrier
     still loads.
+  - **Independent review:** no critical finding. Its scratch scripts covered the RC7 core and about 200 installed mods. Fixed,
+    with tests:
+    - **Missile engine slots:** a `.proj`'s engine slots name engine styles too; RC7's weapon loader holds the same keys,
+      and Tania's flare missile uses one. They are now carried. A missing missile style is not shown to be Fatal, so it is
+      no carrier gap.
+    - **Subtraction:** a `*Set` gap named the first hull using the style, so removing that hull moved the gap and failed
+      the subtraction on a gap the donor already had. It now names the styles file.
+    - **Comments:** commented-out `playSound` calls made a carrier fail; two real mods name undefined ids that way.
+      Comments are stripped first.
+    - **Set proofs:** `gene prove-set` took no dependencies, so a set whose hulls use a library's engine style failed
+      (Sephira Conclave and DME). `gene prove-set` has `--provider-root` now, like `gene prove`.
+    - **CSV-row and JSON-entry members** name sounds too, for example `abilities.csv`'s `uiOn` and `commodities.csv`'s
+      `sound id`. Their strings now count.
+
+    Recorded, not changed:
+    - `donor_needs` does not read dependencies, so a dependency's style or sound reads as missing in `unknowns.missing`,
+      which nothing acts on;
+    - a loose script shadowed by a jar class of the same name is still read for play calls;
+    - a skin's `engineSlotChanges` entry with a `styleId` but no `style` is missed. No installed mod has one.
+
+    The review also checked, and found right:
+    - ids with `/`, `~`, `#` or a space, end to end;
+    - no installed mod has an undefined hull-style sound, so the check should not fail a working mod;
+    - no mod re-defines an engine enum name.
 - 94.G3 **Gene bank**: content-addressed store, alleles across the corpus, lineage, licence state; RevenantLib distributes genes
   from vanished authors (GD-3). The store's payloads live under `data_root()`, like `Done/`, never in this public
   repository; only manifests of the owner's own or permitted content become committed fixtures (2026-11-19).

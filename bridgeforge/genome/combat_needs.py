@@ -92,6 +92,26 @@ def _files(entry: object, root: Path, core: Path | None, suffixes: tuple[str, ..
     return found
 
 
+def _entry_strings(root: Path, members: list[dict]) -> set[str]:
+    """The strings of the gene's CSV-row and JSON-entry members. Core columns name sound ids too: `abilities.csv`'s
+    `uiOn`/`worldLoop`, `commodities.csv`'s `sound id` (review of slice 22)."""
+    from bridgeforge.genome.proof import _nested_get, pointer_tokens
+    from bridgeforge.scan.scanner import _load_lenient_json_file
+    from bridgeforge.vendor_plan import _rows
+
+    found: set[str] = set()
+    for member in members:
+        if member["what"] == "csv-row":
+            table, _, ident = member["path"].partition(" [")
+            row = _rows(Path(root), table).get(ident.rstrip("]"))
+            found |= {v for v in (row or {}).values() if isinstance(v, str)}
+        elif member["what"] == "json-entry":
+            file, _, ptr = member["path"].partition("#")
+            data = _load_lenient_json_file(Path(root) / file)
+            found |= set(strings(_nested_get(data, pointer_tokens(ptr)))) if isinstance(data, dict) else set()
+    return found
+
+
 def donor_needs(root: Path, members: list[dict], vanilla_core: Path | None) -> dict[str, list[str]]:
     """{"donor": member paths, "missing": [...]}: the engine styles and sounds the gene uses that the mod defines (and the
     files those entries name that the mod has and the core lacks), and the keyed ones nothing defines. Without the core only
@@ -108,8 +128,10 @@ def donor_needs(root: Path, members: list[dict], vanilla_core: Path | None) -> d
     core_sounds, mod_sounds = set(_json_object(core / SOUNDS)) if core else set(), _json_object(root / SOUNDS)
     donor: set[str] = set()
     missing: list[str] = []
-    named = {s for spec in specs.values() for s in strings(spec)} | code_literals(root, members)
-    for ident in sorted({i for spec in hulls.values() for i in engine_style_ids(spec)}):
+    named = {s for spec in specs.values() for s in strings(spec)} | code_literals(root, members) | _entry_strings(root, members)
+    # Review of slice 22: a missile's `.proj` names engine styles the same way (RC7's weapon loader holds the same keys);
+    # they are carried, though a missing missile style is not shown to be Fatal, so the carrier check leaves them out.
+    for ident in sorted({i for spec in specs.values() for i in engine_style_ids(spec)}):
         if ident in core_engines:
             continue
         if ident in mod_engines:
@@ -134,7 +156,7 @@ def donor_needs(root: Path, members: list[dict], vanilla_core: Path | None) -> d
 def combat_gaps(carrier: Path, others: list[Path], *, code: bool = True) -> list[dict]:
     """The carrier check's part for combat (RC8-52, RC8-53): `engine-style-undefined`, `hull-style-sound-undefined` and,
     with `code`, `sound-play-undefined`. `others` are the declared dependencies' folders and the core."""
-    from bridgeforge.genome.carrier_load import _styles
+    from bridgeforge.genome.carrier_load import HULL_STYLES, _styles
 
     carrier = Path(carrier)
     roots = [carrier, *others]
@@ -154,10 +176,10 @@ def combat_gaps(carrier: Path, others: list[Path], *, code: bool = True) -> list
                 gaps.append({"finding": "engine-style-undefined", "file": relative, "style": ident})
         if isinstance(spec.get("style"), str):
             used.setdefault(spec["style"], relative)
-    for name, relative in sorted(used.items()):
+    for name in sorted(used):
         for ident in style_sound_ids(styles.get(name)):
-            if ident not in sounds:
-                gaps.append({"finding": "hull-style-sound-undefined", "file": relative, "style": name, "sound": ident})
+            if ident not in sounds:  # against the styles file, not a hull: the subtraction compares gaps whole (review)
+                gaps.append({"finding": "hull-style-sound-undefined", "file": HULL_STYLES, "style": name, "sound": ident})
     if code:
         for ident, where in sorted(_played_ids(carrier).items()):
             if ident not in sounds:
@@ -170,10 +192,12 @@ def _played_ids(carrier: Path) -> dict[str, str]:
     text, loaded jar classes by their literals' sinks (genome/literal_sinks.py)."""
     from bridgeforge.genome.literal_sinks import class_literal_sinks
     from bridgeforge.scan.scan_classfile import _loaded_mod_jars, _parse_class_file, iter_class_files_in_jars
+    from bridgeforge.vendor_plan import _COMMENTS
 
     found: dict[str, str] = {}
     for source in sorted(Path(carrier).rglob("*.java")):
-        for ident in _JAVA_PLAY.findall(source.read_text(encoding="utf-8-sig", errors="replace")):
+        # Comments first: a commented-out call is not played (review of slice 22: two mods name undefined ids that way).
+        for ident in _JAVA_PLAY.findall(_COMMENTS.sub("", source.read_text(encoding="utf-8-sig", errors="replace"))):
             found.setdefault(ident, source.relative_to(carrier).as_posix())
     for jar, member, data in iter_class_files_in_jars(_loaded_mod_jars(Path(carrier))):
         info = _parse_class_file(data)
