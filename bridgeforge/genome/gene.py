@@ -367,6 +367,10 @@ def describe(mod: Path, anchor: str, *, vanilla_core: Path | None = None, policy
     suspects = ([s for s in plan["suspects"] if s["path"] != SETTINGS_FILE] + extra["suspects"] + campaign["suspects"]
                 + (system["suspects"] if system else []) + mentioned)
     style = _style_needs(root, members, vanilla_core)
+    from bridgeforge.genome.combat_needs import donor_needs
+
+    combat = donor_needs(root, members, vanilla_core)  # slice 22: engine styles and sounds (RC8-52, RC8-53)
+    donor = sorted(set(style["donor"]) | set(combat["donor"]))
     info = read_mod_info(root) or {}
     licence = _licence(plan["licence"], info, [m["path"] for m in members], policy_path)
     dependencies = sorted(d["id"] for d in info.get("dependencies") or [] if isinstance(d, dict) and isinstance(d.get("id"), str))
@@ -386,14 +390,14 @@ def describe(mod: Path, anchor: str, *, vanilla_core: Path | None = None, policy
         "needs": {"vanilla": sorted(set(plan["provided_by_vanilla"]) | set(extra["vanilla"]) | set(campaign["vanilla"])),
                   "mods": needed_mods,
                   "genes": [g for g in campaign["genes"] if g != anchor],
-                  **({"donor": style["donor"]} if style["donor"] else {})},
+                  **({"donor": donor} if donor else {})},
         "registrations": registrations, "conditions": conditions, "persistent_state": _saved_state(system, campaign, members),
         "build": {"game_version": info.get("gameVersion"), "mod_version": _version_text(info.get("version"))},
         "provenance": {"mod_id": info.get("id"), "mod_name": info.get("name"), "author": info.get("author")},
         "derived_from": None,
         "licence": licence,
         "phenotype_obligations": list(PHENOTYPE[kind]),
-        "unknowns": {"missing": plan["missing"] + missing_classes + extra["missing"] + style["missing"],
+        "unknowns": {"missing": plan["missing"] + missing_classes + extra["missing"] + style["missing"] + combat["missing"],
                      "suspects": suspects + style["suspects"]},
         "collected_from": list(COLLECTED_FROM),
     }

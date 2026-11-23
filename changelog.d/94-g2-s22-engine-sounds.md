@@ -1,0 +1,1 @@
+- `gene describe`/`prove` (94.G2 slice 22): the engine styles a gene's hulls name and the mod sound ids its specs, styles and code name are `needs.donor` (RC8_BEHAVIOUR RC8-52, RC8-53); the carrier check reports `engine-style-undefined`, `hull-style-sound-undefined` and `sound-play-undefined`.

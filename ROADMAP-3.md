@@ -2651,6 +2651,44 @@ history as the closure benchmark, a cross-repository trace check, an early Java 
         code name, goes into `needs.donor` as a `engine_styles.json` or `sounds.json` entry with its files.
       - The carrier check gets matching gaps.
       - Two RC8_BEHAVIOUR rows to write, from these runs.
+  **Slice 22 built 2026-11-23: engine styles and sounds (RC8_BEHAVIOUR RC8-52, RC8-53).** Branch
+  `feat/g2-s22-engine-sounds`. The advisor's design: carry broadly, fail narrowly.
+  - **`bridgeforge/genome/combat_needs.py`.** Each entry the gene uses becomes a `needs.donor` entry: a copy in the
+    carrier, kept by the subtraction. Needs are not members, because the subtraction scan cannot see a sound id used from
+    code.
+    - **Engine styles:** each one a gene's hull or skin engine slot names, if the mod defines it. The entry is
+      `data/config/engine_styles.json#/<id>`, plus the image files it names. The javap of `ShipHullSpecLoader` gives the
+      rule:
+      - a `CUSTOM` slot's `styleId`, or any `style` outside the engine enum, names one;
+      - an inline `styleSpec` or an enum name needs nothing.
+    - **Sounds:** each mod sound id that is named by the gene's member specs (`.ship`, `.wpn`, `.system` and the
+      rest), by its hulls' styles (`*Set` keys), by a carried engine style, or by its code's literals. The entry is
+      `data/config/sounds.json#/<id>`, plus its sound files. The core's own ids are not carried.
+    - **Missing:** an engine style or a style's `*Set` sound id that nothing defines is in `unknowns.missing`. Without
+      the core nothing is called missing.
+  - **Carrier check (`load_gaps`):** it fails only on what a run showed to be Fatal:
+    - `engine-style-undefined`;
+    - `hull-style-sound-undefined`;
+    - `sound-play-undefined`, for an id that carried code passes to a `SoundPlayerAPI` play method. Jar classes are
+      judged by literal sinks and loose scripts by text.
+
+    Weapon and system sounds are carried but never fail the check, and neither do missing `.ogg` files. The subtraction's
+    check skips the code walk, which would walk the whole donor twice.
+  - **Measured locally:**
+    - On the slice-21 carriers, the new gaps match the diagnostics exactly: P3 has 1 engine style, and P4 has 2 engine
+      styles, 5 style sounds and 4 sounds played by code.
+    - With slice 22, both sets PASS with 0 gaps. Identities, carrier ids and member counts are unchanged, as expected:
+      needs are not members.
+    - P4's carrier holds the same 77 files and the same JSON entries as DIAG-P4-S22B, which was LIVE_DONE. P3's holds
+      DIAG-P3-S22A's files plus 3 weapon sounds and their 4 files.
+    - P1, P2 and P4 still pass both static halves.
+  - **Tests:** `tests/test_combat_needs.py`:
+    - which engine slots name a style;
+    - the donor needs, and what is left out;
+    - missing styles and sounds, with and without the core;
+    - the proof carrying the entries, the subtraction keeping them, and an id with a space;
+    - the three gaps, and the code walk turned off;
+    - a javac-compiled jar class playing an undefined sound.
 - 94.G3 **Gene bank**: content-addressed store, alleles across the corpus, lineage, licence state; RevenantLib distributes genes
   from vanished authors (GD-3). The store's payloads live under `data_root()`, like `Done/`, never in this public
   repository; only manifests of the owner's own or permitted content become committed fixtures (2026-11-19).
