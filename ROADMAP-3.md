@@ -2899,7 +2899,10 @@ history as the closure benchmark, a cross-repository trace check, an early Java 
     - superseding;
     - two sources of one manifest;
     - a source outside the data root, and a core of another build, refused;
+    - a source changed after describe, refused;
     - each member kind's bytes hashing as its member does.
+
+    Mutation-checked: 13 mutants. One survived (the member-hash check) until its test was added; then all were caught.
 - 94.G4 **Adaptation**: target-impact, gated fixers and `src-to-jar` at gene scope; Project Go carries translations; SpriteForge
   validates sprites and slots.
   **Project Go's part, slice 1 (2026-11-22, Project-Go #19): `ssmt-cli gene-carry`, a read-only report.**
