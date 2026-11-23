@@ -207,6 +207,64 @@ def _nested_classes(root: Path, members: list[dict]) -> list[dict]:
     return sorted(found, key=lambda m: m["path"])
 
 
+def _style_needs(root: Path, members: list[dict], vanilla_core: Path | None) -> dict:
+    """Slice 20 (owner 2026-11-23, "Separate, needed"): the hull styles the gene's hulls use, as donor parts it needs and does not
+    own: {"donor": [`data/config/hull_styles.json#/<style>` and the style's own files], "missing": [...], "suspects": [...]}.
+    A carrier gets a copy; the subtraction copy keeps them (RC8_BEHAVIOUR RC8-49: an undefined style, or a missing file it
+    names, is Fatal at load). A style only this gene's hulls use is kept a need too and flagged: the ruling covers shared
+    ones. Without the core a vanilla style cannot be told apart, so only styles the mod defines are judged."""
+    from bridgeforge.genome.carrier_load import HULL_STYLES, _styles, files_named
+    from bridgeforge.genome.closure import pointer
+    from bridgeforge.genome.evidence import path_problem
+    from bridgeforge.scan.scanner import _load_lenient_json_file
+
+    result: dict[str, list] = {"donor": [], "missing": [], "suspects": []}
+    own = {m["path"] for m in members if m["what"] == "file" and m["path"].startswith("data/hulls/")
+           and m["path"].endswith((".ship", ".skin"))}
+    used: dict[str, list[str]] = {}
+    for path in sorted(own):
+        data = _load_lenient_json_file(Path(root) / path)
+        style = data.get("style") if isinstance(data, dict) else None
+        if isinstance(style, str) and style.strip():
+            used.setdefault(style, []).append(path)
+    if not used:
+        return result
+    core, defined = _styles(vanilla_core), _styles(root)
+    donor: set[str] = set()
+    for name, users in sorted(used.items()):
+        if name in core or (name not in defined and vanilla_core is None):
+            continue
+        if name not in defined:
+            result["missing"].append(f"hull style {name} ({', '.join(users[:3])}): no hull_styles.json defines it")
+            continue
+        entry = f"{HULL_STYLES}#{pointer(name)}"
+        donor.add(entry)
+        for file in files_named(defined[name]):
+            if path_problem(file):  # review of slice 20: `../x.png` was copied outside the carrier
+                result["missing"].append(f"hull style {name} names {file!r}, not a path inside the mod: not carried")
+            elif (Path(root) / file).is_file() and not (vanilla_core and (Path(vanilla_core) / file).is_file()):
+                donor.add(file)
+        if not _other_style_users(root, name, own):
+            result["suspects"].append({"path": entry, "mentions": [], "reason": "a hull style only this gene's hulls use: kept a "
+                                       "need, since the owner's 2026-11-23 ruling covers styles shared with other hulls"})
+    result["donor"] = sorted(donor)
+    return result
+
+
+def _other_style_users(root: Path, style: str, own: set[str]) -> int:
+    """How many of the mod's hulls and skins outside `own` use `style`."""
+    from bridgeforge.scan.scanner import _load_lenient_json_file
+
+    hulls = Path(root) / "data" / "hulls"
+    count = 0
+    for path in [*hulls.rglob("*.ship"), *hulls.rglob("*.skin")] if hulls.is_dir() else []:
+        if path.relative_to(root).as_posix() in own:
+            continue
+        data = _load_lenient_json_file(path)
+        count += isinstance(data, dict) and data.get("style") == style
+    return count
+
+
 _PACKAGE_DECL = re.compile(r"^\s*package\s+([\w.]+)\s*;", re.MULTILINE)
 
 
@@ -270,7 +328,8 @@ def describe(mod: Path, anchor: str, *, vanilla_core: Path | None = None, policy
         classes = [system["generator"]]
     else:
         seeds = [anchor]
-    plan, campaign = _closed_plan(mod, anchor, seeds, classes, vanilla_core, policy_path)
+    plan, campaign = _closed_plan(mod, anchor, seeds, classes, vanilla_core, policy_path,
+                                  named_are_needs=kind == "custom-start")
     root = Path(plan["provider"])
     if kind not in ("combat-plugin", "star-system", "custom-start") and anchor not in plan["closure_ids"]:
         raise GeneError(f"{anchor} is not defined by {root} (missing: {', '.join(plan['missing']) or 'nothing'})")
@@ -307,6 +366,7 @@ def describe(mod: Path, anchor: str, *, vanilla_core: Path | None = None, policy
                                              {p.split(":", 1)[1] for p in {anchor, *plan["closure_ids"], *campaign["provides"]}})
     suspects = ([s for s in plan["suspects"] if s["path"] != SETTINGS_FILE] + extra["suspects"] + campaign["suspects"]
                 + (system["suspects"] if system else []) + mentioned)
+    style = _style_needs(root, members, vanilla_core)
     info = read_mod_info(root) or {}
     licence = _licence(plan["licence"], info, [m["path"] for m in members], policy_path)
     dependencies = sorted(d["id"] for d in info.get("dependencies") or [] if isinstance(d, dict) and isinstance(d.get("id"), str))
@@ -325,14 +385,16 @@ def describe(mod: Path, anchor: str, *, vanilla_core: Path | None = None, policy
         "members": members,
         "needs": {"vanilla": sorted(set(plan["provided_by_vanilla"]) | set(extra["vanilla"]) | set(campaign["vanilla"])),
                   "mods": needed_mods,
-                  "genes": [g for g in campaign["genes"] if g != anchor]},
+                  "genes": [g for g in campaign["genes"] if g != anchor],
+                  **({"donor": style["donor"]} if style["donor"] else {})},
         "registrations": registrations, "conditions": conditions, "persistent_state": _saved_state(system, campaign, members),
         "build": {"game_version": info.get("gameVersion"), "mod_version": _version_text(info.get("version"))},
         "provenance": {"mod_id": info.get("id"), "mod_name": info.get("name"), "author": info.get("author")},
         "derived_from": None,
         "licence": licence,
         "phenotype_obligations": list(PHENOTYPE[kind]),
-        "unknowns": {"missing": plan["missing"] + missing_classes + extra["missing"], "suspects": suspects},
+        "unknowns": {"missing": plan["missing"] + missing_classes + extra["missing"] + style["missing"],
+                     "suspects": suspects + style["suspects"]},
         "collected_from": list(COLLECTED_FROM),
     }
     problems = validate(gene)
@@ -342,26 +404,40 @@ def describe(mod: Path, anchor: str, *, vanilla_core: Path | None = None, policy
 
 
 def _closed_plan(mod: Path, anchor: str, seeds: list[str], classes: list[str], vanilla_core: Path | None,
-                 policy_path: Path | None) -> tuple[dict, dict]:
+                 policy_path: Path | None, *, named_are_needs: bool = False) -> tuple[dict, dict]:
     """vendor-plan's closure, run again until the gene's code names nothing new: content ids its literals name (94.G2: a
     combat plugin's spawned variants are its gene) and the classes the campaign rows it names point at (P3: an industry's
-    plugin). Returns the plan and the campaign ids of its final code (`campaign.campaign_ids`)."""
+    plugin). Returns the plan and the campaign ids of its final code (`campaign.campaign_ids`).
+
+    With `named_are_needs`, the content ids the code names that the mod defines are genes this one needs (`campaign["genes"]`),
+    not seeds. Owner 2026-11-23 ("Separate, needed"): a custom start's starting ship is its own gene, which the start needs
+    (slice 20). An id only the core defines stays a seed, which vendor-plan files under `provided_by_vanilla` (review of
+    slice 20: a start naming `wolf_CS` made a vanilla variant a gene the set could not carry)."""
     from bridgeforge.genome.campaign import campaign_ids
     from bridgeforge.genome.closure import ids_named_by_code
+    from bridgeforge.vendor_plan import _Index
 
+    needed: set[str] = set()
     plan = vendor_plan(mod, seeds, vanilla_core=vanilla_core, policy_path=policy_path, classes=classes)
+    own = _Index(Path(plan["provider"])) if named_are_needs else None
     for _round in range(8):
         root = Path(plan["provider"])
         code = _code_members(root, plan)
         named = [i for i in ids_named_by_code(root, code, vanilla_core) if i not in seeds and i != anchor]
         campaign = campaign_ids(root, code, vanilla_core)
+        if own is not None:
+            mine = {i for i in named if own.defines(*i.split(":", 1))}
+            needed |= mine
+            named = [i for i in named if i not in mine]
         more = [c for c in campaign["classes"] if c not in classes]
         if not named and not more:
+            campaign["genes"] = sorted({*campaign["genes"], *needed})
             return plan, campaign
         seeds, classes = sorted({*seeds, *named}), [*classes, *more]
         plan = vendor_plan(mod, seeds, vanilla_core=vanilla_core, policy_path=policy_path, classes=classes)
     root = Path(plan["provider"])
     campaign = campaign_ids(root, _code_members(root, plan), vanilla_core)
+    campaign["genes"] = sorted({*campaign["genes"], *needed})
     campaign["suspects"].append({"path": anchor, "mentions": [], "reason": "the closure still named new ids or classes "
                                  "after 8 rounds: it may be incomplete"})
     return plan, campaign
@@ -545,6 +621,20 @@ def _licence_problem(licence: object, member_paths: set[str] | None) -> str | No
     return None
 
 
+def _donor_problem(needs: object) -> list[str]:
+    """`needs.donor` (slice 20), when present: member paths whose file part is a relative posix path inside the mod (no `..`).
+    Checked apart from `needs.genes`, so a bad `genes` list cannot hide a bad `donor` list (review of slice 20)."""
+    from bridgeforge.genome.evidence import path_problem
+    from bridgeforge.licence_ledger import member_file
+
+    if not isinstance(needs, dict) or "donor" not in needs:
+        return []
+    donor = needs["donor"]
+    if isinstance(donor, list) and all(isinstance(p, str) and p and not path_problem(member_file(p)) for p in donor):
+        return []
+    return ["needs.donor, when present, is a list of member paths (slice 20)"]
+
+
 def validate(gene: object) -> list[str]:
     """What keeps `gene` from being a schema-2 manifest; empty when it is one. Sister repositories read these files, so
     every field's shape is checked, and malformed input gives problems, never an exception."""
@@ -571,6 +661,7 @@ def validate(gene: object) -> list[str]:
         elif key == "needs" and "genes" in value and not (
                 isinstance(value["genes"], list) and all(isinstance(g, str) and ":" in g for g in value["genes"])):
             problems.append("needs.genes, when present, is a list of 'kind:id' anchors")
+    problems += _donor_problem(gene["needs"])
     for key in ("build", "provenance"):
         if not isinstance(gene[key], dict):
             problems.append(f"{key} is an object")

@@ -1,0 +1,1 @@
+- `gene describe`/`prove` (94.G2 slice 20): a hull style the mod defines, and its files, are `needs.donor` (copied into carriers, kept by the subtraction); a custom start's starting ship is a gene it needs, not part of it; the subtraction copy is load-checked against the donor.

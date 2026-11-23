@@ -259,7 +259,8 @@ def prove_set(mod: Path, anchor: str, out: Path, *, vanilla_core: Path | None, q
     root, digest = _mod_root(mod), set_identity(genes)
     made_by = systems[0] if systems else None
     carrier_gene = {"identity": digest, "anchors": [f"{anchor} and the {len(genes) - 1} genes it needs"], "members": merged,
-                    "needs": {"mods": sorted({m for g in genes.values() for m in g["needs"]["mods"]})},
+                    "needs": {"mods": sorted({m for g in genes.values() for m in g["needs"]["mods"]}),
+                              "donor": sorted({d for g in genes.values() for d in g["needs"].get("donor") or []})},
                     "kind": "star-system" if made_by else "set", "registrations": genes[made_by]["registrations"] if made_by else []}
     work = out / "work"
     try:
@@ -282,6 +283,7 @@ def prove_set(mod: Path, anchor: str, out: Path, *, vanilla_core: Path | None, q
     for number, carried in enumerate(order, 1):
         atomic_write_text(out / "closure" / _manifest_name(number, carried), dumps(genes[carried]), newline="")
     inputs = [("member", path) for path in sorted({member_file(m["path"]) for m in merged})]
+    inputs += [("need", path) for path in sorted({member_file(p) for p in carrier_gene["needs"]["donor"]} - {i[1] for i in inputs})]
     proof = {**header(SET_PROOF, anchor_gene, root=root, inputs=inputs, verdict=verdict), "half": "static",
              "carrier": {"id": f"gene_carrier_{digest[:12]}", "set_identity": digest, "members": len(merged),
                          **({"plugin": plugin} if plugin else {})},

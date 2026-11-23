@@ -142,8 +142,14 @@ def subtract(root: Path, gene: dict, dest: Path) -> list[str]:
     for source in sorted(_build_sources(dest, outer)):
         source.unlink()
         notes.append(f"{source.relative_to(dest).as_posix()} removed with its class (build source)")
+    # Slice 20 review: a member that is also a donor need (the gene's hull sprite that a shared style names as a cover) is
+    # kept: other donor content still loads it. Compared casefolded, as the game's Windows file reads are.
+    needed = {p.casefold() for p in (gene.get("needs") or {}).get("donor") or []}
     for member in gene["members"]:
         path = member["path"]
+        if path.casefold() in needed:
+            notes.append(f"{path} kept: a member that is also a donor need")
+            continue
         if member["what"] == "file":
             (dest / path).unlink()
         elif member["what"] == "csv-row":
@@ -204,7 +210,10 @@ def build_carrier(root: Path, gene: dict, dest: Path, *, vanilla_core: Path | No
                     "author": "BridgeForge gene proof", "description": f"Isolation carrier for {gene['anchors'][0]} (94.G2).",
                     "gameVersion": info.get("gameVersion"), "dependencies": [{"id": mod} for mod in gene["needs"]["mods"]]}
     settings: dict[str, dict] = {}
-    for member in gene["members"]:
+    # Slice 20: donor parts the gene needs and does not own (a shared hull style and its files) are copied too.
+    donor = [{"what": "json-entry" if member_file(path) != path else "file", "path": path}  # `cover#1.png` is a file
+             for path in (gene.get("needs") or {}).get("donor") or []]
+    for member in [*gene["members"], *donor]:
         path = member["path"]
         if member["what"] == "file":
             (dest / path).parent.mkdir(parents=True, exist_ok=True)
@@ -423,13 +432,24 @@ def prove(mod: Path, anchor: str, out: Path, *, vanilla_core: Path | None = None
     # Slice 19: what the game needs to load the carrier (RC8-49). Without the core a vanilla style cannot be told from an
     # undefined one, so the check does not run (review of slice 19); a declared dependency's styles and files count.
     if vanilla_core is None:
-        isolation["load_gaps"] = "NOT_RUN: no --vanilla-core, so a hull's vanilla style cannot be told from an undefined one"
+        isolation["load_gaps"] = subtraction["load_gaps"] = ("NOT_RUN: no --vanilla-core, so a hull's vanilla style cannot be "
+                                                             "told from an undefined one")
     else:
         deps = dependency_folders([Path(p) for p in provider_roots or []], gene["needs"]["mods"])
         isolation["load_gaps"] = load_gaps(work / "carrier", vanilla_core, deps)
         if isolation["load_gaps"]:
             isolation["verdict"] = "FAIL"
+        # Slice 20 review: the subtraction copy must load as the donor does. Only gaps the donor lacks count: one it already
+        # has is not the gene's to fix.
+        before = {json.dumps(g, sort_keys=True) for g in load_gaps(root, vanilla_core, deps)}
+        subtraction["load_gaps"] = [g for g in load_gaps(work / "subtraction", vanilla_core, deps)
+                                    if json.dumps(g, sort_keys=True) not in before]
+        if subtraction["load_gaps"]:
+            subtraction["verdict"] = "FAIL"
     inputs = [("member", path) for path in sorted({member_file(m["path"]) for m in gene["members"]})]
+    # Slice 20: the donor parts it needs are inputs too: they are not in the identity, so a changed style would leave stale
+    # evidence looking valid (advisor 2026-11-23).
+    inputs += [("need", path) for path in sorted({member_file(p) for p in gene["needs"].get("donor") or []} - {i[1] for i in inputs})]
     atomic_write_text(out / "gene.json", dumps(gene), newline="")
     written = {}
     halves = (("subtraction-proof", subtraction, {"rewritten": notes, **({"registration_cut": cut} if cut else {})}),
