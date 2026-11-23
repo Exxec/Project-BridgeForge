@@ -338,6 +338,12 @@ def record_group(log: Path, config: dict, queue: Path, rig: Path, *, test_id: st
     from bridgeforge.rig.rig_doctor import DEFAULT_CORE_BASELINE_RELATIVE, _repo_root
 
     tested = [workspaces[m] for m in sorted(report["members"]) if workspaces.get(m) is not None]
+    from bridgeforge.genome.boot import staged_boot_workspaces
+
+    boot = staged_boot_workspaces(tested)
+    if boot:  # a gene boot run is evidence about a gene, never a revival's validation (94.G2)
+        raise ProbeGroupError(f"{', '.join(w.name for w in boot)}: a gene boot copy (gene boot stage); read the run with "
+                              f"`gene boot evaluate`, never record or archive it.")
     scenario_blocks = evaluate_member_scenarios(log, {m: workspaces[m] for m in sorted(report["members"]) if workspaces.get(m) is not None})
     if scenario_blocks:
         from bridgeforge.probe.probe_scenario import apply_to_verdicts

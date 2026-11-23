@@ -183,6 +183,11 @@ def archive_mod(workspace: Path, done_dir: Path, *, policy_path: Path | None = N
     """Archive the workspace into done_dir/<workspace>. An earlier archive of the mod is never deleted: `refresh` (or `move_aside`)
     moves it to Done/_replaced-<date>/<Mod>[-N] first. If writing the new archive fails part-way, the partial one is moved to
     Done/_failed-<date>/ and the earlier archive is moved back; the ArchiveError says exactly where everything is (DOC-001)."""
+    from bridgeforge.genome.boot import STAGED_MARKER
+
+    if (Path(workspace) / STAGED_MARKER).is_file():
+        # A gene boot copy (94.G2): a subtraction copy carries the donor's reports, so it could otherwise read as validated.
+        raise ArchiveError(f"{workspace} is a gene boot copy (gene boot stage): it is evidence about a gene, never archived.")
     state: dict = {}
     try:
         return _archive_mod(workspace, done_dir, policy_path=policy_path, today=today, refresh=refresh, move_aside=move_aside,
