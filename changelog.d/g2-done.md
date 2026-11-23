@@ -1,0 +1,1 @@
+- ROADMAP-3: 94.G2 marked Done (2026-11-23): all four pilots proven on both boot halves; 18 of 18 evidence files pass `gene evidence check`.
