@@ -279,6 +279,12 @@ def describe_faction(mod: Path, ident: str, vanilla_core: Path | None, policy_pa
         else:
             missing.append(f"{kind}:{item} (listed by the faction; neither the mod nor the core defines it)")
     vanilla += [f"file:{f}" for f in core_files]
+    from bridgeforge.genome.faction_fleet import fleet_needs
+
+    fleet = fleet_needs(root, faction, mod_index, core_index)  # slice 23: owner 2026-11-23, a faction's fleet is its gene's
+    genes += fleet["genes"]
+    vanilla += fleet["vanilla"]
+    missing += fleet["missing"]
     missing += [f"file:{f} (named by the faction; in neither the mod nor the core)" for f in absent]
     commodity_needs, commodity_missing, commodity_suspects = _commodities(root, core_root, faction, path)
     vanilla += commodity_needs
@@ -286,7 +292,8 @@ def describe_faction(mod: Path, ident: str, vanilla_core: Path | None, policy_pa
     registrations, notes = _registrations(root, ident)
     suspects = ([{"path": path, "mentions": tags, "reason": "the faction's lists name tags: sets of hulls, weapons or wings, "
                   "recorded and not expanded"}] if tags else [])
-    suspects += commodity_suspects + _unread(path, faction) + notes + ([description_suspect] if description_suspect else [])
+    suspects += (commodity_suspects + _unread(path, faction) + notes + ([description_suspect] if description_suspect else [])
+                 + fleet["suspects"])
     members.sort(key=lambda m: (m["what"], m["path"]))
     info = read_mod_info(root) or {}
     licence = _licence(revival_licence(info.get("id"), info.get("name"), policy_path), info, [m["path"] for m in members], policy_path)
@@ -294,7 +301,8 @@ def describe_faction(mod: Path, ident: str, vanilla_core: Path | None, policy_pa
     gene = {
         "schema": GENE_SCHEMA, "schema_version": GENE_SCHEMA_VERSION, "identity": identity("faction", members),
         "kind": "faction", "anchors": [anchor], "provides": [anchor], "members": members,
-        "needs": {"vanilla": sorted(set(vanilla)), "mods": [], "genes": sorted(set(genes))},
+        "needs": {"vanilla": sorted(set(vanilla)), "mods": [], "genes": sorted(set(genes)),
+                  **({"donor": fleet["donor"]} if fleet["donor"] else {})},
         "registrations": registrations, "conditions": [],
         "persistent_state": [{"name": f"faction {ident}", "via": "saved with its content lists (RC8_BEHAVIOUR RC8-43)"}],
         "build": {"game_version": info.get("gameVersion"), "mod_version": _version_text(info.get("version"))},

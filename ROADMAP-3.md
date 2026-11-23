@@ -2644,7 +2644,9 @@ history as the closure benchmark, a cross-repository trace check, an early Java 
       - P4: the flux tracker looking up the hull style's `*Set` sound ids, which only the donor's `sounds.json`
         defines.
     - **DIAG-P3-S22A,** with the one engine style and its 2 files added by hand: **LIVE_DONE** (main menu, campaign,
-      combat). For P3 that completes the list: hull styles, phase sprites and an engine style.
+      combat). For P3 that completes the list: hull styles, phase sprites and an engine style. *Corrected 2026-11-23
+      (slice 23): it did not. The diagnostic printed only dialogs and ERROR lines, not the probe's own FAIL lines, and
+      the carrier's faction fielded no fleet (P3B-CAR3 below).*
     - **DIAG-P4-S22A,** with 2 engine styles, 5 style sounds and their files added: the battle ran, then a weapon's
       every-frame script played a mod sound id the carrier lacks, and `playSound` was Fatal.
     - **DIAG-P4-S22B,** with all 12 mod sound ids its specs and code name (4 in jar classes, 5 style sets, 2 in
@@ -2742,6 +2744,53 @@ history as the closure benchmark, a cross-repository trace check, an early Java 
     - **Owner question (2026-11-23):** is a faction's fleet part of its gene? Under "Separate, needed", the shared role
       entries for its known hulls would be `needs.donor`, and the variants they name would be genes the faction needs,
       as a custom start's ship is. That grows P3's set by every variant of its known hulls.
+  **Slice 23 built 2026-11-23: a faction's fleet is part of its gene** (owner 2026-11-23: "Yes, as needs"). Branch
+  `feat/g2-s23-faction-fleet`.
+  - **`bridgeforge/genome/faction_fleet.py`.** A faction gene's needs now include what its fleet is built from:
+    - each entry of the donor's `data/world/factions/default_ship_roles.json` that names a variant of a hull the faction
+      knows (`knownShips`, `priorityShips`) or a wing it knows (`knownFighters`, `priorityFighters`) is `needs.donor`, with
+      its role block's `includeDefault` and `fallback` keys;
+    - the variants and wings those entries name are `needs.genes`, carried by `gene prove-set`, or `needs.vanilla` when
+      the core defines them;
+    - the role-file shape is RC8-46's: `doctrine` skipped, a `_wing` suffix for wings.
+  - **Carrier check:** `ship-role-variant-missing` is a role entry of the carrier's roles file, or of a carried
+    `.faction`'s `shipRoles`, whose variant or wing nothing defines (RC8-46: Fatal at load).
+    - It runs on the carrier only: `load_gaps(..., carrier_only=False)` skips it with the code walk.
+    - A variant gene's subtraction rightly leaves its role entries in the donor, as a recorded dependent (advisor
+      2026-11-23).
+  - **Measured locally, P3:** the faction gets 85 role entries for 26 variants, all the mod's. Its set now carries 79
+    genes (was 53), with 0 refused, 0 unresolved and 0 load gaps; the carrier has 358 members (`gene_carrier_6c106fd6a134`)
+    and 32 variants. 4 of the faction's 21 known hulls have no role variant in the donor either.
+  - **DIAG-P3-S23-20261123** (never evaluated, recorded or archived): the locally built carrier was LIVE_DONE, with no
+    dialog and no probe FAIL or WARN line. `faction-fleet-gen OK`: 7 members in a generated patrol, where P3B-CAR3 had
+    none.
+  - **Diagnostics print the probe's FAIL and WARN lines now.** A LIVE_DONE run can still fail a gene on one, which is how
+    DIAG-P3-S22A read as complete (the `gene-boot-run` skill's generator, 2026-11-23).
+  - **Tests:** `tests/test_faction_fleet.py`:
+    - the roles of known hulls and wings as needs, and their variants as genes;
+    - a core variant as vanilla;
+    - unknown hulls, unknown wings and `doctrine` left out;
+    - a faction without a role file, whose manifest shape is unchanged;
+    - the carrier gap for the roles file and for `shipRoles`, and the subtraction check skipping it.
+
+    Mutation-checked: 14 mutants, all caught on the first run.
+  - **Independent review:** no critical finding. Checked against 65 local role files and the RC7 core. Fixed, with tests:
+    - **Hulls and wings known by tag.** These get no fleet needs, because tags are not expanded (a slice-10 decision).
+      Most vanilla factions, and several revived mods' factions, know their ships that way. P3's faction does not. The gene
+      now records a suspect naming the fleet gap.
+      **Owner question:** expand tags against the hull and wing `tags` columns, so such factions carry their fleets too?
+    - **Undefined role variants.** A role entry whose variant nothing defines, perhaps a dependency's, was dropped
+      silently. It is now a suspect.
+    - **Unreadable files.** An unreadable roles or `.faction` file read as empty. It is now `ship-roles-unreadable`,
+      failing closed.
+    - **Tests** now cover `priorityShips`, the core's object-shaped `fallback` and `fallback2`, and a set proof end to
+      end.
+    - **Duplicate helper.** The copied JSON reader was dropped.
+
+    Recorded, not changed: a variant whose `hullId` is a skin the faction does not list, while it lists the base hull,
+    is not taken. That matches vanilla data (core factions list skin ids), but the game's check is not javap-verified.
+
+    Mutation check after the fixes: 17 mutants, all caught. Full suite: 3518 tests, OK (skipped=13); hermeticity PASS.
 - 94.G3 **Gene bank**: content-addressed store, alleles across the corpus, lineage, licence state; RevenantLib distributes genes
   from vanished authors (GD-3). The store's payloads live under `data_root()`, like `Done/`, never in this public
   repository; only manifests of the owner's own or permitted content become committed fixtures (2026-11-19).
