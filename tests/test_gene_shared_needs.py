@@ -60,7 +60,14 @@ class StyleNeedTests(unittest.TestCase):
         with resolved_temp_dir() as root:
             nowhere = describe(_mod(root, style="NOWHERE"), "hull:fx_ship", vanilla_core=_core(root))
         self.assertNotIn("donor", vanilla["needs"])  # absent, so earlier manifests stay byte-identical
+        self.assertFalse([m for m in vanilla["unknowns"]["missing"] if m.startswith("hull style")])  # the core defines it
         self.assertTrue([m for m in nowhere["unknowns"]["missing"] if m.startswith("hull style NOWHERE")])
+
+    def test_a_malformed_donor_list_fails_validation(self) -> None:
+        with resolved_temp_dir() as root:
+            gene = describe(_mod(root), "hull:fx_ship", vanilla_core=_core(root))
+        self.assertIn("needs.donor, when present, is a list of member paths (slice 20)",
+                      validate({**gene, "needs": {**gene["needs"], "donor": [1, ""]}}))
 
     def test_the_carrier_gets_the_style_the_subtraction_keeps_it_and_the_proof_reads_it_as_an_input(self) -> None:
         with resolved_temp_dir() as root:
