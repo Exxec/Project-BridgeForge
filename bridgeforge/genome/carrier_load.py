@@ -58,13 +58,14 @@ def _held(relative: str, roots: list[Path]) -> bool:
     return any((root / relative).is_file() for root in roots)
 
 
-def load_gaps(carrier: Path, vanilla_core: Path, dependencies: list[Path] | None = None, *, code: bool = True) -> list[dict]:
+def load_gaps(carrier: Path, vanilla_core: Path, dependencies: list[Path] | None = None, *, carrier_only: bool = True) -> list[dict]:
     """[{finding, file, ...}]: each hull or skin whose `style` neither the carrier, a declared dependency's folder nor the core
     defines (`hull-style-undefined`); each file a style the carrier defines names that none of them holds
     (`hull-style-file-missing`); each hull, skin or styles file that cannot be read (`hull-file-unreadable`,
     `hull-styles-unreadable`); each phase sprite a carrier hull needs that none of them holds (`hull-phase-sprite-missing`,
     RC8-51; slice 21); and what a ship needs once it is built for combat (slice 22, `combat_needs.combat_gaps`): its engine
-    styles, its hull style's sound sets and, with `code`, the sounds its code plays (RC8-52, RC8-53)."""
+    styles, its hull style's sound sets and, with `carrier_only`, the sounds its code plays (RC8-52, RC8-53) and its ship-role
+    entries' variants (`ship-role-variant-missing`, RC8-46, slice 23)."""
     from bridgeforge.scan.scanner import _load_lenient_json_file
 
     carrier = Path(carrier)
@@ -90,7 +91,12 @@ def load_gaps(carrier: Path, vanilla_core: Path, dependencies: list[Path] | None
                 gaps.append({"finding": "hull-style-file-missing", "file": HULL_STYLES, "style": name, "path": relative})
     from bridgeforge.genome.combat_needs import combat_gaps
 
-    return gaps + _phase_sprite_gaps(carrier, others) + combat_gaps(carrier, others, code=code)
+    from bridgeforge.genome.faction_fleet import role_gaps
+
+    # `carrier_only`: checks that only make sense on a carrier, not on a donor or its subtraction copy: the code walk (slice
+    # 22) and ship-role entries (slice 23; a subtraction rightly leaves a removed variant's role entries behind).
+    return (gaps + _phase_sprite_gaps(carrier, others) + combat_gaps(carrier, others, code=carrier_only)
+            + (role_gaps(carrier, others) if carrier_only else []))
 
 
 def _phase_sprite_gaps(carrier: Path, others: list[Path]) -> list[dict]:

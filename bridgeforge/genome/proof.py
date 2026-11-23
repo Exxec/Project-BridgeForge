@@ -441,8 +441,8 @@ def prove(mod: Path, anchor: str, out: Path, *, vanilla_core: Path | None = None
             isolation["verdict"] = "FAIL"
         # Slice 20 review: the subtraction copy must load as the donor does. Only gaps the donor lacks count: one it already
         # has is not the gene's to fix.
-        before = {json.dumps(g, sort_keys=True) for g in load_gaps(root, vanilla_core, deps, code=False)}
-        subtraction["load_gaps"] = [g for g in load_gaps(work / "subtraction", vanilla_core, deps, code=False)
+        before = {json.dumps(g, sort_keys=True) for g in load_gaps(root, vanilla_core, deps, carrier_only=False)}
+        subtraction["load_gaps"] = [g for g in load_gaps(work / "subtraction", vanilla_core, deps, carrier_only=False)
                                     if json.dumps(g, sort_keys=True) not in before]
         if subtraction["load_gaps"]:
             subtraction["verdict"] = "FAIL"
