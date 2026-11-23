@@ -101,8 +101,24 @@ def _corpus(base: Path) -> Path:
     _write(mentioner / "data/variants/m.variant", json.dumps({"variantId": "m", "hullId": "ship_a", "hullMods": ["hm_a"]}))
     _write(mentioner / "data/strings/notes.txt", "wing_ab is another id; xwing_a too")  # not whole words: wing_a not named
     # In a class, the byte before a constant is its length: here "a", a word character (review 2026-11-23).
-    _zip(mentioner / "jars" / "m.jar", {"m/Big.class": b"\xca\xfe" * 40, "m/C.class": b"\xca\xfe\xba\xbe\x00agun_a\x00"})
+    _zip(mentioner / "jars" / "m.jar", {"m/Big.class": b"\xca\xfe" * 40, "m/C.class": b"\xca\xfe\xba\xbe\x00agun_a\x00",
+                                        "m/ids.json": '{"v": "ship_a_v"}'})
     return done
+
+
+MENTIONS = sorted(["hullmod:hm_a", "hull:ship_a", "weapon:gun_a", "variant:ship_a_v"])
+
+
+def _deflate64(name: str):
+    """read_limited as the jar-class walk calls it, failing for one entry as Python does on a Deflate64 entry."""
+    from bridgeforge.zipsafe import read_limited
+
+    def flaky(archive, item, limit):
+        if getattr(item, "filename", item) == name:
+            raise NotImplementedError("That compression method is not supported")
+        return read_limited(archive, item, limit)
+
+    return mock.patch("bridgeforge.scan.scan_classfile.read_limited", flaky)
 
 
 EXPECTED_ROOTS = {
@@ -165,7 +181,7 @@ class PlanTests(unittest.TestCase):
     def _plan(self, root: Path, **kwargs) -> dict:
         done = _corpus(root)
         bank = _bank(root)
-        with NO_SYSTEMS, mock.patch("bridgeforge.zipsafe.MAX_CLASS_BYTES", 64):
+        with NO_SYSTEMS, _deflate64("m/Big.class"):
             return plan(done, bank=bank, quiet=True, base=root, **kwargs)
 
     def test_the_plan_lists_definitions_mentions_zips_skipped_copies_and_what_could_not_be_read(self) -> None:
@@ -179,9 +195,9 @@ class PlanTests(unittest.TestCase):
                          ("moda", "1.0", "archive", []))  # a defined id is not also a mention
         self.assertEqual(rows["Done/Mod-A/original/extracted/Mod A-1.0"]["defines"], [PILOT])
         mentioner = rows["Done/Mentioner"]
-        self.assertEqual((mentioner["defines"], sorted(mentioner["mentions"])),
-                         ([], sorted(["hullmod:hm_a", "hull:ship_a", "weapon:gun_a"])))
-        self.assertEqual(mentioner["unreadable"], ["jars/m.jar!m/Big.class (ZipEntryTooLarge)"])  # and C.class still read
+        self.assertEqual((mentioner["defines"], sorted(mentioner["mentions"])), ([], MENTIONS))
+        # One class Python cannot read is listed, and the classes after it are still read (gun_a is in C.class).
+        self.assertEqual(mentioner["unreadable"], ["jars/m.jar!m/Big.class: That compression method is not supported"])
         self.assertEqual({z["path"].removeprefix("Done/"): z["state"] for z in result["zips"]}, {
             "Mod-A/Mod-A-1.0.zip": "packaged copy of a scanned copy",
             "Mod-A/original/Mod A-1.0.zip": "packaged copy of a scanned copy",
@@ -218,7 +234,7 @@ class PlanTests(unittest.TestCase):
                 code = run_alleles_cli(args)
         rows = {r["path"]: r for r in result["roots"]}
         self.assertEqual(rows["Done/Mentioner"]["error"], "defines: KeyError: 'boom'")
-        self.assertEqual(sorted(rows["Done/Mentioner"]["mentions"]), sorted(["hullmod:hm_a", "hull:ship_a", "weapon:gun_a"]))
+        self.assertEqual(sorted(rows["Done/Mentioner"]["mentions"]), MENTIONS)
         zips = {z["path"]: z["state"] for z in result["zips"]}
         self.assertEqual(zips["Done/Other.zip"], "unreadable (NotImplementedError)")
         self.assertEqual((result["summary"]["errors"], result["summary"]["roots"], code), (1, 7, 1))  # an error fails the run

@@ -261,25 +261,27 @@ def mentioned_ids(root: Path, patterns: tuple[re.Pattern[bytes], re.Pattern[byte
 
 
 def _jar_mentions(path: Path, root: Path, text_pattern, class_pattern, unread: list[str]) -> set[str]:
+    """Ids named in a jar: its classes through the one jar-class walk (`iter_class_files_in_jars`, which skips and lists an
+    entry it cannot read and reads on), then its text entries, each read on its own."""
+    from bridgeforge.scan.scan_classfile import iter_class_files_in_jars
     from bridgeforge.zipsafe import MAX_CLASS_BYTES, read_limited
 
     found: set[str] = set()
-    try:
-        jar = zipfile.ZipFile(path)
-    except Exception as exc:  # a jar Python cannot open at all (BadZipFile, an unsupported method): listed, not fatal
-        unread.append(f"{_rel(path, root)} ({type(exc).__name__})")
+    whole, entries = [], []
+    for _jar, _member, data in iter_class_files_in_jars([path], whole, skipped_entries=entries):
+        found.update(m.decode("utf-8") for m in class_pattern.findall(data))
+    unread.extend(problem.replace(str(path), _rel(path, root), 1) for problem in whole + entries)
+    if whole:
         return found
-    with jar:
-        for entry in jar.namelist():
-            is_class = entry.endswith(".class")
-            if not is_class and Path(entry).suffix.lower() not in _TEXT:
-                continue
-            try:
-                data = read_limited(jar, entry, MAX_CLASS_BYTES)
-            except Exception as exc:  # one oversize or unsupported entry: listed, and the rest of the jar is read
-                unread.append(f"{_rel(path, root)}!{entry} ({type(exc).__name__})")
-                continue
-            found.update(m.decode("utf-8") for m in (class_pattern if is_class else text_pattern).findall(data))
+    try:
+        with zipfile.ZipFile(path) as jar:
+            for entry in [e for e in jar.namelist() if Path(e).suffix.lower() in _TEXT]:
+                try:
+                    found.update(m.decode("utf-8") for m in text_pattern.findall(read_limited(jar, entry, MAX_CLASS_BYTES)))
+                except Exception as exc:  # one entry Python cannot read: listed, and the rest of the jar is read
+                    unread.append(f"{_rel(path, root)}!{entry}: {type(exc).__name__}")
+    except Exception as exc:  # the jar opened for its classes but not again: listed, not fatal
+        unread.append(f"{_rel(path, root)}: {type(exc).__name__}")
     return found
 
 

@@ -408,9 +408,10 @@ def iter_class_files_in_jars(jars, unreadable: list[str] | None = None, max_entr
     The one jar-walking loop behind `mod_jar_class_names` and `verify-shadow` (ROADMAP P14 item 26).
     A jar that cannot be opened or exceeds MAX_JAR_ENTRIES is skipped; pass `unreadable` to learn
     which, so a "not shadowed" answer can say what it did not look inside. A single class entry that
-    cannot be read (over MAX_CLASS_BYTES, a bad CRC) is skipped and the rest of its jar is still read;
-    pass `skipped_entries` to learn which (ROADMAP-3 93.33). Whole jars and single entries are kept
-    apart, because `verify-shadow` counts the jars it checked from `unreadable`.
+    cannot be read (over MAX_CLASS_BYTES, a bad CRC, a compression Python lacks such as Deflate64, an
+    encrypted entry) is skipped and the rest of its jar is still read; pass `skipped_entries` to learn
+    which (ROADMAP-3 93.33; the last two raised past this loop until the 94.G3 slice 2a review). Whole jars
+    and single entries are kept apart, because `verify-shadow` counts the jars it checked from `unreadable`.
     """
     for jar in jars:
         try:
@@ -428,7 +429,7 @@ def iter_class_files_in_jars(jars, unreadable: list[str] | None = None, max_entr
                         continue
                     try:
                         data = read_limited(archive, item, MAX_CLASS_BYTES)
-                    except (OSError, zipfile.BadZipFile, KeyError) as exc:
+                    except (OSError, zipfile.BadZipFile, KeyError, NotImplementedError, RuntimeError) as exc:
                         if skipped_entries is not None:
                             skipped_entries.append(f"{jar}!{item.filename}: {exc}")
                         continue
