@@ -2633,6 +2633,7 @@ copy/sync one group's mods into the rig, write the merged probe config, set enab
 | `--with-lunalib` | - | also enable LunaLib whenever GraphicsLib (any version) is enabled without it (RC8-25: GraphicsLib 1.12.1 needs it under Fast Rendering; 1.12.1 gets it automatically) |
 | `--no-lunalib` | - | do not enable LunaLib automatically for GraphicsLib 1.12.1 (to show the dependency gap, RC8-25) |
 | `--setup` SPEC | repeatable | probe setup applied once per save, as for probe-config --setup; also swap-industry:<from>:<to>:<count>[:<condition-prefix>] (probe 0.2.25); repeatable |
+| `--keep-saves` | - | leave the rig's earlier game saves in place (by default they move to <rig>/_saves-moved/<time>/ so every run starts the same way; ROADMAP-3 93.50) |
 | `--also-enable` MOD_OR_SET | repeatable | also enable this mod id (with its dependencies) or named set (aotd: Vaults of Knowledge, Toolbox fork, Prepatcher, BMO, Ashlib); repeatable; every id must be in the rig |
 | `--save-after-checks` | - | the probe saves the game once after the day-1 checks, so the save can be read and reloaded (probe 0.2.26) |
 | `--save-reload-after-days` N | - | opt in to the save-and-reload fingerprint stage: at in-game day N the probe logs a fingerprint, saves, and stores it; `live --save-reload` then reloads that save (next probe version) |

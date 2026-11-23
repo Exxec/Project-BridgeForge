@@ -21,6 +21,7 @@ from typing import Callable
 
 from bridgeforge.log_triage import MAIN_MENU_RE
 from bridgeforge.launch import EXIT_POLL_SECONDS, GameRefused, LaunchNoProcess, settle_exit  # noqa: F401  (re-exported: callers and tests import them from here)
+from bridgeforge.live.window_gone import GameWindowGone, detail as window_gone_detail  # noqa: F401  (GameWindowGone re-exported: 93.50)
 
 # Client-area fractions of the game window (1280x960 view), measured 2026-10-11.
 MAIN_MENU_NEW_GAME = (0.7195, 0.4625)
@@ -545,12 +546,28 @@ def continue_after_battle(log: Path, hands: Hands, round_from: int, timeout: flo
 def drive(log: Path, hands: Hands, menu_timeout: float = 240, campaign_timeout: float = 600, combat_timeout: float | None = None,
           generic_fallback: bool = True, new_game_grace: float = NEW_GAME_GRACE,
           vanilla_rows: int = VANILLA_MISSION_ROWS, save_reload: bool = False, probe_saves: bool = False) -> LiveResult:
-    """Run the whole live sequence against a started game whose stdout is `log`. `combat_timeout` defaults to combat_wait()."""
+    """Run the whole live sequence against a started game whose stdout is `log`. `combat_timeout` defaults to combat_wait().
+
+    A game window that vanishes mid-run ends it as LIVE_STUCK at the stage in progress, with the log's last lines (93.50:
+    SR7-LIVE-0985a-20261117 raised "the game window is gone" from New Game's click and gave no verdict)."""
     if combat_timeout is None:
         combat_timeout = combat_wait()  # read at call time, so the retry and round constants decide it (93.62)
     result = LiveResult("LIVE_STUCK", log=str(log))
     hands = recording(hands, log, result.actions)
+    at = ["main-menu"]  # the stage in progress, for a vanished window
+    try:
+        return _drive(log, hands, result, at, menu_timeout, campaign_timeout, combat_timeout, generic_fallback,
+                      new_game_grace, vanilla_rows, save_reload, probe_saves)
+    except GameWindowGone:
+        result.stage, result.detail = at[0], window_gone_detail(_log_text(log))
+        _write_actions(log, result.actions)
+        return result
 
+
+def _drive(log: Path, hands: Hands, result: LiveResult, at: list[str], menu_timeout: float, campaign_timeout: float,
+           combat_timeout: float, generic_fallback: bool, new_game_grace: float, vanilla_rows: int, save_reload: bool,
+           probe_saves: bool) -> LiveResult:
+    """drive's sequence; `at[0]` names the stage in progress."""
     def stuck(stage: str, detail: str) -> LiveResult:
         result.stage, result.detail = stage, detail
         _write_actions(log, result.actions)
@@ -559,6 +576,7 @@ def drive(log: Path, hands: Hands, menu_timeout: float = 240, campaign_timeout: 
     if not wait_for(log, MENU_READY, menu_timeout, hands):
         return stuck("main-menu", "the game never logged that the main menu was up")
     result.stages.append("main-menu")
+    at[0] = "new-game"
     hands.sleep(20)  # the menu is drawn some seconds after its log line
     flow = new_game_flow_for(_log_text(log))
     new_game(hands, flow)
@@ -577,15 +595,18 @@ def drive(log: Path, hands: Hands, menu_timeout: float = 240, campaign_timeout: 
         return stuck("new-game", "no 'campaign END' probe line: a screen did not take the click, generation failed, or the probe is not enabled" + tail)
     result.stages.append("campaign")
     if save_reload:  # the probe fingerprints and saves at day N; the reload is a second launch (save_reload_run)
+        at[0] = "fingerprint-save"
         if not wait_for(log, FINGERPRINT_SAVED, campaign_timeout, hands):
             return stuck("fingerprint-save", "no 'fingerprint|save|cmdSave returned true' probe line: save_reload.after_days not reached or cmdSave failed")
         result.stages.append("fingerprint-saved")
     if probe_saves:
+        at[0] = "probe-save"
         if not wait_for(log, PROBE_SAVED, PROBE_SAVE_TIMEOUT, hands):
             return stuck("probe-save", "the probe config asks for a save after the checks, and no 'save|campaign|cmdSave returned' "
                                        "probe line came: leaving the campaign during a save loses the keys and clicks (93.59)")
         result.stages.append("probe-saved")
         hands.sleep(PROBE_SAVE_SETTLE)
+    at[0] = "leave-campaign"
     left = to_mission_list(hands, Path(f"{log}.leave-campaign"))
     if left is False:
         return stuck("leave-campaign", "no main menu on screen after Escape, Exit and OK, also after one retry: the keys did not reach "
@@ -597,6 +618,7 @@ def drive(log: Path, hands: Hands, menu_timeout: float = 240, campaign_timeout: 
         return stuck("mission-list", f"{rows_below} mission rows sit below the probe's; only {MAX_ROWS_REACHABLE} are reachable without scrolling back")
     start_timeout, settle_timeout = min(COMBAT_START_TIMEOUT, combat_timeout), min(POST_BATTLE_SETTLE, combat_timeout)
     while round_no < rounds_total:
+        at[0] = f"combat-round-{round_no + 1}"
         offset = len(_log_text(log))
         started, shot = start_probe_combat(log, hands, (rows_below, list_total), round_no + 1, start_timeout, offset, result.stages)
         if not started:
@@ -638,7 +660,7 @@ def real_hands(rig: Path, launcher_pid: int | None = None) -> Hands:
     def geometry():
         found = game_click.game_window(pids())
         if found is None:
-            raise RuntimeError("the game window is gone")
+            raise GameWindowGone("the game window is gone")
         return found
 
     def front() -> None:

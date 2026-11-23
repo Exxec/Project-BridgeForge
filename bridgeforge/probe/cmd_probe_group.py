@@ -65,6 +65,7 @@ def add_parser(subcommands) -> None:
     group_install.add_argument("--with-lunalib", action="store_true", help="also enable LunaLib whenever GraphicsLib (any version) is enabled without it (RC8-25: GraphicsLib 1.12.1 needs it under Fast Rendering; 1.12.1 gets it automatically)")
     group_install.add_argument("--no-lunalib", action="store_true", help="do not enable LunaLib automatically for GraphicsLib 1.12.1 (to show the dependency gap, RC8-25)")
     group_install.add_argument("--setup", action="append", default=[], metavar="SPEC", help="probe setup applied once per save, as for probe-config --setup; also swap-industry:<from>:<to>:<count>[:<condition-prefix>] (probe 0.2.25); repeatable")
+    group_install.add_argument("--keep-saves", action="store_true", help="leave the rig's earlier game saves in place (by default they move to <rig>/_saves-moved/<time>/ so every run starts the same way; ROADMAP-3 93.50)")
     group_install.add_argument("--also-enable", action="append", default=[], metavar="MOD_OR_SET", help="also enable this mod id (with its dependencies) or named set (aotd: Vaults of Knowledge, Toolbox fork, Prepatcher, BMO, Ashlib); repeatable; every id must be in the rig")
     group_install.add_argument("--save-after-checks", action="store_true", help="the probe saves the game once after the day-1 checks, so the save can be read and reloaded (probe 0.2.26)")
     group_install.add_argument("--save-reload-after-days", type=int, default=0, metavar="N", help="opt in to the save-and-reload fingerprint stage: at in-game day N the probe logs a fingerprint, saves, and stores it; `live --save-reload` then reloads that save (next probe version)")
@@ -197,9 +198,14 @@ def _probe_install(args: argparse.Namespace, queue: Path, rig: Path) -> dict | i
     result = install_group(plan, args.group, queue, rig, stage=args.stage_providers, with_lunalib=args.with_lunalib,
                            setups=args.setup, expect_supply=args.expect_supply, save_after_checks=args.save_after_checks,
                            save_reload_after_days=args.save_reload_after_days, save_reload_note=args.save_reload_note,
-                           no_lunalib=args.no_lunalib, also_enable=args.also_enable)
+                           no_lunalib=args.no_lunalib, also_enable=args.also_enable, keep_saves=args.keep_saves)
     if not args.json:
         print(f"Group {result['group']} installed: {', '.join(result['members'])}")
+        saves = result.get("saves_aside") or {}
+        if saves.get("moved"):
+            print(f"  moved {len(saves['moved'])} earlier save(s) aside to {saves['to']} (93.50; --keep-saves keeps them)")
+        if saves.get("left"):
+            print(f"  WARN {saves['left']}")
         for item in result["staged_providers"]:
             print(f"  provider {item['mod_id']} {item['version']} from {item['workspace']}: {item['action']} (id, version and files verified)")
         for item in result["copied"]:

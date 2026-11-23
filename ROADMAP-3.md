@@ -2773,6 +2773,23 @@ fixes of 93.28. 93.26-93.35 are that day's findings.
     - Why a save was read during New Game is not shown. The rig's `saves/` held 14 saves from the day's runs, and
       `probe-group install` leaves them. Moving the rig's saves aside before each run would make every run start the same
       way.
+  **Done 2026-11-22.**
+  - **The window:** `real_hands` raises `GameWindowGone` (still a `RuntimeError`), and `drive` turns it into LIVE_STUCK at
+    the stage in progress (`new-game`, `fingerprint-save`, `probe-save`, `leave-campaign` or `combat-round-N`). The
+    verdict quotes the log's last three lines. The reload's own driver gets the same treatment with 88.19/88.22.
+  - **The saves:** `probe-group install` moves the rig's `saves/save_*` folders into `<rig>/_saves-moved/<UTC time>/`,
+    never deleting one, and says so.
+    - `saves/common` (the probe's config and marker) stays.
+    - A `saves` folder that is a junction or link is the owner's, so it is left alone and reported.
+    - `--keep-saves` keeps them.
+    - It moves at install only: a save-reload run's reload still finds the save its first launch wrote.
+  - **Tests:**
+    - `tests/test_live_run.py`: the window vanishing at New Game (the log's last line quoted), while leaving the campaign,
+      and at a battle's deploy;
+    - `tests/test_probe_group.py`: saves moved and `common` kept, `--keep-saves`, a linked `saves` left alone, two
+      batches in one second kept apart.
+  - **Mutation-checked** with `mutate_batch.py`: 10 mutants, all caught after a passing baseline.
+  - Not covered by a test: that `real_hands` raises `GameWindowGone`, because it needs a real game window.
 - 93.58 (S) **The display goes dark mid-run.** Test1's power plan turns the display off after 180 s without input
   (`powercfg` VIDEOIDLE 0xb4, read 2026-11-19). The 96.2 runs P962KR and P962KR2 (Kadur Remnant) reached the campaign, then the
   harness's Escape and menu clicks never reached the game: LIVE_STUCK at the first combat round, the log silent after the

@@ -417,6 +417,36 @@ def _rig_folders_by_id(mods_dir: Path) -> dict[str, list[Path]]:
     return found
 
 
+SAVES_ASIDE_DIR = "_saves-moved"
+
+
+def move_aside_saves(rig: Path, stamp: str | None = None) -> dict:
+    """Move the rig's game saves (`saves/save_*` folders) into `<rig>/_saves-moved/<stamp>/`, never deleting one, so every run
+    starts the same way (93.50: SR7-LIVE-0985a-20261117's New Game read a save SR6 had left, then the window vanished).
+    `saves/common` (the probe's config and marker) stays. A `saves` folder that is a junction or link is the owner's, not the
+    rig's: it is left alone and reported."""
+    from datetime import datetime, timezone
+
+    from bridgeforge.boot_test import _is_link
+
+    saves = Path(rig) / "saves"
+    if not saves.exists():
+        return {"moved": [], "to": None}
+    if _is_link(saves):
+        return {"moved": [], "to": None, "left": f"{saves} is a junction or link, so its saves are not the rig's; left alone"}
+    found = sorted(p for p in saves.iterdir() if p.name.startswith("save_") and p.is_dir() and not _is_link(p))
+    if not found:
+        return {"moved": [], "to": None}
+    base = Path(rig) / SAVES_ASIDE_DIR / (stamp or datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ"))
+    target, n = base, 2
+    while target.exists():  # two installs in one second, or a stamp reused: never mix two batches
+        target, n = base.with_name(f"{base.name}-{n}"), n + 1
+    target.mkdir(parents=True)
+    for folder in found:
+        shutil.move(str(folder), str(target / folder.name))
+    return {"moved": [p.name for p in found], "to": str(target)}
+
+
 def _move_aside_duplicate_ids(rig: Path, members: dict[str, Path]) -> list[dict]:
     """Move a second rig folder with a member's mod id to <rig>/mods-disabled-providers. SEEKER-0.6 beside SEEKER and
     Legacy-of-Arkgneisis-0.98a beside Arkgneisis (2026-10-05): the game loads one, record_group could not tell which
@@ -592,10 +622,12 @@ def _stage_member_scenario(working: Path, rig_copy: Path, workspace: str) -> dic
 def install_group(plan: dict, group_number: int, queue: Path, rig: Path, install_probe: bool = True,
                   stage: bool = False, with_lunalib: bool = False, setups: list[str] | None = None,
                   expect_supply: list[str] | None = None, save_after_checks: bool = False, no_lunalib: bool = False,
-                  also_enable: list[str] | None = None, save_reload_after_days: int = 0, save_reload_note: str = "") -> dict:
+                  also_enable: list[str] | None = None, save_reload_after_days: int = 0, save_reload_note: str = "",
+                  keep_saves: bool = False) -> dict:
     """Copy/sync members into the rig, write the merged config, set enabled_mods.json. A group whose members
     need providers from the queue installs only with `stage` (`--stage-providers`), which copies and verifies them.
-    `setups` (probe setup specs) and `expect_supply` ("commodity@industry") go into the merged config (probe 0.2.25)."""
+    `setups` (probe setup specs) and `expect_supply` ("commodity@industry") go into the merged config (probe 0.2.25).
+    The rig's earlier game saves are moved aside first (`move_aside_saves`, 93.50) unless `keep_saves`."""
     from bridgeforge.probe.probe_config import parse_expect_supply, parse_setups
 
     setups = parse_setups(setups)
@@ -617,6 +649,7 @@ def install_group(plan: dict, group_number: int, queue: Path, rig: Path, install
     if needed and not stage:
         names = ", ".join(sorted({f"{p['mod_id']} ({p['workspace']})" for p in needed}))
         raise ProbeGroupError(f"group {group_number} needs providers staged into the rig: {names}. Rerun with --stage-providers.")
+    saves_aside = {"moved": [], "to": None, "kept": True} if keep_saves else move_aside_saves(rig)
     staged = stage_providers(group, queue, rig) if needed else []
     mods_dir = rig / "mods"
     installed = rig_mod_ids(mods_dir)
@@ -683,7 +716,7 @@ def install_group(plan: dict, group_number: int, queue: Path, rig: Path, install
     return {"schema_version": SCHEMA_VERSION, "mode": "PROBE_GROUP_INSTALL", "group": group_number,
             "members": [m["workspace"] for m in group["members"]], "copied": copied, "staged_providers": staged, "enabled_mods": enabled,
             "dependency_version_conflicts": dependency_version_conflicts(mods_dir, enabled),
-            "moved_aside": moved_aside, "incomplete_providers": incomplete_provider_copies(rig, enabled),
+            "moved_aside": moved_aside, "saves_aside": saves_aside, "incomplete_providers": incomplete_provider_copies(rig, enabled),
             "scenarios": [{k: v for k, v in s.items() if k != "scenario"} for s in scenarios],
             "probe_mission_added": probe_mission_added, "lunalib_advice": advice, "lunalib": lunalib_why,
             "config_path": str(common / CONFIG_FILE), "checked_ids": len(config["content_variants"]["ship"]) + len(config["content_variants"]["other"])

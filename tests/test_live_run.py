@@ -21,8 +21,10 @@ class FakeGame:
     def __init__(self, log: Path, rounds: int = 1, stall_at: str | None = None, lost_starts: tuple[int, ...] = (),
                  late_redefinition: bool = False, dies_at_deploy: int | None = None, dies_in_battle: bool = False,
                  saves_after_end: bool = False, menu_after_exits: int | None = None, lost_spaces: int = 0,
-                 round_seconds: float = 0.0) -> None:
+                 round_seconds: float = 0.0, window_gone_on: tuple[float, float] | None = None) -> None:
         self.log, self.rounds, self.stall_at = log, rounds, stall_at
+        # window_gone_on: a click on this point finds no window (SR7-LIVE-0985a-20261117's New Game click, 93.50)
+        self.window_gone_on = window_gone_on
         # lost_spaces: that many SPACE presses in battle land before the mission takes input (SA-SR2-20261119 lost the press
         # after deploying and the first retry). round_seconds: the battle runs that long after the press that takes, then
         # logs END (93.62); 0 ends it at once.
@@ -52,7 +54,7 @@ class FakeGame:
 
     def _window(self) -> None:
         if not self.alive:
-            raise RuntimeError("the game window is gone")
+            raise live_run.GameWindowGone("the game window is gone")
 
     def front(self) -> None:
         self._window()
@@ -63,6 +65,8 @@ class FakeGame:
 
     def click(self, fx: float, fy: float) -> None:
         self._window()
+        if (fx, fy) == self.window_gone_on:
+            raise live_run.GameWindowGone("the game window is gone")
         self.actions.append(("click", fx, fy))
         if self.saving:
             self.lost_to_save.append(("click", fx, fy))
@@ -358,6 +362,24 @@ class DriveTests(unittest.TestCase):
         self.assertEqual(len(result.actions), len(game.actions) - sum(1 for a in game.actions if a[0] == "logged"))
         sizes = [a["log_bytes"] for a in result.actions]
         self.assertEqual(sizes, sorted(sizes))  # the log only grows while the run acts
+
+    def test_a_window_that_vanishes_at_new_game_is_stuck_there_with_the_logs_last_lines(self) -> None:
+        # SR7-LIVE-0985a-20261117: New Game's click raised "the game window is gone" and the run gave no verdict (93.50).
+        result, game = self._drive(window_gone_on=live_run.MAIN_MENU_NEW_GAME)
+        self.assertEqual((result.verdict, result.stage), ("LIVE_STUCK", "new-game"))
+        self.assertIn("the game window is gone", result.detail)
+        self.assertIn("Reading save data from [x]", result.detail)  # the log's last line, quoted
+        self.assertEqual(game.combat_started, 0)
+
+    def test_a_window_that_vanishes_while_leaving_the_campaign_names_that_stage(self) -> None:
+        result, _ = self._drive(window_gone_on=live_run.GAME_MENU_EXIT_OK)
+        self.assertEqual((result.verdict, result.stage), ("LIVE_STUCK", "leave-campaign"))
+        self.assertIn("campaign|END", result.detail)
+
+    def test_a_window_that_vanishes_at_a_battles_deploy_names_its_round(self) -> None:
+        result, _ = self._drive(rounds=2, window_gone_on=live_run.DEPLOY)
+        self.assertEqual((result.verdict, result.stage), ("LIVE_STUCK", "combat-round-1"))
+        self.assertIn("the game window is gone", result.detail)
 
     def test_game_that_never_reaches_the_menu_is_stuck_at_the_menu(self) -> None:
         with resolved_temp_dir() as base:
