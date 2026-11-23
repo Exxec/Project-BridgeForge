@@ -1034,6 +1034,19 @@ class CombatRoundsTests(unittest.TestCase):
         self.assertEqual(report["members"]["mod_a"]["verdict"], "PASS")  # coverage is reported, not a verdict
 
 
+class MergedHullListsTests(unittest.TestCase):
+    def test_a_group_config_unites_its_members_empty_variant_hulls_and_ship_sections(self) -> None:
+        # 93.66 and 93.68: the group config the probe reads must keep each member's lists.
+        with resolved_temp_dir() as root:
+            first = build_probe_config(_workspace(root / "q", "A", "mod_a", "hull_a"))
+            second = build_probe_config(_workspace(root / "q", "B", "mod_b", "hull_b"))
+        first.update(hulls_sections=["a_arm"], hulls_empty_variant=["a_bare"])
+        second.update(hulls_sections=["b_arm"], hulls_empty_variant=["b_bare"])
+        merged = merge_configs([first, second])
+        self.assertEqual(merged["hulls_sections"], ["a_arm", "b_arm"])
+        self.assertEqual(merged["hulls_empty_variant"], ["a_bare", "b_bare"])
+
+
 class CombatUndeployedTests(unittest.TestCase):
     """93.67: P034-BULTACH-20261122 deployed 67 of its 108 planned hulls; the rest waited in reserve until time ran out."""
 
