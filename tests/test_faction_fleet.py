@@ -124,7 +124,7 @@ class TagTests(unittest.TestCase):
 
     def _tag_core(self, root):
         core = _core(root)
-        _write(core / "data" / "hulls" / "ship_data.csv", "name,id,tags\nWolf,wolf,base_bp\nHound,hound,demo_bp\n")
+        _write(core / "data" / "hulls" / "ship_data.csv", "name,id,tags\nWolf,wolf,base_bp\nHound,hound,demo_bp\nLasher,lasher,demo_bp\n")
         return core
 
     def test_tags_reach_tagged_hulls_skins_by_their_own_tags_wings_and_a_mod_row_wins(self) -> None:
@@ -135,7 +135,7 @@ class TagTests(unittest.TestCase):
             mod, core = self._tag_mod(root), self._tag_core(root)
             knows = known(json.loads((mod / "data" / "world" / "factions" / "demo.faction").read_text(encoding="utf-8")),
                           _Index(mod), _Index(core))
-        self.assertEqual(knows["by_tag"]["hull"], {"demo_hull", "demo_skin"})  # not plain_skin; hound's mod row has no tag
+        self.assertEqual(knows["by_tag"]["hull"], {"demo_hull", "demo_skin", "lasher"})  # not plain_skin; hound's mod row has no tag
         self.assertEqual(knows["by_tag"]["wing"], {"demo_wing"})
         self.assertEqual(knows["unmatched"], {"nothing_bp"})  # demo_bp, in both lists, is matched by a hull and a wing
 
@@ -144,6 +144,7 @@ class TagTests(unittest.TestCase):
             gene = describe(self._tag_mod(root), "faction:demo_faction", vanilla_core=self._tag_core(root))
         self.assertTrue({"hull:demo_hull", "hull:demo_skin", "wing:demo_wing", "variant:demo_hull_Var1"} <= set(gene["needs"]["genes"]))
         self.assertNotIn("hull:other_hull", gene["needs"]["genes"])
+        self.assertNotIn("hull:lasher", gene["needs"]["genes"])  # a core hull reached by tag counts for role matching only
         self.assertEqual(gene["needs"]["donor"], [f"{ROLES_FILE}#/combatSmall/demo_hull_Var1"])
         self.assertIn(["nothing_bp"], [s["mentions"] for s in gene["unknowns"]["suspects"] if s["path"] == ROLES_FILE])
 
