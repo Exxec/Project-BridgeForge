@@ -1,0 +1,1 @@
+- Docs: ROADMAP-3 items verified as built are marked Done or Partly built (reassessment 2026-11-23); ROADMAP_STATUS, LOCAL_HANDOFF, NEXT_MILESTONE, FEATURE_GENOME_ROADMAP and BUGS carry dated corrections.

@@ -1,5 +1,7 @@
 # Next milestone proposal: one reproducible revival case
 
+**Note 2026-11-23:** S1 was accepted on 2026-10-25 (bounded local-new-game scope, below), so this page is history. The active track is the feature genome G series, now 94.G2 (ROADMAP-3 item 94, [FEATURE_GENOME_ROADMAP](FEATURE_GENOME_ROADMAP.md)); S4 is parked and S2 and S3 no longer gate (ROADMAP-3 item 97).
+
 **2026-10-25 independent closeout review:** see [S1_COMPLETION_REVIEW.md](S1_COMPLETION_REVIEW.md) for fresh
 2,717-test validation, artifact-only resume, exact local archive/retry and real-input refusal controls.
 The controlled loose-Java compilation pilot passes full coverage and exact-subject owner review.

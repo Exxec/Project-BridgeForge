@@ -49,7 +49,7 @@ prints `target_core_reports`, the build the core itself reports (ROADMAP-3 92.40
 - **White_Legion** has RC7 at `C:\Program Files (x86)\Fractal Softworks\Starsector985a` and no rig; its `Done/` and older
   workspaces are empty folder skeletons (92.24). Development runs there, live tests on Test1.
 - Move workspaces between them as a zip with UTF-8 names and compare names byte for byte, not only file counts and hashes:
-  `tar | ssh tar` turned Eridani's CJK file names into mojibake (92.40; 93.6 and 93.18 are open).
+  `tar | ssh tar` turned Eridani's CJK file names into mojibake (92.40; 93.6 and 93.18 are open). [2026-11-23: 93.6, 93.18 and the rest of 92.40 were closed as covered on 2026-11-22; the Test1 procedure and the memory mirror cover them.]
 - `Done/` keeps only the latest archive of each mod (owner 2026-11-17): the seven older copies are in
   `Done/_replaced-2026-11-17/` on Test1, with a README (96.0).
 
@@ -66,7 +66,7 @@ they are.
 **Runs still to do.**
 1. **First live run with the canSkipTutorial pin (93.28).** `probe-group live` on the 0.98.5a rig. Done: the run gets past
    New Game's tutorial choice, and the owner's `canSkipTutorial` is as before afterwards (absent stays absent).
-2. **The abandoned archives the catalogue flagged (96.2).** Kadur Remnant (the gated `jar-call-signature-changed` fixer),
+2. **[2026-11-23: done, 96.2 is complete: all six archives are LIVE_VALIDATED on the RC7 rig, 2026-11-19.]** **The abandoned archives the catalogue flagged (96.2).** Kadur Remnant (the gated `jar-call-signature-changed` fixer),
    Broken Star (`relink`), Vayra's Sector (`reportSuccess(int)`: the argument decided from vanilla's own callers, which pass
    the bounty's level; 91.1, 95.14), YunruCore (`hullmod:low_maintenance` now collides with an RC7 hull mod: rename or keep,
    the owner's call with the evidence), Neutrino Corporation 1.8.9 and Station Augments (hand ports of calls into obfuscated
@@ -89,7 +89,7 @@ they are.
    - G1R-LIVE-0985a-20261117 fought Eridani's, Musashi's and Scrapyard's round-2 hulls and passed (93.39). Owner
      2026-11-17: Eridani's and Scrapyard's archives stay as they are.
    - JDK 27 (93.43) is set up on Test1 but is not the default: `run-j27-frpp.bat`, chosen with `BF_RIG_BAT=run-j27-frpp.bat`.
-     Make one comparison run against JDK 25. Then make it the wrappers' default, with JDK 25 as the fallback.
+     Make one comparison run against JDK 25. Then make it the wrappers' default, with JDK 25 as the fallback. [2026-11-23: the comparison run is skipped until a Prepatcher release supports RC7 (owner 2026-11-22, 93.43); the wrappers were retired 2026-11-19.]
 
 4. **Archived OP trims (92.20)**, on Test1 (it needs the full `Done/`): classify each `variant-op-over-budget` trim as
    REGRESSION or AUTHORED against the mod's reference core, and restore the AUTHORED ones as `+bf.N` revisions.
@@ -120,6 +120,8 @@ bleed where RC3 does, and the log has no ModuleSlotFix "stock module variant" wa
 `reports/` and in item 87.7.
 
 ## 0b. Item 73 / 75 implementation: what still needs this machine (2026-10-18)
+
+**Note 2026-11-23:** this is the RC8-era list of 2026-10-18, kept for history. The target has been 0.98.5a-RC7 since 2026-11-15; live testing runs on the second machine (Test1) with the `probe-group live` harness, not on this machine; ROADMAP-3 is the authority for what is open. Items below that ROADMAP-3 shows done or closed: 96.2 (the ports, done 2026-11-19), 93.6 and 93.18 (closed as covered 2026-11-22) and the JDK 27 comparison (skipped, 93.43). Nothing below was deleted.
 
 **Project Go follow-up 2026-10-19 (owner: "Repeat for all next phases if able").** Translation schema alignment is
 implemented offline. Runtime manifests now record observed selected-Java version, and run records support an explicit
