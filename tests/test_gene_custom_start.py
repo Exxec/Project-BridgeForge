@@ -121,6 +121,9 @@ class NestedClassTests(unittest.TestCase):
             _write(src / "data" / "scripts" / "demo_Start.java", source)
             subprocess.run([javac_path(), "-encoding", "UTF-8", "-proc:none", "-d", str(out), str(src / "data" / "scripts" / "demo_Start.java")],
                            check=True, capture_output=True)
+            # The mod ships its source under src/, as Bultach does: vendor-plan then follows the source's imports, which never
+            # name the anonymous class (a jar class without source is followed through its bytecode, which does).
+            _write(mod / "src" / "data" / "scripts" / "demo_Start.java", source)
             info = json.loads((mod / "mod_info.json").read_text(encoding="utf-8"))
             _write(mod / "mod_info.json", json.dumps({**info, "jars": ["jars/demo.jar"]}))
             (mod / "jars").mkdir()
