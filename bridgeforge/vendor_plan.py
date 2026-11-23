@@ -22,6 +22,7 @@ from pathlib import Path
 from bridgeforge.scan.scanner import _load_lenient_json_file, _parse_class_file, _read_csv_rows_lenient, iter_class_files_in_jars
 from bridgeforge.file_hash import sha256_file as _sha256  # 96.5 A10
 from bridgeforge.game_csv import game_rows
+from bridgeforge.phase_sprites import phase_sprite_paths, phase_systems
 
 SCHEMA_VERSION = 1
 KINDS = ("hullmod", "weapon", "wing", "hull", "variant", "shipsystem")
@@ -178,6 +179,14 @@ def vendor_plan(provider: Path, ids: list[str], *, target: Path | None = None, v
     def add(what: str, path: str, reason: str) -> None:
         include.setdefault(f"{what}:{path}", {"what": what, "path": path, "reason": reason})
 
+    systems: list[dict] = []  # phase systems (RC8-51), read once, at the first hull
+
+    def phase_sprites(ident: str, key: str) -> None:
+        if not systems:
+            systems.append(phase_systems([source, vanilla]))
+        for path, reason in phase_sprite_paths(ident, [source, vanilla], systems[0]):
+            queue.append(("file", path, f"{key} phase sprite: {reason} (RC8-51)"))
+
     def need_id(kind: str, ident: str, why: str) -> None:
         if isinstance(ident, str) and ident.strip():
             queue.append(("id", f"{kind}:{ident.strip()}", why))
@@ -289,6 +298,7 @@ def vendor_plan(provider: Path, ids: list[str], *, target: Path | None = None, v
                         need_id("weapon", ident_, f"{key} builtInWeapons")
                     for ident_ in spec.get("builtInWings") or []:
                         need_id("wing", ident_, f"{key} builtInWings")
+                    phase_sprites(ident, key)
                 if kind == "variant":
                     need_id("hull", spec.get("hullId", ""), f"{key} hullId")
                     for field in ("hullMods", "permaMods", "sMods"):
