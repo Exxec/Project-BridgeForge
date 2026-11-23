@@ -2425,6 +2425,27 @@ history as the closure benchmark, a cross-repository trace check, an early Java 
     Mutation-checked: 13 mutants. One survived: `describe` adding the nested classes was untested, because a jar class
     without source is followed through its bytecode, which names its anonymous class. All 13 were caught once the test
     shipped its source under `src/`, as Bultach does.
+  - **Independent review:** no critical or high finding. Fixed, with tests:
+    - `_nested_classes` now walks through `scan_classfile.iter_class_files_in_jars` (the duplication audit's
+      `jar-class-walk` rule). A nested class that cannot be read stops the gene.
+    - Nested classes are code too: `_code_members` includes them, so their literals are followed.
+    - `Outer$.class` is not nested, and a class nested twice names its nearest outer member.
+    - An unreadable or non-object `customStarts.json` says so.
+
+    Identities after the fixes: P1-P3 anchors unchanged, P4 `ffd69b5e`, P3's set carrier `gene_carrier_93f4646e00d1`.
+  **P2's and P3's boots, 2026-11-22 (Test1, `_rig-genes`, `gene boot` from slice 17; P2 and P3 re-proved on Test1 with
+  main's code, identities equal to White_Legion's).**
+  - **P2B-SUB-20261122,** P2's subtracted donor: PASS, BOOTED (main menu, no Fatal, no mod error).
+  - **P2B-CAR-20261122 and P3B-CAR-20261122,** P2's carrier and P3's set carrier (`gene_carrier_92b783705cff`, built
+    before slice 18): FAIL, the same Fatal at load. `ResourceLoaderState.initSpecStore` threw an NPE because
+    `getHullStyle()` returned null.
+    - The carriers' hulls use `TANIA_ASTEROID` and `ECE_TECH`, styles defined only in each donor's
+      `data/config/hull_styles.json`, which no carrier holds.
+    - **Next (G2):** a hull's `style` names a hull style. A mod-defined style travels with the gene as a json-entry
+      (an object key, so the contract allows it).
+    - A style other donor hulls also use must stay in the subtraction copy: it is needed and shared, not owned. Design
+      with the advisor first.
+    - P4's carrier has the same gap.
 - 94.G3 **Gene bank**: content-addressed store, alleles across the corpus, lineage, licence state; RevenantLib distributes genes
   from vanished authors (GD-3). The store's payloads live under `data_root()`, like `Done/`, never in this public
   repository; only manifests of the owner's own or permitted content become committed fixtures (2026-11-19).
