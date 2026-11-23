@@ -2560,6 +2560,54 @@ history as the closure benchmark, a cross-repository trace check, an early Java 
     - Hull files are re-read once per style. This costs speed only.
     - The rule covers every content id the start's code names that the mod defines, not only its ship. For P4 that is
       the ship alone.
+  **Boot halves of the slice-20 proofs, 2026-11-23** (Test1 `_rig-genes`, after #229). Each proof was re-made on Test1 and
+  matched White_Legion's identities; each run was evaluated before the next install.
+  - **P2: proven, both halves.**
+    - P2B-SUB-20261123: BOOTED.
+    - P2B-CAR-20261123: BOOTED. Both LIVE_DONE, and the log shows the game reading the carrier's own `hull_styles.json`.
+  - **P3B-CAR-20261123 is void.** The setup reused a folder of the same name, which held the slice-18 diagnostic re-proof.
+    Needs are not part of the identity, so the identity check could not tell. The folder carries a `SUPERSEDED.txt`.
+  - **P3B-CAR2-20261123:** the fresh slice-20 set carrier got past the hull styles. It was then Fatal at load on a phase
+    sprite of one of its hulls (`<sprite>_glow1.png`). This is a new gap (RC8-51), and slice 21 detects it.
+  - **P4B-SUB-20261123:** BOOTED, with Nexerelin enabled.
+    - Its live run stalled at combat round 2. The screenshot shows the mission screen with the probe mission selected
+      and not started. This is a harness stall like 93.37, and it does not affect the gene's verdict.
+  - **P4B-CAR-20261123:** Fatal at load: `graphics/ships/ork_murtach_glow1.png` not found, the same gap.
+  - **Lesson for the setup scripts:** prove into a fresh folder and refuse an existing one. Compare content-bound values
+    as well as identities: the carrier's tree hash, or the carrier id once a member changes.
+  **Slice 21 built 2026-11-23: phase sprites (RC8_BEHAVIOUR RC8-51).** Branch `feat/g2-s21-phase-sprites`.
+  - **Evidence:** javap of RC7's `starfarer_obf.jar` (`SpecStore`, `specs.M`, `specs.O00o.isPhase`) gives the rule. It
+    was confirmed by two Fatals: P4B-CAR above, and P3B-CAR2 on a hull that matched only through its `PHASE` shield.
+    - Ship systems that count are those whose `.system` sets both `phaseHighlight` and `phaseDiffuse`.
+    - A phase hull has the `PHASE` hint, or a `PHASE` shield with defense id `phasecloak`.
+    - It takes a system's suffixes when its ship system is that system, or when its shield type is `PHASE`. That second
+      case covers every such system.
+    - The game queues `spriteName[:-4] + suffix + ".png"` for each suffix that is not empty.
+  - **`bridgeforge/phase_sprites.py`** holds the rule. A skin takes its base hull's row with its own `spriteName`,
+    `systemId`, `addHints` and `removeHints`.
+    - **vendor-plan:** the hull closure queues each derived image as a file: a member when the mod has it, vanilla when
+      the core does, missing otherwise.
+    - **`carrier_load`:** reports `hull-phase-sprite-missing` when neither the carrier, a declared dependency nor the
+      core holds one.
+  - **Measured locally:** slice 20's P4 set carrier has exactly the two murtach glows as gaps, and P3's set carrier has 6,
+    all present in its donor. With slice 21:
+    - both sets PASS with 0 load gaps;
+    - P4's carrier holds 87 members (`gene_carrier_97b590f11c53`), and P3's holds 332 (`gene_carrier_44b293d8f5f8`);
+    - P1 to P4's anchor identities are unchanged, and P1, P2 and P4 still pass both static halves.
+  - **Shared files:** the advisor's case of a glow that a donor decorative weapon also uses as its sprite.
+    - The subtraction removes it, and the scan reports the weapon's `asset-reference-missing` as a leak. The proof FAILs
+      rather than passing silently.
+    - Under the owner's "Separate, needed", such a file is a need. That is left for a slice of its own.
+    - None of P1 to P4's anchor genes has a member image that another donor file names (measured 2026-11-23).
+  - **Tests:** `tests/test_phase_sprites.py`:
+    - which hulls are phase hulls;
+    - systems that need both keys, and an empty suffix;
+    - the system match against the `PHASE`-shield match;
+    - skins;
+    - the closure's member and missing image;
+    - the load gap, with the core's copy counted;
+    - a hull gene's proof carrying its glows;
+    - the shared-glow leak.
 - 94.G3 **Gene bank**: content-addressed store, alleles across the corpus, lineage, licence state; RevenantLib distributes genes
   from vanished authors (GD-3). The store's payloads live under `data_root()`, like `Done/`, never in this public
   repository; only manifests of the owner's own or permitted content become committed fixtures (2026-11-19).
