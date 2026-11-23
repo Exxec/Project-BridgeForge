@@ -115,12 +115,15 @@ class DriveTests(unittest.TestCase):
             else:
                 self.assertEqual(result.stage, "fingerprint-save")
 
-    def _reload(self, after_click: list[str], alive=lambda: True, dialog: str | None = None, after_compare: list[str] = ()):
+    def _reload(self, after_click: list[str], alive=lambda: True, dialog: str | None = None, after_compare: list[str] = (),
+                before_click: list[str] = (), dialog_at_click: str | None = None):
         """drive_reload on a log that gets `after_click` once Continue is clicked; `after_compare` lines and a windows.txt
-        `dialog` appear during the settle period."""
+        `dialog` appear during the settle period. `before_click` lines are in the log already; `dialog_at_click` is written
+        to windows.txt with the click (a dialog during the load)."""
         with resolved_temp_dir() as base:
             log = base / "run.stdout.log"
-            log.write_text("1 [main] INFO  Reading save data from [x]\n", encoding="utf-8")
+            log.write_text("".join(line + "\n" for line in ["1 [main] INFO  Reading save data from [x]", *before_click]),
+                           encoding="utf-8")
             clicks: list[tuple] = []
             sleeps = [0]
 
@@ -128,6 +131,8 @@ class DriveTests(unittest.TestCase):
                 clicks.append((fx, fy))
                 with log.open("a", encoding="utf-8") as handle:
                     handle.write("\n".join(after_click) + "\n")
+                if dialog_at_click:
+                    (base / "run.windows.txt").write_text(f"20:10:30 dialog: 'Error' text: '{dialog_at_click}'\n", encoding="utf-8")
 
             def sleep(_seconds):
                 if COMPARE in log.read_text(encoding="utf-8"):
@@ -162,6 +167,25 @@ class DriveTests(unittest.TestCase):
         result, _ = self._reload([LOAD, *reload_log(SAME, True)], dialog="Fatal: java.lang.NullPointerException")
         self.assertEqual((result.verdict, result.stage), ("LIVE_STUCK", "after-compare"))
         self.assertIn("Fatal: java.lang.NullPointerException", result.detail)
+
+    def test_a_fatal_logged_right_behind_the_compare_line_fails_the_reload(self) -> None:
+        # Review of #215: the wait polls once a second, so a Fatal 243 ms after the compare line can already be in the log
+        # when the poll sees the line; it must still be read.
+        result, _ = self._reload([LOAD, *reload_log(SAME, True), "301 [main] FATAL x  - right behind"])
+        self.assertEqual((result.verdict, result.stage), ("LIVE_STUCK", "after-compare"))
+        self.assertIn("right behind", result.detail)
+
+    def test_a_dialog_during_the_load_fails_the_reload(self) -> None:
+        result, _ = self._reload([LOAD, *reload_log(SAME, True)], dialog_at_click="Fatal: during load")
+        self.assertEqual((result.verdict, result.stage), ("LIVE_STUCK", "after-compare"))
+        self.assertIn("during load", result.detail)
+
+    def test_load_and_compare_lines_before_the_click_do_not_count(self) -> None:
+        result, _ = self._reload([], before_click=[LOAD, *reload_log(SAME, True)])
+        self.assertEqual((result.verdict, result.stage), ("LIVE_STUCK", "continue"))
+        # a real load after the click, but the only compare line is an old one
+        result, _ = self._reload([LOAD], before_click=reload_log(SAME, True))
+        self.assertEqual((result.verdict, result.stage), ("LIVE_STUCK", "fingerprint-compare"))
 
     def test_a_fatal_log_line_after_the_compare_line_fails_the_reload(self) -> None:
         result, _ = self._reload([LOAD, *reload_log(SAME, True)], after_compare=["300 [main] FATAL x  - it broke"])
