@@ -281,7 +281,7 @@ def describe_faction(mod: Path, ident: str, vanilla_core: Path | None, policy_pa
     vanilla += [f"file:{f}" for f in core_files]
     from bridgeforge.genome.faction_fleet import fleet_needs
 
-    fleet = fleet_needs(root, faction, mod_index, core_index)  # slice 23: owner 2026-11-23, a faction's fleet is its gene's
+    fleet = fleet_needs(root, faction, mod_index, core_index, path)  # slice 23: owner 2026-11-23, a faction's fleet is its gene's
     genes += fleet["genes"]
     vanilla += fleet["vanilla"]
     missing += fleet["missing"]
@@ -290,9 +290,9 @@ def describe_faction(mod: Path, ident: str, vanilla_core: Path | None, policy_pa
     vanilla += commodity_needs
     missing += commodity_missing
     registrations, notes = _registrations(root, ident)
-    suspects = ([{"path": path, "mentions": tags, "reason": "the faction's lists name tags: hull and fighter tags are expanded "
-                  "for its fleet (slice 24, faction_fleet.known); weapon and hull mod tags are recorded and not expanded"}]
-                if tags else [])
+    suspects = ([{"path": path, "mentions": tags, "reason": "the faction's lists name tags: `knownShips` and `knownFighters` "
+                  "tags are expanded for its fleet (slice 24, faction_fleet.known); the others (weapons, hull mods, priority "
+                  "lists, `hullFrequency` weights) are recorded and not expanded"}] if tags else [])
     suspects += (commodity_suspects + _unread(path, faction) + notes + ([description_suspect] if description_suspect else [])
                  + fleet["suspects"])
     members.sort(key=lambda m: (m["what"], m["path"]))
