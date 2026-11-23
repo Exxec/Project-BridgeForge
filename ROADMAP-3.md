@@ -2719,6 +2719,8 @@ history as the closure benchmark, a cross-repository trace check, an early Java 
     - ids with `/`, `~`, `#` or a space, end to end;
     - no installed mod has an undefined hull-style sound, so the check should not fail a working mod;
     - no mod re-defines an engine enum name.
+
+    Mutation check after the fixes: 25 mutants (the earlier 20 plus 5 for the review's fixes), all caught.
 - 94.G3 **Gene bank**: content-addressed store, alleles across the corpus, lineage, licence state; RevenantLib distributes genes
   from vanished authors (GD-3). The store's payloads live under `data_root()`, like `Done/`, never in this public
   repository; only manifests of the owner's own or permitted content become committed fixtures (2026-11-19).
