@@ -819,6 +819,8 @@ unproven).
     reports what it moved ("moved N the working copy no longer has to ...").
   - **Before:** the drift count included those files, so every later sync reported drift again and never converged.
   - **Batches:** two syncs in one second get separate folders.
+  - **Case:** a rig path that differs from a shipped one only in case is the same file on Windows, so it is not
+    moved (review of #214: the rig lost and regained it on alternate syncs).
   - **Tests:** `tests/test_probe_group.py` `SyncStaleFilesTests`:
     - the stale file moved intact, and the next sync finds nothing to do;
     - a new rig folder copied whole;
@@ -847,6 +849,15 @@ unproven).
   - **Tests:** `tests/test_probe_group.py` `CombatRoundsTests` (the reasons parsed; the existing round cases carry
     `ended`).
   - **The Java end conditions are proven only live,** by the first run on probe 0.3.4.
+  - **Review of #216 (advisor and an independent review):** ships appear one per frame (SR6 logged them about 20 ms
+    apart, owner 0 first), so the first version would have called every battle `side-wiped` at once.
+    - **Both sides seen:** a side counts as wiped only once both sides have had a live ship.
+    - **No reserves:** only when that side has nothing left in reserve (`CombatFleetManagerAPI.getReservesCopy()`,
+      javap of RC7).
+    - **The engine's own end** needs both sides seen too, since a mission opens paused on its deployment screen.
+    - Rebuilt: 54 classes.
+    - **The live pass condition:** an ordinary group ends with `reason=time` near 60 s, and every planned hull has a
+      `combat-deployment` line.
 - 96.14 (M) **A tool for game classes the obfuscator renamed.** Neutrino Corporation and Station Augments both called game
   classes that RC7's obfuscator renamed with unchanged members (`systems.F` -> `systems.return`, `specs.do` -> `specs.M`,
   `ai.ooOO` -> `ai.C`, ...). Each port needed hand tools, kept in the workspaces' `scratch/rc7-remap/`:
@@ -3531,6 +3542,12 @@ approved for now set in roadmap").** Each entry names the hand work it replaces.
     - a dialog, a Fatal line and a dead game after the compare line;
     - a vanished window at Continue.
   - **Mutation-checked:** 5 mutants, all caught after a passing baseline.
+  - **Review of #215:**
+    - **The Fatal scan:** it starts at the end of the compare line itself. The wait polls once a second, so a Fatal
+      243 ms after the line could land before the poll saw it.
+    - **Dialogs:** they count from the Continue click, which also catches a dialog during the load.
+    - **Tests:** a Fatal right behind the compare line, a dialog during the load, and old load and compare lines
+      before the click. 4 more mutants, all caught.
   - **Left:**
     - 88.22's reverse case, a New Game that loaded an old save: 93.50 now moves the rig's old saves aside at install.
     - REMOVALS.json's `files` category (77.19) is not part of this.
