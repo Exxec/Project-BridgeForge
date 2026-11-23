@@ -567,7 +567,7 @@ def drive(log: Path, hands: Hands, menu_timeout: float = 240, campaign_timeout: 
 def _drive(log: Path, hands: Hands, result: LiveResult, at: list[str], menu_timeout: float, campaign_timeout: float,
            combat_timeout: float, generic_fallback: bool, new_game_grace: float, vanilla_rows: int, save_reload: bool,
            probe_saves: bool) -> LiveResult:
-    """drive's sequence; `at[0]` names the stage in progress."""
+    """drive's sequence; `at[0]` names the stage in progress (set where a click can find the window gone)."""
     def stuck(stage: str, detail: str) -> LiveResult:
         result.stage, result.detail = stage, detail
         _write_actions(log, result.actions)
@@ -595,12 +595,10 @@ def _drive(log: Path, hands: Hands, result: LiveResult, at: list[str], menu_time
         return stuck("new-game", "no 'campaign END' probe line: a screen did not take the click, generation failed, or the probe is not enabled" + tail)
     result.stages.append("campaign")
     if save_reload:  # the probe fingerprints and saves at day N; the reload is a second launch (save_reload_run)
-        at[0] = "fingerprint-save"
         if not wait_for(log, FINGERPRINT_SAVED, campaign_timeout, hands):
             return stuck("fingerprint-save", "no 'fingerprint|save|cmdSave returned true' probe line: save_reload.after_days not reached or cmdSave failed")
         result.stages.append("fingerprint-saved")
     if probe_saves:
-        at[0] = "probe-save"
         if not wait_for(log, PROBE_SAVED, PROBE_SAVE_TIMEOUT, hands):
             return stuck("probe-save", "the probe config asks for a save after the checks, and no 'save|campaign|cmdSave returned' "
                                        "probe line came: leaving the campaign during a save loses the keys and clicks (93.59)")

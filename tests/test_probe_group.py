@@ -413,6 +413,22 @@ class InstallTests(unittest.TestCase):
         self.assertIn("junction or link", result["left"])
         self.assertTrue(still)
 
+    def test_only_real_save_folders_move(self) -> None:
+        # Review of #213: a `save_*` file, or a `save_*` entry that is a link, is not a game save of the rig's.
+        from bridgeforge.probe.probe_group import move_aside_saves
+
+        with resolved_temp_dir() as root:
+            rig = root / "rig"
+            (rig / "saves" / "save_Real_1").mkdir(parents=True)
+            (rig / "saves" / "save_note.txt").write_text("x", encoding="utf-8")
+            elsewhere = root / "elsewhere_save"
+            elsewhere.mkdir()
+            link_dir(elsewhere, rig / "saves" / "save_Linked_1")
+            result = move_aside_saves(rig)
+            left = sorted(p.name for p in (rig / "saves").iterdir())
+        self.assertEqual(result["moved"], ["save_Real_1"])
+        self.assertEqual(left, ["save_Linked_1", "save_note.txt"])
+
     def test_two_batches_in_one_second_do_not_mix(self) -> None:
         from bridgeforge.probe.probe_group import move_aside_saves
 

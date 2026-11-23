@@ -21,10 +21,12 @@ class FakeGame:
     def __init__(self, log: Path, rounds: int = 1, stall_at: str | None = None, lost_starts: tuple[int, ...] = (),
                  late_redefinition: bool = False, dies_at_deploy: int | None = None, dies_in_battle: bool = False,
                  saves_after_end: bool = False, menu_after_exits: int | None = None, lost_spaces: int = 0,
-                 round_seconds: float = 0.0, window_gone_on: tuple[float, float] | None = None) -> None:
+                 round_seconds: float = 0.0, window_gone_on: tuple[float, float] | None = None,
+                 window_gone_at_deploy: int | None = None) -> None:
         self.log, self.rounds, self.stall_at = log, rounds, stall_at
-        # window_gone_on: a click on this point finds no window (SR7-LIVE-0985a-20261117's New Game click, 93.50)
-        self.window_gone_on = window_gone_on
+        # window_gone_on: a click on this point finds no window (SR7-LIVE-0985a-20261117's New Game click, 93.50);
+        # window_gone_at_deploy: the Nth DEPLOY click does
+        self.window_gone_on, self.window_gone_at_deploy = window_gone_on, window_gone_at_deploy
         # lost_spaces: that many SPACE presses in battle land before the mission takes input (SA-SR2-20261119 lost the press
         # after deploying and the first retry). round_seconds: the battle runs that long after the press that takes, then
         # logs END (93.62); 0 ends it at once.
@@ -65,7 +67,7 @@ class FakeGame:
 
     def click(self, fx: float, fy: float) -> None:
         self._window()
-        if (fx, fy) == self.window_gone_on:
+        if (fx, fy) == self.window_gone_on or ((fx, fy) == live_run.DEPLOY and self.deploys + 1 == self.window_gone_at_deploy):
             raise live_run.GameWindowGone("the game window is gone")
         self.actions.append(("click", fx, fy))
         if self.saving:
@@ -380,6 +382,16 @@ class DriveTests(unittest.TestCase):
         result, _ = self._drive(rounds=2, window_gone_on=live_run.DEPLOY)
         self.assertEqual((result.verdict, result.stage), ("LIVE_STUCK", "combat-round-1"))
         self.assertIn("the game window is gone", result.detail)
+        result, _ = self._drive(rounds=2, window_gone_at_deploy=2)  # review of #213: the round's number, not a fixed one
+        self.assertEqual((result.verdict, result.stage), ("LIVE_STUCK", "combat-round-2"))
+
+    def test_the_window_gone_detail_quotes_the_last_three_lines(self) -> None:
+        from bridgeforge.live.window_gone import detail
+
+        quoted = detail("one\ntwo\n\nthree\nfour\nfive\n")
+        self.assertTrue(quoted.endswith("three | four | five"), quoted)
+        self.assertNotIn("two", quoted)
+        self.assertIn("(the log is empty)", detail("\n  \n"))
 
     def test_game_that_never_reaches_the_menu_is_stuck_at_the_menu(self) -> None:
         with resolved_temp_dir() as base:
