@@ -56,6 +56,7 @@ class LoadGapTests(unittest.TestCase):
             _write(carrier / "data" / "hulls" / "a.ship", json.dumps({"hullId": "a", "style": "LIB_STYLE"}))
             _write(carrier / "data" / "hulls" / "plain.ship", json.dumps({"hullId": "plain"}))  # no style: nothing to check
             _write(carrier / "data" / "hulls" / "broken.ship", "{not json")
+            _write(root / "outside.png", "png")  # beside the carrier: a '..' path must not reach it
             _write(carrier / HULL_STYLES, json.dumps({"OWN": {"slotCoverLargeTurret": "/graphics/lib/c.png",
                                                               "slotCoverSmallTurret": "graphics\\LIB\\D.PNG",
                                                               "damageDecalSheet": "../outside.png"}}))
