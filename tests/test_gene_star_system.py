@@ -1,4 +1,4 @@
-"""94.G2 P3: star-system genes (Eridani's Pantheon is the pilot) and the campaign ids a gene's code names."""
+"""94.G2 P3: star-system genes (Eridani's star system is the pilot) and the campaign ids a gene's code names."""
 from __future__ import annotations
 
 import hashlib
@@ -327,12 +327,12 @@ class CarrierPluginTests(unittest.TestCase):
         with resolved_temp_dir() as root:
             mod = root / "mod"
             _write(mod / "data" / "config" / "settings.json", json.dumps(
-                {"designTypeColors": {"天苑四设计": [1, 2, 3, 255]}, "graphics": {"intel": {"x": "a.png", "y": "b.png"}}},
+                {"designTypeColors": {"示例设计": [1, 2, 3, 255]}, "graphics": {"intel": {"x": "a.png", "y": "b.png"}}},
                 ensure_ascii=False))
             gene = {"members": [{"what": "json-entry", "path": "data/config/settings.json#/graphics/intel/x"}]}
             subtract(mod, gene, root / "copy")
             text = (root / "copy" / "data" / "config" / "settings.json").read_text(encoding="utf-8")
-            self.assertIn("天苑四设计", text)
+            self.assertIn("示例设计", text)
             self.assertNotIn('"x"', text)
 
     def test_boot_notes_say_what_each_boot_half_needs(self) -> None:
@@ -420,7 +420,7 @@ class CutTests(unittest.TestCase):
     def test_a_javap_line_is_compared_by_meaning(self) -> None:
         from bridgeforge.genome.registration_cut import normalise
 
-        # Eridani's cut ECEModPlugin, 2026-11-20: the same getstatic, padded after #99 and after #100.
+        # Eridani's cut mod plugin, 2026-11-20: the same getstatic, padded after #99 and after #100.
         before = "      60: getstatic     #99                 // Field com/fs/starfarer/api/campaign/RepLevel.INHOSPITABLE"
         after = "      55: getstatic     #100                // Field com/fs/starfarer/api/campaign/RepLevel.INHOSPITABLE"
         self.assertEqual(normalise(before), normalise(after))

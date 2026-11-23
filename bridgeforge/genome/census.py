@@ -20,7 +20,7 @@ callee list, so the measure can be re-scored without walking the corpus again (a
 A plugin with no bytecode (a loose `.java` script) is `source-only` and not measured; the summary counts those.
 
 Calibration (2026-11-19, by hand against the source): Eridani Combine's `onNewGame` reaches `generate` at depth 1, one mod
-class (`ECE_StarSystem`) and two API mutations (`addParticipatingFaction`, `setRelationship`): three features, multi.
+class (the star system's generator) and two API mutations (`addParticipatingFaction`, `setRelationship`): three features, multi.
 """
 from __future__ import annotations
 

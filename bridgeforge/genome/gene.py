@@ -182,7 +182,7 @@ def _nested_classes(root: Path, members: list[dict]) -> list[dict]:
     that it does not hold yet. They are part of their outer class: javac writes them beside it and the JVM loads them when it
     first uses them, but vendor-plan follows source imports, which never name them. P4 (2026-11-22): `bt_murtach_start$1`,
     the Script the custom start's execute() adds, was missing, and so were 7 listener and enum classes in P3's set closure
-    (`ECE_FluxEMPHullMod$ECE_EMPStateDamageTakenListener`, `ECE_EngineController$Side`, ...), so its carrier lacked them."""
+    (a hull mod's listener, a controller's side enum, ...), so its carrier lacked them."""
     from bridgeforge.scan.scan_classfile import iter_class_files_in_jars
 
     have = {m["path"] for m in members if m["what"] == "jar-class"}
@@ -370,8 +370,7 @@ def _closed_plan(mod: Path, anchor: str, seeds: list[str], classes: list[str], v
 def _saved_state(system: dict | None, campaign: dict, members: list[dict]) -> list[dict]:
     """What the gene leaves in a save: a star system and its markets, and each industry it owns, saved by class name with
     every market that has it (removing the gene then breaks such a save). Evidence, Test1 rig save LeonardCallisto
-    (G1R-LIVE-0985a-20261117, Eridani enabled), read 2026-11-20: `<cL cl="Sstm" ... bN="Pantheon">`, `<Market><id>
-    ECE_planet3_market</id>`, and `<data.scripts.campaign.ECE__PlanetaryCommandCenter id="ECE_PlanetaryCommandCenter">`
+    (G1R-LIVE-0985a-20261117, Eridani enabled), read 2026-11-20: the star system's `<cL cl="Sstm" ...>` entry, markets with computed ids, and the industry's class name
     inside the market's `<industries>` (XStream writes `_` in a class name as `__`)."""
     state = list(system["persistent_state"]) if system else []
     rows = {m["path"] for m in members if m["what"] == "csv-row"}

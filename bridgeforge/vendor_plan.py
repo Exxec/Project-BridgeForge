@@ -141,7 +141,7 @@ class _Index:
 
 def _same_package_uses(key: str, text: str, source: _Index) -> list[str]:
     """The classes of `key`'s package its source (comments stripped) names in code. Not inside a string or a char literal:
-    Eridani's hull mods test hasHullMod("ECE_FluxEMPHullMod"), an id that equals a class name in data.hullmods (94.G2
+    Eridani's hull mods test hasHullMod for one hull mod's id, which equals a class name in data.hullmods (94.G2
     slice 13)."""
     package = key.rsplit(".", 1)[0]
     code = _STRING_LITERALS.sub(lambda m: m.group(0)[0] * 2, text)
