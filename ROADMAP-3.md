@@ -2849,6 +2849,17 @@ history as the closure benchmark, a cross-repository trace check, an early Java 
 
     Mutation-checked: 10 mutants, three of them from the javap facts. One survived until the core-hull test was
     added; then all were caught.
+  - **Independent review:** no critical, high or medium finding. It confirmed the code against javap, including wing
+    tags, the unused `base_bp` default and a mod row replacing the core's, and showed P3's faction needs unchanged.
+    Bultach's `orks` set proved PASS with 89 genes and 0 gaps. Fixed, with tests:
+    - **Priority lists:** the game fields only hulls a faction knows (`Faction`'s picks check `knowsShip` before
+      `isShipPriority`), so `priorityShips` and `priorityFighters` no longer pull role entries. This corrects slice 23's
+      choice.
+    - **Content the game never loads:** a skin outside `data/hulls/skins`, and a `ship_data.csv` row without a `.ship`,
+      are not reached.
+    - **Unmatched tags** are judged per kind: a fighters tag that no wing carries is flagged even when a hull carries it.
+    - **The tag suspect** names the faction file.
+    - **RC8-55** carries the review's javap.
 - 94.G3 **Gene bank**: content-addressed store, alleles across the corpus, lineage, licence state; RevenantLib distributes genes
   from vanished authors (GD-3). The store's payloads live under `data_root()`, like `Done/`, never in this public
   repository; only manifests of the owner's own or permitted content become committed fixtures (2026-11-19).
