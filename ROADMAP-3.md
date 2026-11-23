@@ -1355,8 +1355,8 @@ history as the closure benchmark, a cross-repository trace check, an early Java 
     over a raw folder), and skips `_` folders. `atlas_classfile` gains `method_targets`, the (owner, name) of every
     invoke per method.
   - Calibrated by hand against source before the corpus run:
-    - Eridani `onNewGame` reaches `generate` at depth 1: `ECE_StarSystem` plus faction relations and the bounty entry,
-      3 features;
+    - Eridani `onNewGame` reaches `generate` at depth 1: the star system's generator class plus faction relations and the
+      bounty entry, 3 features;
     - Tania: each hook builds `TaniaGen` and makes at most one inline change;
     - Bultach is monolithic: `onGameLoad` has 6 features;
     - Scrapyard declares no plugin.
@@ -1581,9 +1581,9 @@ history as the closure benchmark, a cross-repository trace check, an early Java 
     - a known library stays only when referenced, and an unknown one stays.
 
     Mutation-checked: 5 mutants killed.
-  **Slice 6 Done 2026-11-20: `star-system` genes are described; P3 is Eridani's Pantheon (proofs are slice 7).**
+  **Slice 6 Done 2026-11-20: `star-system` genes are described; P3 is Eridani's star system (proofs are slice 7).**
   - **The anchor.** `star-system:<name>` is the constant name a loaded mod class passes to `SectorAPI.createStarSystem`,
-    as a combat plugin is a key of `plugins`. Eridani passes it through a local (`String systemName = "Pantheon"`), which
+    as a combat plugin is a key of `plugins`. Eridani passes it through a local holding the constant name, which
     the shared class scanner drops, so `atlas_classfile` gains two read-only helpers. `iter_method_code` gives each
     method's bytecode. `last_argument_constants` gives a call's last argument when the instruction before the call is a
     constant, or a load of a local whose every store is that constant. A call or a store a jump reaches takes no
@@ -1591,7 +1591,8 @@ history as the closure benchmark, a cross-repository trace check, an early Java 
     caller's value. A computed name, no class, or several classes are refused, each with its own message. Loose-script
     generators are not closed yet.
   - **The registration is an element, not a member.** Eridani's `onNewGame` reaches `generate`, which calls
-    `ECE_StarSystem` and also sets faction relations and a bounty entry: three features in one hook (GR-2's common case).
+    the star system's generator class and also sets faction relations and a bounty entry: three features in one hook
+    (GR-2's common case).
     So the plugin class is not a member. Each call site into the generator is a `registrations` element naming the hooks
     that reach it through the mod's own classes (a helper class between the hook and the generator is followed; lambdas
     and reflection are not), and a generator no hook reaches, or that is the plugin itself, is refused. Identity (kind and members) therefore does not cover where
@@ -1610,23 +1611,23 @@ history as the closure benchmark, a cross-repository trace check, an early Java 
       faction carries ship lists that are not this gene, and the plugin's relations statements must stay separable. The
       contract pin moves to `1345f51a…`; `gene sisters` shows no sister pins it yet.
   - **Saved state, checked against a save.** A Test1 rig save that ran Eridani (LeonardCallisto, G1R-LIVE-0985a-20261117)
-    holds `<cL cl="Sstm" ... bN="Pantheon">`, markets with computed ids (`ECE_planet3_market`), and the industry as
-    `<data.scripts.campaign.ECE__PlanetaryCommandCenter>` inside each market's industries (XStream writes `_` as `__`).
+    holds the star system's `<cL cl="Sstm" ...>` entry, markets with computed ids, and the industry as its class name
+    inside each market's industries (XStream writes `_` as `__`).
     `persistent_state` names all three. The markets' ids are computed, so no `market:` id is claimed; that is a suspect.
-    "Pantheon" also appears in saves without Eridani, as a vanilla constellation name.
+    The star system's name also appears in saves without Eridani, as a vanilla constellation name.
   - **Two bugs found on the way, both older than P3:**
     - The settings-key rule read `getString("scripts", id)`, the string-table lookup, as a missing settings key
       `scripts`. It now counts only one-String getters, through `last_argument_constants`.
     - A jar class with no source under `src/` was named `x.jar!a/B.class` by vendor-plan and silently skipped by
       `code_literals`, so its literals named nothing. `_code_members` now resolves the jar's path in the mod.
     - P1 and P2 are unchanged: same identity, needs, suspects and missing, re-described and compared with their records.
-  - **P3, `star-system:Pantheon` (gene `3ebc89de…`):**
-    - 12 members: the generator class; the `ECE_PlanetaryCommandCenter` industry row, its icon and its plugin class; four
+  - **P3, the star system (gene `3ebc89de…`):**
+    - 12 members: the generator class; the industry row, its icon and its plugin class; four
       `intel` graphics keys and their illustrations.
-    - Provides `industry:ECE_PlanetaryCommandCenter`.
-    - 66 vanilla needs; `needs.genes` `faction:EridaniCombine`; `needs.mods` BoxUtil and MagicLib (the industry class).
-    - One registration (`ECEModPlugin.generate`, reached from `onNewGame`) and three saved-state elements; no missing.
-    - The manifest is in `In operation/Eridani-Combine/genes/p3-Pantheon-20261120/`. `gene prove` refuses star systems
+    - Provides its industry.
+    - 66 vanilla needs; `needs.genes` the faction; `needs.mods` BoxUtil and MagicLib (the industry class).
+    - One registration (the mod plugin's `generate`, reached from `onNewGame`) and three saved-state elements; no missing.
+    - The manifest is in P3's proof folder of 2026-11-20 (under the mod's `genes` folder). `gene prove` refuses star systems
       until slice 7.
   - Tests: `tests/test_gene_star_system.py` (a compiled fixture mod: plugin, generator through a local, industry with
     plugin and icon, faction, graphics keys, duplicates, a computed name, an unreachable generator):
@@ -1664,15 +1665,15 @@ history as the closure benchmark, a cross-repository trace check, an early Java 
   - **Every carrier lists its jars** in mod_info. The game loads only listed jars, and P2's carrier listed none, so its
     boot would have loaded no class. P2's carrier now lists `jars/tania.jar`.
   - **Found by P3's first proof:** removing a nested key re-wrote `settings.json` with `json.dumps`' default
-    `ensure_ascii=True`. Eridani's `天苑四设计` designTypeColors key became `\u` escapes and stopped matching its manufacturer
+    `ensure_ascii=True`. Eridani's CJK designTypeColors key became `\u` escapes and stopped matching its manufacturer
     (`design-type-color-unused`). Both rewrites in `proof.py` now keep non-ASCII as text.
   - **The proof module's jar note is corrected.** A jar that loses classes is written by copying each kept entry's
     ZipInfo, the method `patch-jar-class` uses. The jar that loaded no class in 2026-10 came from .NET ZipArchive's Update
     mode. So the boot halves can stage the static copies byte for byte.
-  - **P3, `star-system:Pantheon` (gene `3ebc89de…`): subtraction PASS** (no dependents, no leaks; one registration, the
-    unresolved import in `src/data/scripts/ECEModPlugin.java`, and one site, `ECEModPlugin.generate`). **Isolation PASS**
+  - **P3, the star system (gene `3ebc89de…`): subtraction PASS** (no dependents, no leaks; one registration, the
+    unresolved import in the mod plugin's source, and one site, the plugin's `generate`). **Isolation PASS**
     (the carrier plugin compiled; the carrier's own findings are its mod_info). Both pass `gene evidence check --root` with
-    8 inputs re-hashed. The record is in `In operation/Eridani-Combine/genes/p3-Pantheon-20261120-proofs-v2/` (the first run, before the review fixes, stays beside it).
+    8 inputs re-hashed. The record is in P3's proofs-v2 folder of 2026-11-20 (the first run, before the review fixes, stays beside it).
   - P1 and P2 re-proved with this code: both halves still PASS, with the same dependents (1 and 3).
   - Tests: `tests/test_gene_star_system.py` (21 in all):
     - prove passes both halves with a generated carrier plugin; the carrier lists both jars and the call site stays in
@@ -1702,7 +1703,7 @@ history as the closure benchmark, a cross-repository trace check, an early Java 
   - Next: P1's two boot runs once Test1 is logged on; then a `gene boot` command, shaped by P1's real log, that stages
     the copies and writes the boot-half evidence beside the static files; then P2.
   **Slice 8 Done 2026-11-20: the registration is cut from the subtraction copy, so P3's subtracted donor can boot.**
-  - **Precondition measured first.** Eridani's own `src/data/scripts/ECEModPlugin.java`, compiled for Java 8 (the jar's
+  - **Precondition measured first.** Eridani's own mod plugin source, compiled for Java 8 (the jar's
     class version) with LazyLib, MagicLib, GraphicsLib and BoxUtil from the RC8 install's `mods/`, gives the shipped class
     instruction for instruction (javap, pool numbers aside).
   - **`genome/registration_cut.py`** cuts each site only when every step is shown; otherwise the proof keeps its "needs
@@ -1717,19 +1718,19 @@ history as the closure benchmark, a cross-repository trace check, an early Java 
     Every site is planned in a temp folder first, writing nothing in the copy. Only when all pass are the jars (written
     fresh by copying each entry's ZipInfo) and then the sources written. A failure puts back what was written, from bytes
     held in memory. A write retries while an indexer holds the file, as `patch-jar-class` does: VS Code's Java extension
-    held P3's subtracted `ECE.jar` (WinError 5). `gene prove` takes `--provider-root` (repeatable) for the libraries the
+    held P3's subtracted mod jar (WinError 5). `gene prove` takes `--provider-root` (repeatable) for the libraries the
     source imports.
   - **javap comparison by meaning.** Removing a call shortens its method, so later jump targets move (`ifnull 110`); and
     javap pads its comment column after the pool index, so `#99` and `#100` pad differently (Eridani's `RepLevel`
     getstatic). `normalise` reads a jump target as a label and any run of spaces as one; both were found on the real class
     before the first cut passed.
   - **P3 (gene `3ebc89de…`):**
-    - **Cut:** `import data.scripts.world.systems.ECE_StarSystem;` and `new ECE_StarSystem().generate(sector);` from
-      `ECEModPlugin.generate`, release 8, all four checks.
+    - **Cut:** the generator's import and its `generate(sector)` call from
+      the mod plugin's `generate`, release 8, all four checks.
     - **Proofs:** subtraction PASS with no registration left, the site marked cut, and a boot note that needs only the rig;
       isolation PASS.
     - **Evidence:** both pass `gene evidence check --root`. The record is in
-      `In operation/Eridani-Combine/genes/p3-Pantheon-20261120-proofs-v3/`.
+      P3's proofs-v3 folder of 2026-11-20.
   - Tests: `tests/test_gene_star_system.py` (30 in all; the fixture now ships its call site's build source):
     - prove cuts the call: the copy's source and class no longer name the generator, and the boot note needs only the rig;
     - a source that is not the shipped class refuses the cut and leaves the copy as subtraction made it;
@@ -1836,7 +1837,7 @@ history as the closure benchmark, a cross-repository trace check, an early Java 
     - a mere mention hid a `(not located)` reference.
 
     Mutation-checked: 12 mutants, all killed.
-  **Slice 10 Done 2026-11-20: faction genes, described.** P3's star system needs `faction:EridaniCombine`, so faction is
+  **Slice 10 Done 2026-11-20: faction genes, described.** P3's star system needs its faction, so faction is
   the next closable kind (`genome/faction.py`; boundary from the advisor the same day, inside schema 4).
   - **What a faction gene is:** a `.faction` file the mod ships for an id the core lacks. A mod's file for a core id
     (`hegemony`) merges into the core faction, so it is refused by name; so is an id the mod has no file for.
@@ -1855,13 +1856,13 @@ history as the closure benchmark, a cross-repository trace check, an early Java 
   - **Saved state:** a saved `Faction` keeps its lists (RC8-43).
   - **`gene prove` refuses a faction for now.** Its proofs need a `factions.csv` row cut keyed by the `faction` column and
     a carrier holding every listed gene.
-  - **Eridani measured** (`In operation/Eridani-Combine/genes/faction-EridaniCombine-20261120/`, identity 54e5e03e):
+  - **Eridani measured** (P3's faction proof folder of 2026-11-20, identity 54e5e03e):
     - 4 members: the file, its row, two logo files;
     - `needs.genes` 54 (20 weapons, 17 hulls, 12 hull mods, 5 wings);
     - `needs.vanilla` 66 (32 weapons, 25 portrait files, 5 hull mods, 4 hulls);
     - nothing missing;
-    - one registration, `ECEModPlugin.generate` from `onNewGame`, which also calls `setRelationship`;
-    - tags `ECE_bp`, `standard` and `tritachyon` as suspects.
+    - one registration, the mod plugin's `generate` from `onNewGame`, which also calls `setRelationship`;
+    - tags (one of the mod's own, `standard` and `tritachyon`) as suspects.
 
     So P3's carrier boot needs most of Eridani's content genes. A faction trimmed to fewer ships would be a derived gene,
     later.
@@ -1904,9 +1905,9 @@ history as the closure benchmark, a cross-repository trace check, an early Java 
     and `tags`). A key naming no string is none.
   - **`custom` is not plain:** the core's pirates and Luddic Path name station hulls in it.
   - **Eridani:** identity unchanged, gene needs still 54, vanilla needs 66 -> 69 (three commodities). The new suspects
-    are `music` (its own `music_ECE_*` tracks, which the faction does not carry), `voices`, `names`,
+    are `music` (its own music tracks, which the faction does not carry), `voices`, `names`,
     `shipNameSources`, `internalComms` and `factionDoctrine` (six commander skills).
-  - **P3's whole closure, measured** (every `needs.genes` described in turn from `star-system:Pantheon`):
+  - **P3's whole closure, measured** (every `needs.genes` described in turn from the star system):
     - 56 genes: the system, the faction, 17 hulls, 12 hull mods, 20 weapons and 5 wings;
     - no refused kind and nothing missing; 107 suspects;
     - 154 distinct vanilla needs; mods BoxUtil, MagicLib and LazyLib;
@@ -1949,16 +1950,16 @@ history as the closure benchmark, a cross-repository trace check, an early Java 
     - 56 genes carried, none refused, no unresolved reference;
     - carrier `gene_carrier_b9e6470362d7`: 321 members, 184 input files, Eridani's jar (26 classes) plus the generated
       plugin; it depends on BoxUtil, MagicLib and LazyLib;
-    - not made: the faction's `getFaction` and `addParticipatingFaction` in `ECEModPlugin.generate`;
-    - `not_carried`: 32 ids, all named by the faction file (its `music_ECE_*` tracks, voices, name sets, commander skills,
+    - not made: the faction's `getFaction` and `addParticipatingFaction` in the mod plugin's `generate`;
+    - `not_carried`: 32 ids, all named by the faction file (its music tracks, voices, name sets, commander skills,
       tags).
   - **The 13 hull mods are one unit.** Each Eridani hull mod gene holds the same 43 members: every hull mod's row, sprite
-    and class, because they all extend `ECE_BaseHullmod`, which imports `ECE_IDs`, a constants class naming all 13 ids.
+    and class, because they all extend the faction's hull-mod base class, which imports a constants class naming all 13 ids.
     Every hull holds those 43 too. So the 56 genes are fewer separable pieces: taking one Eridani hull or hull mod takes
     all 13 hull mods. Telling "names an id as a constant" from "needs that content" is a later closure refinement.
-    **Correction 2026-11-20 (slice 13):** `ECE_IDs` holds three strings (the faction id and two design types), not the hull
-    mod ids. The hull mods were joined by `hasHullMod("ECE_FluxEMPHullMod")` checks. Vendor-plan's same-package rule read
-    that string as a use of the class `ECE_FluxEMPHullMod`, whose lookup table names the rest. See slice 13.
+    **Correction 2026-11-20 (slice 13):** the constants class holds three strings (the faction id and two design types), not the hull
+    mod ids. The hull mods were joined by `hasHullMod` checks for one hull mod. Vendor-plan's same-package rule read
+    that string as a use of that hull mod's class, whose lookup table names the rest. See slice 13.
   - **Regression:** P1's and P2's carriers are unchanged, file for file (P2's jar entries are identical; only `writestr`'s
     zip dates differ, as before).
   - Tests: `tests/test_gene_set.py`:
@@ -1984,8 +1985,8 @@ history as the closure benchmark, a cross-repository trace check, an early Java 
   **Slice 12 Done 2026-11-20: the set proof checks that the carrier defines what the set provides and needs.**
   - **Why (advisor knock-out, 2026-11-20):** P3's set carrier was rebuilt with one carried gene removed, and the
     scan-based isolation still passed each time:
-    - weapon `ECE_truthL`;
-    - hull `ECE_Neptune`;
+    - a weapon;
+    - a hull;
     - the faction itself.
 
     The scanner checks neither the ids a faction lists nor whether a faction exists, so P3's first PASS was not evidence of
@@ -2002,25 +2003,25 @@ history as the closure benchmark, a cross-repository trace check, an early Java 
     the genes naming it.
   - **P3, re-checked on the recorded carrier and the three knock-out carriers:**
     - the full set: nothing unresolved;
-    - without the weapon: FAIL, `weapon:ECE_truthL` named by the faction;
-    - without the hull: FAIL, `hull:ECE_Neptune` named by the faction;
+    - without the weapon: FAIL, the weapon named by the faction;
+    - without the hull: FAIL, the hull named by the faction;
     - without the faction: FAIL, named by the hulls and the system.
   - **Also on record:**
     - **Test1 agrees:** its own `prove-set` run gave the same gene (3ebc89de) and carrier (`gene_carrier_b9e6470362d7`,
       56 genes, 321 members), and its evidence check passed.
     - **What binds Eridani:** 56 anchors are 45 distinct genes, because the 12 hull mod genes share one identity. One
       strongly connected group holds 30: the faction, 17 hulls and 12 hull mods. Weapons and wings need no gene.
-    - **Hulls and hull mods to the faction:** an artifact of following source imports. The loaded `ECE_BaseHullmod.class`
-      never references `ECE_IDs`. `ECE_Configs` keeps only an unused constant-pool entry for it, because the strings are
-      inlined. `ECE_IDs` holds three strings, not the hull mod ids.
+    - **Hulls and hull mods to the faction:** an artifact of following source imports. The loaded hull-mod base class
+      never references the constants class. A config class keeps only an unused constant-pool entry for it, because the strings are
+      inlined. The constants class holds three strings, not the hull mod ids.
     - **Hull mods to each other:** their classes use other hull mod ids as stat-modifier source keys, map keys and
       `contains` checks. That names an id without needing it.
 
     Fixing the first is a closure fix (follow loaded classes). The second is a closure-boundary decision put to the owner
     the same day.
     **Correction 2026-11-20 (slice 13):** following the loaded classes does not fix the first. A scratch run with jar
-    classes read as bytecode only still needed the faction, because `ECE_Configs` keeps an unused constant-pool entry for
-    `ECE_IDs`. Both links are "a constant names an id", which the owner's ruling and slice 13 settle.
+    classes read as bytecode only still needed the faction, because a config class keeps an unused constant-pool entry for
+    the constants class. Both links are "a constant names an id", which the owner's ruling and slice 13 settle.
   - Tests: `tests/test_gene_set.py`:
     - every kind resolved or not, with its reason;
     - a weapon or a hull mod knocked out of the fixture set FAILs, naming it and the faction.
@@ -2040,12 +2041,12 @@ history as the closure benchmark, a cross-repository trace check, an early Java 
   - **Owner 2026-11-20** (asked with the numbers, chose "Mention = suspect"): a literal that only names another id, as a
     key, a label or an "is it installed?" check, is recorded as a suspect. Only code that adds or uses the content is a
     need.
-  - **The trace** (every closure edge of `hullmod:ECE_Dlorica` and `hull:ECE_Neptune`, by mechanism) showed three causes:
-    - every hull mod tests `hasHullMod("ECE_FluxEMPHullMod")` and `getHullMods().contains(...)`;
-    - vendor-plan's same-package rule read that string as a use of the class `ECE_FluxEMPHullMod`;
+  - **The trace** (every closure edge of one hull mod and one hull, by mechanism) showed three causes:
+    - every hull mod tests `hasHullMod` for one hull mod and `getHullMods().contains(...)`;
+    - vendor-plan's same-package rule read that string as a use of that hull mod's class;
     - that class's lookup table names the other hull mods.
 
-    `ECE_BaseHullmod`'s source imports `ECE_IDs`. That class holds the faction id as a constant, which no instruction
+    The hull-mod base class's source imports the constants class. That class holds the faction id as a constant, which no instruction
     loads.
   - **`genome/literal_sinks.py`:** in a jar class, each string `ldc` is followed on the operand stack to the instruction
     that pops it (`owner.method#argument`). Anything it cannot follow is `unknown`: a jump target, a store, a `dup` of
@@ -2075,13 +2076,13 @@ history as the closure benchmark, a cross-repository trace check, an early Java 
       check. The fourth, `tania_addsmods_norefit_luddic`, left because of the spawners, with no sink of its own: it was
       requested only because `tania_Placebo_For_IDs`, the spawner rows' script class, names it. No `removeMod` was
       involved.
-    - Hulls keep their built-in hull mods (Neptune: `hiressensors`, `surveying_equipment`, `ECE_FluxEMPHullMod`).
+    - Hulls keep their built-in hull mods (one hull: `hiressensors`, `surveying_equipment` and one of the mod's own hull mods).
     - **P3's set** (`genes/p3-set-20261120-s13/`): PASS. 56 genes, carrier `gene_carrier_da1d29484d73`, nothing
       unresolved. The three knock-outs still FAIL on the new closure. The faction knock-out is now named by the system
       alone.
     - **The binding is gone:** 56 distinct identities (was 45), and the largest strongly connected group is 1 (was 30).
       Only the system needs the faction. 32 genes need nothing and provide only themselves: 12 hull mods and 20 weapons.
-  - **Left for the owner:** `hullmod:ECE_FluxEMPHullMod` still provides 11 hull mods through its own `Map.put` lookup
+  - **Left for the owner:** one hull mod still provides 11 hull mods through its own `Map.put` lookup
     table. Hulls that build it in take that table too. Whether a map key that is only looked up is a mention needs
     data-flow evidence, so it is left as a need.
   - Tests: `tests/test_literal_sinks.py`:
@@ -2104,8 +2105,8 @@ history as the closure benchmark, a cross-repository trace check, an early Java 
 
     Mutation-checked: 14 mutants, all killed (the `dup` case needed its own probe method).
   **Slice 14 Done 2026-11-20: keys of a map that is only looked up are mentions (owner ruling).**
-  - **Owner 2026-11-20** (asked with the numbers, chose "Lookup-only keys = suspect"): `ECE_FluxEMPHullMod` keeps a public
-    `HULLMOD_POINTS` table of 10 other hull mod ids. Its code only looks entries up (javap: `containsKey`, `get`), yet the
+  - **Owner 2026-11-20** (asked with the numbers, chose "Lookup-only keys = suspect"): one hull mod keeps a public
+    points table of 10 other hull mod ids. Its code only looks entries up (javap: `containsKey`, `get`), yet the
     table made that hull mod, and every hull that builds it in, carry all 10.
   - **The rule** (`literal_sinks`):
     - a literal put as a map key is tagged with the map field when that field's load comes right before it
@@ -2119,9 +2120,9 @@ history as the closure benchmark, a cross-repository trace check, an early Java 
     also returns the pool index of field instructions.
   - **Results:**
     - P1, P2 (89e207d1) and P3 (3ebc89de) keep their slice-13 identities;
-    - Eridani's lookup-only maps are `HULLMOD_POINTS` and `modRecorder`;
-    - `hullmod:ECE_FluxEMPHullMod` is 7 members, providing only itself;
-    - `hull:ECE_Neptune` is 11 members, providing itself and the hull mod it builds in.
+    - Eridani's lookup-only maps are two (a points table and a recorder);
+    - that hull mod is 7 members, providing only itself;
+    - the hull is 11 members, providing itself and the hull mod it builds in.
     - **P3's set** (`genes/p3-set-20261120-s14/`): PASS. 56 genes, carrier `gene_carrier_7e9378bdc19e`, nothing
       unresolved.
     - **Binding:** 56 distinct genes, largest strongly connected group 1, 32 standalone. The largest hull gene now
@@ -2145,7 +2146,7 @@ history as the closure benchmark, a cross-repository trace check, an early Java 
     all killed (a local map and a cast field each needed their own case).
   **Slice 15 Done 2026-11-20: an id a gene checks for is a condition, and a single gene's carrier is checked too.**
   - **Why (advisor):** a gene that loads alone may not act alone.
-    - `ECE_Dlorica.isApplicableToShip` is `getHullMods().contains("ECE_FluxEMPHullMod")` (javap). It installs only on
+    - One hull mod's `isApplicableToShip` is `getHullMods().contains(<another hull mod's id>)` (javap). It installs only on
       a ship that has that hull mod, which means an Eridani hull that builds it in.
     - P2's plugin acts only on ships carrying the spawner hull mods.
 
@@ -2159,12 +2160,12 @@ history as the closure benchmark, a cross-repository trace check, an early Java 
     `provides`, not its `needs.genes`, which a single gene's carrier does not hold by design. An unresolved anchor
     FAILs it. P1, P2 and P3 still PASS with nothing unresolved.
   - **Results:**
-    - all 12 Eridani hull mods record `checks-for hullmod:ECE_FluxEMPHullMod`;
+    - all 12 Eridani hull mods record `checks-for` one hull mod;
     - P2 records `checks-for` its three spawner hull mods;
     - P1 and P3 have none.
 
     So "32 genes stand alone" (slice 13) holds for loading. A hull mod spliced alone is installable only where
-    `ECE_FluxEMPHullMod` is present, and P2's boot needs a host ship carrying a spawner hull mod.
+    that hull mod is present, and P2's boot needs a host ship carrying a spawner hull mod.
   - **WP5 sweep:** `gene evidence check --root` passes on every current P1–P3 proof:
     - P1: `genes/p1-sa_lobster_tanks-20261120-s14/`, re-proved here, because the 2026-11-19 record carries withdrawn
       gene schema 3;
@@ -2196,7 +2197,7 @@ history as the closure benchmark, a cross-repository trace check, an early Java 
     verdict PASS. `gene evidence check --root` accepts the export, with 184 inputs re-hashed. The export stays in the
     proof folder, since Eridani is LOCAL_ONLY.
   - **Candidate: the faction gene lacks its description.** The export's only uncovered unit is the FACTION row of
-    `descriptions.csv` for `faction:EridaniCombine`: no member names it. Closed by slice 16.
+    `descriptions.csv` for the faction: no member names it. Closed by slice 16.
   - **Candidate: commented rows as members.** The weapon genes `atropos`, `heavyblaster` and `plasma` each carry a
     `weapon_data.csv` row whose line starts with `#` (in the `name` column). Project Go skips such a row as a comment;
     `vendor_plan._rows` treats a row as a comment only when its `id` starts with `#`. Closed by slice 16: javap shows
@@ -2294,7 +2295,7 @@ history as the closure benchmark, a cross-repository trace check, an early Java 
     - **P3 set:** re-proved as `genes/p3-set-20261122-s16`, PASS with 53 genes, carrier `gene_carrier_92b783705cff` (319
       members). It has 53 distinct identities, largest strongly connected group 1, and 29 standalone (12 hull mods, 17
       weapons); that corrects slice 13's 56 and 32. `gene evidence check --root` passes.
-    - **Superseded folders:** `p3-set-20261120-s14` and `faction-EridaniCombine-20261120` now hold `SUPERSEDED.txt`.
+    - **Superseded folders:** `p3-set-20261120-s14` and P3's faction proof folder of 2026-11-20 now hold `SUPERSEDED.txt`.
     - **Project Go's export of s16:** 740 units (289 data, 451 raw jar), 0 uncovered, 11 `no_units` (6 jar classes,
       4 settings entries, the `factions.csv` row). It confirms both fixes independently.
   - **Tests:**
@@ -2397,8 +2398,7 @@ history as the closure benchmark, a cross-repository trace check, an early Java 
     - The carrier resolution check knows a start: the carrier's file registers it and the carrier holds its class.
   - **Nested classes:** a jar class brings its nested and anonymous classes from the same jar (`_nested_classes`).
     - Where a mod ships its source, vendor-plan follows the source's imports, which never name them.
-    - `bt_murtach_start$1`, the `Script` its `execute()` adds, was missing. So were 7 classes of P3's set closure
-      (`ECE_FluxEMPHullMod$ECE_EMPStateDamageTakenListener`, `ECE_EngineController$Side` and five more), so P3's set
+    - `bt_murtach_start$1`, the `Script` its `execute()` adds, was missing. So were 7 nested classes of P3's set closure, so P3's set
       carrier lacked them.
     - P1, P2 and P3's anchor identities are unchanged (bb64ad41, 89e207d1, 3ebc89de). P3's set carrier becomes
       `gene_carrier_93f4646e00d1` (326 members, was 319; still PASS).
@@ -2443,7 +2443,7 @@ history as the closure benchmark, a cross-repository trace check, an early Java 
   - **P2B-CAR-20261122 and P3B-CAR-20261122,** P2's carrier and P3's set carrier (`gene_carrier_92b783705cff`, built
     before slice 18): FAIL, the same Fatal at load. `ResourceLoaderState.initSpecStore` threw an NPE because
     `getHullStyle()` returned null.
-    - The carriers' hulls use `TANIA_ASTEROID` and `ECE_TECH`, styles defined only in each donor's
+    - The carriers' hulls use `TANIA_ASTEROID` and one Eridani style, styles defined only in each donor's
       `data/config/hull_styles.json`, which no carrier holds.
     - **Next (G2):** a hull's `style` names a hull style. A mod-defined style travels with the gene as a json-entry
       (an object key, so the contract allows it).
@@ -2500,7 +2500,7 @@ history as the closure benchmark, a cross-repository trace check, an early Java 
   Salvor add and remove on save copies.
 - 94.G7 **Engineering**: composed carriers (VoidSmith checks fleet roles), agent-edited genes with independent verification,
   recipes; owner designs labelled as departures.
-- Pilots (GD-4): P1 Scrapyard Armories `sa_lobster_tanks`, P2 Navarchy of Tania junkyard spawner, P3 Eridani Combine Pantheon
+- Pilots (GD-4): P1 Scrapyard Armories `sa_lobster_tanks`, P2 Navarchy of Tania junkyard spawner, P3 Eridani Combine star
   system, P4 Bultach Coalition custom start. Local-only under GD-2.
 - Multi-agent mode (owner asked 2026-11-17 "should we turn on ultracode for the genome phase?"; recommendation, not a decision): an
   eight-agent read-only assessment (two readers, two opposing assessors, a judge, a fact check and a policy check, a synthesis; 32
@@ -3513,7 +3513,7 @@ Manufactorum and Navarchy of Tania are revived (UNATTENDED_DONE), before their l
 - 92.25 **Done 2026-11-16.** **CRITICAL: agent fixes to `src/` never reach the jar the game loads.** `escalation run --apply` edits `src/**/*.java` and
   verifies by rescanning the source; nothing rebuilds the jar. Navarchy of Tania: 8 applied agent fixes (hull-mod state, hard-coded
   entity/system references, orbit guard) were inert in `jars/tania.jar`; the scan still flagged the jar copy
-  (`jars/tania.jar!data/hullmods/tania_Cautious_Personality.class`). Eridani: 1 (`ECE_StarSystem`). Done by hand 2026-11-16 with a
+  (`jars/tania.jar!data/hullmods/tania_Cautious_Personality.class`). Eridani: 1 (the star system's generator class). Done by hand 2026-11-16 with a
   scratch `src_to_jar.py`: (1) changed sources = `working/src` vs `original/.../src`, plus relink-only classes; (2) prove `src/`
   is authoritative: each ORIGINAL source compiled against the reference core at the jar class's own release (Tania 61/Java 17,
   Eridani 52/Java 8) gives bytecode identical to the jar's (javap -c -p, constant-pool indexes stripped), else refuse (it refused
@@ -3550,7 +3550,7 @@ Manufactorum and Navarchy of Tania are revived (UNATTENDED_DONE), before their l
   acceptances by finding id + subject (system name, file), not the full evidence.
   Built: baseline keys drop line numbers from the evidence part (`baseline.stable_evidence`), applied to stored keys on load so older baselines still match; a different subject still counts as new. Tests: `tests/test_small_fixes_92.py`; 1111 baseline/escalation/archive tests pass.
 - 92.31 **Done 2026-11-16.** **`player-text-non-english` counts JSON `#` comments.** Eridani Combine after `translate-batch` (59 units translated,
-  2189 -> 761 CJK characters): 753 of the 761 were `#` comments in `EridaniCombine.faction`, `engine_styles.json`,
+  2189 -> 761 CJK characters): 753 of the 761 were `#` comments in the mod's `.faction` file, `engine_styles.json`,
   `hull_styles.json` (Starsector JSON allows `#` comments) and a `designTypeColors` key that is never displayed. Blank `#`
   comments (as `_load_lenient_json_file` does) and skip JSON keys before counting.
   Built: JSON-style data files are counted without trailing `#`/`//` comments and object keys (`scan_text._json_player_part`). Real data: Eridani working copy now clean, the untranslated original still flagged (1431 characters, was 2189 with comments). Tests: `tests/test_fixers_92.py`.
@@ -3559,7 +3559,7 @@ Manufactorum and Navarchy of Tania are revived (UNATTENDED_DONE), before their l
   full-width ASCII punctuation (U+FF01-FF5E, U+3001/3002) in English player text, after translation.
   Built: check `fullwidth-punctuation-in-text` (SAFE, auto) and its fixer (`fixers.encoding._fix_fullwidth_punctuation`, shared rule `scan_text.fullwidth_punctuation_fixed`): lines still holding other CJK are left to translation, line endings and BOM kept. Real data: Eridani's pre-fix files give exactly the two hand-fixed lines. Tests: `tests/test_fixers_92.py`.
 - 92.33 **Done 2026-11-16.** **Translating jar strings leaves `src/` untranslated.** `translate-batch --in-place` patched 18 strings in Eridani's
-  `ECE.jar` (19:49) but `src/` keeps the Chinese, so a later `src-to-jar` rebuild of such a class would revert the
+  mod jar (19:49) but `src/` keeps the Chinese, so a later `src-to-jar` rebuild of such a class would revert the
   translation; the 92.25 proof now refuses (the jar no longer matches the source), which is safe but blocks the rebuild.
   Apply translations to the matching `src/` string literals too, and record the jar classes changed in the src-to-jar ledger.
   Built: `translate-apply` mirrors each translated jar string into the matching `src/<class>.java` literal (raw or \u-escaped form); `src-to-jar` proves against the jar in `original/` by default, so neither a translated nor an already-patched working jar blocks the proof. Tests: `tests/test_translation_92.py`, `tests/test_src_to_jar.py`.

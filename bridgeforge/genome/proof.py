@@ -159,7 +159,7 @@ def subtract(root: Path, gene: dict, dest: Path) -> list[str]:
             if cut is None:
                 data, _ = _parse_json(text)
                 _nested_pop(data, tokens)
-                # Non-ASCII stays text: escaped, Eridani's 天苑四设计 designTypeColors key stopped matching its manufacturer
+                # Non-ASCII stays text: escaped, Eridani's CJK designTypeColors key stopped matching its manufacturer
                 # (P3, 2026-11-20).
                 cut = json.dumps(data, indent=2, ensure_ascii=False) + "\n"
                 why = "a nested key" if len(tokens) > 1 else "its value spans lines"

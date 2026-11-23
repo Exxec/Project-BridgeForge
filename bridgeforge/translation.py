@@ -381,7 +381,7 @@ def _apply_translation(mod_dir: Path, document: dict, out_dir: Path | None = Non
 
 
 def _mirror_jar_strings_to_sources(target: Path, by_file: dict, applied: Counter) -> None:
-    """Give a jar class's shipped source the same translated literals the jar got. Eridani Combine's 18 ECE.jar strings were
+    """Give a jar class's shipped source the same translated literals the jar got. Eridani Combine's 18 jar strings were
     translated while src/ kept the Chinese, so a later src-to-jar rebuild would have reverted them (ROADMAP-3 item 92.33,
     2026-11-16). Only an exact Java literal of the source string, in `<any source root>/<class path>.java`, is replaced."""
     sources: dict[str, list[Path]] = defaultdict(list)

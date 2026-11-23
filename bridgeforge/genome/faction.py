@@ -1,4 +1,4 @@
-"""94.G2 slice 10: faction genes, described (2026-11-20). P3's star system needs `faction:EridaniCombine`.
+"""94.G2 slice 10: faction genes, described (2026-11-20). P3's star system needs its faction.
 
 **Boundary (advisor 2026-11-20, inside schema 4).** `faction:<id>` is a `.faction` file the mod ships whose id the core lacks;
 a mod's file for a core faction id is a merge fragment, not a gene, and is refused by name. Members:
