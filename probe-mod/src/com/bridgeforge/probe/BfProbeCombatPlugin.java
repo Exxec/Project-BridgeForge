@@ -49,35 +49,46 @@ public class BfProbeCombatPlugin extends BaseEveryFrameCombatPlugin {
     private static final int LIMIT_BONUS = 100000;
     private boolean limitsRaisedInBattle = false;
 
+    // Review of 0.3.5: an exception escaping a combat plugin is a Fatal dialog (SK13-1), and one in finish() would leave the
+    // battle running with no END, so both helpers catch everything and log it, as trackLaunches does.
     private static void raiseDeploymentLimits(CombatEngineAPI engine, String when) {
         for (int owner = 0; owner <= 1; owner++) {
-            com.fs.starfarer.api.combat.CombatFleetManagerAPI manager = engine == null ? null : engine.getFleetManager(owner);
-            if (manager == null) {
-                ProbeLog.emit("combat-deploy-limit", ProbeLog.STATUS_WARN, "owner=" + owner, "at " + when + ": no fleet manager");
-                continue;
+            try {
+                com.fs.starfarer.api.combat.CombatFleetManagerAPI manager = engine == null ? null : engine.getFleetManager(owner);
+                if (manager == null) {
+                    ProbeLog.emit("combat-deploy-limit", ProbeLog.STATUS_WARN, "owner=" + owner, "at " + when + ": no fleet manager");
+                    continue;
+                }
+                int before = manager.getMaxStrength();
+                manager.modifyFlatMax(LIMIT_SOURCE, LIMIT_BONUS);  // keyed by source: a second call replaces the first
+                List<FleetMemberAPI> reserves = manager.getReservesCopy();
+                ProbeLog.emit("combat-deploy-limit", ProbeLog.STATUS_INFO, "owner=" + owner,
+                        "at " + when + ": max " + before + " -> " + manager.getMaxStrength() + " curr=" + manager.getCurrStrength()
+                                + " reserves=" + (reserves == null ? 0 : reserves.size()));
+            } catch (Throwable t) {
+                ProbeLog.emit("combat-deploy-limit", ProbeLog.STATUS_WARN, "owner=" + owner,
+                        "at " + when + ": " + t.getClass().getName() + ": " + t.getMessage());
             }
-            int before = manager.getMaxStrength();
-            manager.modifyFlatMax(LIMIT_SOURCE, LIMIT_BONUS);
-            List<FleetMemberAPI> reserves = manager.getReservesCopy();
-            ProbeLog.emit("combat-deploy-limit", ProbeLog.STATUS_INFO, "owner=" + owner,
-                    "at " + when + ": max " + before + " -> " + manager.getMaxStrength() + " curr=" + manager.getCurrStrength()
-                            + " reserves=" + (reserves == null ? 0 : reserves.size()));
         }
     }
 
     /** Each side's reserves when the battle ends, by hull id: planned hulls that never deployed (93.67). */
     private static void reportReserves(CombatEngineAPI engine) {
         for (int owner = 0; owner <= 1; owner++) {
-            com.fs.starfarer.api.combat.CombatFleetManagerAPI manager = engine.getFleetManager(owner);
-            List<FleetMemberAPI> reserves = manager == null ? null : manager.getReservesCopy();
-            StringBuilder hulls = new StringBuilder();
-            if (reserves != null) {
-                for (FleetMemberAPI member : reserves) {
-                    hulls.append(hulls.length() == 0 ? "" : ",").append(member == null ? "?" : member.getHullId());
+            try {
+                com.fs.starfarer.api.combat.CombatFleetManagerAPI manager = engine.getFleetManager(owner);
+                List<FleetMemberAPI> reserves = manager == null ? null : manager.getReservesCopy();
+                StringBuilder hulls = new StringBuilder();
+                if (reserves != null) {
+                    for (FleetMemberAPI member : reserves) {
+                        hulls.append(hulls.length() == 0 ? "" : ",").append(member == null ? "?" : member.getHullId());
+                    }
                 }
+                ProbeLog.emit("combat-reserves", hulls.length() == 0 ? ProbeLog.STATUS_INFO : ProbeLog.STATUS_WARN, "owner=" + owner,
+                        hulls.length() == 0 ? "none left" : "never deployed: " + hulls);
+            } catch (Throwable t) {
+                ProbeLog.emit("combat-reserves", ProbeLog.STATUS_WARN, "owner=" + owner, t.getClass().getName() + ": " + t.getMessage());
             }
-            ProbeLog.emit("combat-reserves", hulls.length() == 0 ? ProbeLog.STATUS_INFO : ProbeLog.STATUS_WARN, "owner=" + owner,
-                    hulls.length() == 0 ? "none left" : "never deployed: " + hulls);
         }
     }
 
@@ -243,6 +254,7 @@ public class BfProbeCombatPlugin extends BaseEveryFrameCombatPlugin {
 
     private void finish(CombatEngineAPI engine, String reason) {
         ended = true;
+        logNewShips(engine);  // review of 0.3.5: a ship first seen on the last frame still gets its deployment line
         ProbeLog.emit("combat-perf", runaway ? ProbeLog.STATUS_WARN : ProbeLog.STATUS_INFO, "combat",
                 "frames=" + frames + " avgFrameMs=" + (frames == 0 ? 0 : Math.round(sumFrameMs / frames * 10) / 10.0)
                         + " worstFrameMs=" + Math.round(worstFrameMs) + " peakHulks=" + peakHulks + " peakShips=" + peakShips);

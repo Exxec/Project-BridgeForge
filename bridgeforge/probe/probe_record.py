@@ -123,7 +123,7 @@ def combat_undeployed(log_text: str, config: dict) -> dict | None:
     A round that never started leaves its hulls here too."""
     if not _COMBAT_ROUND.search(log_text):
         return None
-    planned = [hull for hull in config.get("hulls") or [] if isinstance(hull, str)]
+    planned = list(dict.fromkeys(hull for hull in config.get("hulls") or [] if isinstance(hull, str)))  # once each
     deployed = {match["hull"] for match in _COMBAT_DEPLOYMENT.finditer(log_text)}
     return {"planned": len(planned), "deployed": sum(1 for hull in planned if hull in deployed),
             "missing": sorted(hull for hull in planned if hull not in deployed)}

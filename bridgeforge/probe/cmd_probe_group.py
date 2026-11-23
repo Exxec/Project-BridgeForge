@@ -447,11 +447,24 @@ def _probe_report(args: argparse.Namespace, queue: Path, rig: Path) -> dict | in
         for number, end in enumerate(rounds.get("ended") or [], 1):
             if end["reason"] in ("side-wiped", "engine-ended"):  # 96.13: won early, so later-deployed hulls may not have fought
                 print(f"  combat: battle {number} ended early ({end['reason']}): {end['detail']}")
-        undeployed = result.get("combat_undeployed")
-        if undeployed and undeployed["missing"]:  # 93.67: every planned hull should fight, hidden or not
-            shown = ", ".join(undeployed["missing"][:10]) + (f" and {len(undeployed['missing']) - 10} more" if len(undeployed["missing"]) > 10 else "")
-            print(f"  WARN combat: {len(undeployed['missing'])} of {undeployed['planned']} planned hulls never deployed: {shown}")
+        line = undeployed_line(result.get("combat_undeployed"))
+        if line:
+            print(line)
     return result
+
+
+UNDEPLOYED_SHOWN = 10
+
+
+def undeployed_line(undeployed: dict | None) -> str | None:
+    """The report's WARN for planned hulls with no `combat-deployment` line (93.67: every planned hull should fight, hidden or
+    not), or None when every one deployed or no battle was planned."""
+    missing = (undeployed or {}).get("missing") or []
+    if not missing:
+        return None
+    more = f" and {len(missing) - UNDEPLOYED_SHOWN} more" if len(missing) > UNDEPLOYED_SHOWN else ""
+    return (f"  WARN combat: {len(missing)} of {undeployed['planned']} planned hulls never deployed (in reserve when the battle "
+            f"ended, or their round never started): {', '.join(missing[:UNDEPLOYED_SHOWN])}{more}")
 
 
 _SUB_COMMANDS = {

@@ -3055,6 +3055,12 @@ fixes of 93.28. 93.26-93.35 are that day's findings.
     `combat-deployment` line, and `probe-group report` prints `WARN combat: N of M planned hulls never deployed`. Coverage
     is reported, not a verdict. Tests: `tests/test_probe_group.py` `CombatUndeployedTests`; mutation-checked, 4 mutants,
     all caught.
+  - **Independent review:** no critical finding. Fixed:
+    - the new combat-plugin calls were unguarded, so an exception would have been a Fatal dialog, or a battle with no END
+      from `finish()`; both helpers now catch everything and log it, as `trackLaunches` does;
+    - a ship first seen on the battle's last frame got no deployment line; `finish()` now logs new ships first;
+    - a hull listed twice in `hulls` counted twice;
+    - the WARN line now also names a round that never started, and has a test.
 - 93.64 (S) **A gate whose subject left Done/ had no state to close it.** bf-0b-15 (SEEKER Betelgeuse modules survive save
   and reload) tests SEEKER 0.3.0+bf.5's Betelgeuse and TWIG code. That archive moved to `Done/_replaced-2026-11-17/` when
   SEEKER 0.6.6 replaced it, and 0.6.6 has neither. The owner ruled 2026-11-19: "Close as superseded". `gates.json` allowed

@@ -1051,6 +1051,22 @@ class CombatUndeployedTests(unittest.TestCase):
     def test_a_log_without_a_combat_round_plans_nothing(self) -> None:
         self.assertIsNone(combat_undeployed(self._deployed("ork_a"), {"hulls": ["ork_a", "ork_b"]}))
 
+    def test_a_hull_listed_twice_or_not_a_string_is_counted_once_as_planned(self) -> None:
+        log = f"{self.PREFIX}combat-round|INFO|round 1 of 1|hulls 1-2 of 2\n" + self._deployed("ork_a")
+        undeployed = combat_undeployed(log, {"hulls": ["ork_a", 7, None, "ork_b", "ork_a"]})
+        self.assertEqual(undeployed, {"planned": 2, "deployed": 1, "missing": ["ork_b"]})
+
+    def test_the_warn_line_names_ten_hulls_and_counts_the_rest(self) -> None:
+        from bridgeforge.probe.cmd_probe_group import undeployed_line
+
+        self.assertIsNone(undeployed_line(None))
+        self.assertIsNone(undeployed_line({"planned": 3, "deployed": 3, "missing": []}))
+        missing = [f"h{n:02d}" for n in range(12)]
+        line = undeployed_line({"planned": 108, "deployed": 96, "missing": missing})
+        self.assertIn("12 of 108 planned hulls never deployed", line)
+        self.assertIn("h09 and 2 more", line)
+        self.assertNotIn("h10", line)
+
     def test_the_group_report_carries_and_prints_them(self) -> None:
         with resolved_temp_dir() as root:
             config = merge_configs([build_probe_config(_workspace(root / "q", "A", "mod_a", "hull_a"))])
