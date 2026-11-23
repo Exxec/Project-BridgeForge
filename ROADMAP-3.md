@@ -3053,7 +3053,8 @@ fixes of 93.28. 93.26-93.35 are that day's findings.
     - If the raised limit does not bring the reserves in, the fallback is to spawn them.
   - **The report:** `probe_record.combat_undeployed` lists the planned hulls (the config's `hulls`) with no
     `combat-deployment` line, and `probe-group report` prints `WARN combat: N of M planned hulls never deployed`. Coverage
-    is reported, not a verdict. Tests: `tests/test_probe_group.py` `CombatUndeployedTests`.
+    is reported, not a verdict. Tests: `tests/test_probe_group.py` `CombatUndeployedTests`; mutation-checked, 4 mutants,
+    all caught.
 - 93.64 (S) **A gate whose subject left Done/ had no state to close it.** bf-0b-15 (SEEKER Betelgeuse modules survive save
   and reload) tests SEEKER 0.3.0+bf.5's Betelgeuse and TWIG code. That archive moved to `Done/_replaced-2026-11-17/` when
   SEEKER 0.6.6 replaced it, and 0.6.6 has neither. The owner ruled 2026-11-19: "Close as superseded". `gates.json` allowed
