@@ -112,6 +112,22 @@ class ProbeConfigBuildTests(unittest.TestCase):
         self.assertEqual(config["variants"]["fx_big"], "fx_big_Std")
         self.assertEqual(config["variants"]["fx_big_bare_arm"], "fx_big_bare_arm_Hull")  # not a section: no variant uses it
 
+    def test_a_section_whose_parent_deploys_without_modules_keeps_its_own_slot(self) -> None:
+        # Review of 0.3.6: the plan deploys a parent's first variant; if that one carries no modules, the section never appears.
+        with tempfile.TemporaryDirectory() as directory:
+            mod = _make_fixture_mod(Path(directory))
+            csv = mod / "data" / "hulls" / "ship_data.csv"
+            csv.write_text(csv.read_text(encoding="utf-8") + "fx_big,\nfx_big_arm,\n", encoding="utf-8")
+            variants = mod / "data" / "variants"
+            (variants / "fx_big_arm_Std.variant").write_text('{"hullId":"fx_big_arm","variantId":"fx_big_arm_Std"}', encoding="utf-8")
+            (variants / "fx_big_Alpha.variant").write_text('{"hullId":"fx_big","variantId":"fx_big_Alpha"}', encoding="utf-8")
+            (variants / "fx_big_Std.variant").write_text(
+                '{"hullId":"fx_big","variantId":"fx_big_Std","modules":[{"WS 001":"fx_big_arm_Std"}]}', encoding="utf-8")
+            config = build_probe_config(mod)
+        self.assertEqual(config["variants"]["fx_big"], "fx_big_Alpha")
+        self.assertEqual(config["hulls_sections"], [])
+        self.assertEqual(config["variants"]["fx_big_arm"], "fx_big_arm_Std")
+
     def test_missing_mod_id_raises(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             mod = Path(directory) / "bad_mod"
