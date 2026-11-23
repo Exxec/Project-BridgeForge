@@ -2481,7 +2481,9 @@ history as the closure benchmark, a cross-repository trace check, an early Java 
     - undefined styles in a `.ship` and a `.skin`, with the core's style accepted;
     - a carried style's files, found in the carrier, in the core, or missing;
     - which strings name files;
-    - a hull gene's proof failing isolation.
+    - a hull gene's proof and a gene set's proof failing.
+
+    Mutation-checked: 7 mutants. The set proof's one survived until its test was added; then all were caught.
 - 94.G3 **Gene bank**: content-addressed store, alleles across the corpus, lineage, licence state; RevenantLib distributes genes
   from vanished authors (GD-3). The store's payloads live under `data_root()`, like `Done/`, never in this public
   repository; only manifests of the owner's own or permitted content become committed fixtures (2026-11-19).
