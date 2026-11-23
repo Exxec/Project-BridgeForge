@@ -160,7 +160,26 @@ public class BfProbeCombatPlugin extends BaseEveryFrameCombatPlugin {
         return "player=" + (player.length() == 0 ? "none" : player) + " enemy=" + (enemy.length() == 0 ? "none" : enemy);
     }
 
-    /** Why the battle should end now, or null: a runaway field, the configured time, the engine's own end, a side wiped out. */
+    // Review of 0.3.4: ships appear one per frame (SR6-LIVE-0985a-20261117 logged them about 20 ms apart, owner 0 first), so on
+    // the first frame with a ship the other side has none. A side counts as wiped only once BOTH sides have had a live ship, and
+    // only when that side has nothing left in reserve (CombatFleetManagerAPI.getReservesCopy(), javap of RC7 2026-11-22):
+    // ships beyond the deployment limit come in later. The engine's own end needs both sides seen as well, since a mission
+    // opens paused on its deployment screen.
+    private boolean seenPlayer = false;
+    private boolean seenEnemy = false;
+
+    private boolean bothSidesSeen(int[] counts) {
+        seenPlayer |= counts[0] > 0;
+        seenEnemy |= counts[1] > 0;
+        return seenPlayer && seenEnemy;
+    }
+
+    private static boolean noReserves(CombatEngineAPI engine, int owner) {
+        com.fs.starfarer.api.combat.CombatFleetManagerAPI manager = engine.getFleetManager(owner);
+        return manager == null || manager.getReservesCopy() == null || manager.getReservesCopy().isEmpty();
+    }
+
+    /** Why the battle should end now, or null: a runaway field, the configured time, a side wiped out with no reserves. */
     private String endReason(CombatEngineAPI engine) {
         if (runaway) {
             return "runaway";
@@ -168,12 +187,14 @@ public class BfProbeCombatPlugin extends BaseEveryFrameCombatPlugin {
         if (engine.getTotalElapsedTime(false) >= combatSeconds) {
             return "time";
         }
-        if (engine.isCombatOver()) {
-            return "engine-ended";
-        }
         int[] counts = new int[2];
         aliveBySide(engine, counts);
-        return !loggedShips.isEmpty() && (counts[0] == 0 || counts[1] == 0) ? "side-wiped" : null;
+        if (!bothSidesSeen(counts)) {
+            return null;
+        }
+        boolean playerWiped = counts[0] == 0 && noReserves(engine, 0);
+        boolean enemyWiped = counts[1] == 0 && noReserves(engine, 1);
+        return playerWiped || enemyWiped ? "side-wiped" : null;
     }
 
     private void finish(CombatEngineAPI engine, String reason) {
@@ -202,7 +223,7 @@ public class BfProbeCombatPlugin extends BaseEveryFrameCombatPlugin {
         if (engine == null) {
             return;
         }
-        if (engine.isCombatOver()) {  // 96.13: the game ended it, maybe while paused on its own end screen
+        if (seenPlayer && seenEnemy && engine.isCombatOver()) {  // 96.13: the game ended it, maybe paused on its own end screen
             finish(engine, "engine-ended");
             return;
         }
