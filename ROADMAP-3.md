@@ -2298,6 +2298,37 @@ history as the closure benchmark, a cross-repository trace check, an early Java 
     `conversion_checks.live` (92.28), `probe_config._csv_ids`, `renamed_ids` and `provider_renamed_ids`. Project Go's
     `CsvExtractor` skips a parsed first cell starting `#` after `stripLeading`, so it drops vanilla's quoted
     `"#Light Mortar ..."` row and any row starting ` #`, both of which the game keeps.
+  **Slice 17 Done 2026-11-22: `gene boot stage` and `gene boot evaluate`, the boot halves as a command.** P1's two boots
+  were staged and read by hand; P2's and P3's go through this. `bridgeforge/genome/boot.py`:
+  - **`stage PROOF HALF --queue Q --rig RIG`** copies the half's work copy to `<queue>/<proof>-<half>/working` with a
+    `GENE_BOOT_STAGED.json` marker (proof, half, mod id, gene identity, tree hash). An older copy moves to
+    `<queue>/_replaced-<date>/`. It refuses a half whose static proof is not PASS, a static proof about another gene, and a
+    rig without a mod the gene's `needs.mods` names. A gene set's `set-isolation-proof.json` serves the carrier half.
+  - **`evaluate PROOF HALF TESTID --rig RIG`** refuses, writing nothing, unless the run is bound to the proof:
+    - its manifest names the half's mod;
+    - the staged hash equals the proof's work copy;
+    - the shared evaluator finds the log is this run's, released, with nothing drifted since launch. The manifest pins the
+      enabled list and the probe config, so evaluate before the next install, as with `report`.
+  - **Carrier:** PASS when the game loaded it (93.65), it reached the main menu, the probe report passes it, and the log
+    has no Fatal and no mod error. Each provided id is listed as OBSERVED (in the probe's list for its kind, no FAIL) or
+    NOT_OBSERVED; the probe has no check of hull mods, weapons or systems.
+  - **Subtraction:** BOOTED when the donor loaded and reached the main menu with no Fatal or mod error.
+    BLOCKED_BY_DEPENDENT (header PASS) when every Fatal and mod error names, as a whole token, an id the gene provides
+    through a recorded dependent whose load condition held: `always`, or `with <mod>` with that mod enabled. A mission's
+    dependent never holds, since the probe starts its own. This is the owner's 2026-11-20 rule. Anything else fails it;
+    neither the main menu nor a Fatal is UNKNOWN.
+  - The log, the dialog log and the manifest are copied to `<proof>/boot/<TESTID>/`, and
+    `<proof>/boot-<half>-<TESTID>.json` carries the common header (kind `gene-boot`). The static proofs are not changed.
+  - `probe-group record` refuses a workspace with the marker: a gene boot run is never recorded or archived.
+  - **Real logs (Test1, read only, judged with the module's rules before merge):**
+    - P1B-SUB2-20261120 against the re-proved `p1-boot-20261120-v2`: BLOCKED_BY_DEPENDENT. Two Fatal lines (the
+      RuntimeException and the dialog), both naming `sa_lobster_tanks`; no mod error.
+    - The same log against the pre-slice-9 proof, whose dependent has no `loaded`: FAIL.
+    - LOBSTER-SUB-20261120: FAIL against both lobster proofs (the Fatal names `sa_lobster_royal`, which no recorded
+      dependent explains).
+    - P1B-CAR3-20261122 cannot be judged now: RevenantLib's live test has since replaced `_rig-genes`' probe config.
+  - **Tests:** `tests/test_gene_boot.py`, 22 tests on synthetic proofs and bound runs. Mutation-checked with
+    `mutate_batch.py`: 18 mutants, all caught.
 - 94.G3 **Gene bank**: content-addressed store, alleles across the corpus, lineage, licence state; RevenantLib distributes genes
   from vanished authors (GD-3). The store's payloads live under `data_root()`, like `Done/`, never in this public
   repository; only manifests of the owner's own or permitted content become committed fixtures (2026-11-19).
