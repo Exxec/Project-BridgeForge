@@ -2450,6 +2450,17 @@ history as the closure benchmark, a cross-repository trace check, an early Java 
     - A style other donor hulls also use must stay in the subtraction copy: it is needed and shared, not owned. Design
       with the advisor first.
     - P4's carrier has the same gap.
+  - **Diagnostic boots, 2026-11-23** (never evaluated, recorded or archived). Copies of the two carriers had the donor's
+    `hull_styles.json` added by hand, in their own queue `_genes-diag-queue`. P3's copy came from a fresh Test1 re-proof
+    with slice 18, carrier `gene_carrier_93f4646e00d1`, the same as White_Legion's.
+    - **DIAG-P2-STYLES-20261123: LIVE_DONE** (main menu, campaign, combat). For P2 the style was the only load gap.
+    - **DIAG-P3-STYLES-20261123:** past the styles, a new Fatal at load: one weapon-slot cover image, which the style
+      names and the carrier lacks. So a style brings the files it names too (RC8_BEHAVIOUR RC8-49).
+    - **Owner 2026-11-23 ("Separate, needed"):** a part the gene's hulls share with other donor content, such as a hull
+      style, is a need, not a member. A carrier gets a copy, and the subtraction copy keeps it. The same ruling settles P4's
+      starting ship (slice 18): the start's gene is its registration and classes, and the ship is a need.
+    - **Owner 2026-11-23 ("Counts only, scrub"):** the public repository describes Eridani Combine by counts, never by
+      its identifiers. A follow-up PR replaces the names already on main.
 - 94.G3 **Gene bank**: content-addressed store, alleles across the corpus, lineage, licence state; RevenantLib distributes genes
   from vanished authors (GD-3). The store's payloads live under `data_root()`, like `Done/`, never in this public
   repository; only manifests of the owner's own or permitted content become committed fixtures (2026-11-19).
