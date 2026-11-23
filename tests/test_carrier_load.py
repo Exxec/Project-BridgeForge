@@ -80,11 +80,13 @@ class LoadGapTests(unittest.TestCase):
 
 
 def _styled_hull_mod(root):
+    """A hull whose style nothing defines: since slice 20 a style the mod defines travels with the gene as a need, so only an
+    undefined one still leaves the carrier unable to load."""
     mod = root / "mod"
     _write(mod / "mod_info.json", json.dumps({"id": "demomod", "name": "Demo", "version": "1.0", "gameVersion": "0.98.5a-RC7"}))
     _write(mod / "data" / "hulls" / "ship_data.csv", "name,id\nShip,fx_ship\n")
     _write(mod / "data" / "hulls" / "fx_ship.ship", json.dumps({"hullId": "fx_ship", "style": "FX_STYLE"}))
-    _write(mod / HULL_STYLES, json.dumps({"FX_STYLE": {"shieldRingColor": [1, 2, 3, 255]}}))
+    _write(mod / HULL_STYLES, json.dumps({"OTHER_STYLE": {"shieldRingColor": [1, 2, 3, 255]}}))
     return mod
 
 

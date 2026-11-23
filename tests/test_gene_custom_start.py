@@ -53,7 +53,9 @@ class CustomStartTests(unittest.TestCase):
         paths = {(m["what"], m["path"]) for m in gene["members"]}
         self.assertIn(("file", CUSTOM_STARTS_FILE), paths)
         self.assertIn(("file", "data/scripts/demo_Start.java"), paths)
-        self.assertIn(("file", "data/variants/demo_flagship_Var1.variant"), paths)  # P2's rule: the code names it
+        # Owner 2026-11-23 ("Separate, needed"): the ship the start names is a gene it needs, not a member (slice 20).
+        self.assertNotIn(("file", "data/variants/demo_flagship_Var1.variant"), paths)
+        self.assertIn("variant:demo_flagship_Var1", gene["needs"]["genes"])
         self.assertIn("custom-start:demoStart", gene["provides"])
         self.assertIn("nexerelin", gene["needs"]["mods"])
         self.assertIn({"kind": "mod-enabled", "subject": "nexerelin"},

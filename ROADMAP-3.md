@@ -2497,6 +2497,38 @@ history as the closure benchmark, a cross-repository trace check, an early Java 
 
     The real carriers measure the same. The review's 4 mutants were all caught, once the `..` test placed a file that the
     path would reach.
+  **Slice 20 Done 2026-11-23: shared parts are needs (owner 2026-11-23, "Separate, needed").**
+  - **Hull styles:** a style the gene's hulls use that the mod defines goes into a new `needs.donor` list, with the style's
+    own image and sound files (`data/config/hull_styles.json#/<style>` plus file paths). It is not a member.
+    - The carrier gets a copy: `build_carrier` copies donor parts through its member branches, and a set carrier unites
+      its genes' lists. The subtraction copy keeps them.
+    - Each donor path is an input of the static proofs. Needs are not part of the identity, so a changed style would
+      otherwise leave the evidence looking valid.
+    - A style only this gene's hulls use is kept a need and flagged as a suspect, because the ruling covers shared ones.
+    - A style defined nowhere is in `unknowns.missing`. Without the core, only the mod's own styles are judged.
+  - **Contract:** `needs.donor` is optional and appears only when there is a need, so earlier manifests stay
+    byte-identical.
+    - The schema allows extra `needs` keys. BridgeForge's `validate()` and Project Go's reader check only
+      `vanilla`, `mods` and `genes` (checked 2026-11-23).
+    - `validate()` now checks `needs.donor` when present. The pin (1345f51a) is unchanged.
+  - **Custom start:** the content ids its code names are genes it needs (`needs.genes`), not closure seeds. P4's start
+    is its registration file and two classes; the ship is its own gene, and `gene prove-set` carries both.
+  - **Re-proved locally:**
+    - P1 still passes both halves (bb64ad41).
+    - P2 passes both halves (89e207d1), with its style as one donor need.
+    - P3's set passes, with 0 load gaps (anchor 3ebc89de, carrier `gene_carrier_93f4646e00d1`).
+    - P4 is now 7fba89ed, 3 members, needing `variant:ork_murtach_CDL-01`. Its static subtraction PASSes with no leak, and
+      its set passes (2 genes, carrier `gene_carrier_b5bb5b5aeffe`, 85 members, 0 gaps).
+  - **Tests:** `tests/test_gene_shared_needs.py`:
+    - a shared style and its own files as needs (the core's files are not);
+    - a style only this gene uses, flagged;
+    - a vanilla style, and an undefined one;
+    - the carrier copy, the subtraction keeping the style, and the proof input;
+    - a set carrier;
+    - a start's ship needed, left in the donor, and carried by the set.
+
+    The slice-18 and slice-19 tests changed with the rule: the start's ship is now a need, and the load-gap tests use an
+    undefined style.
 - 94.G3 **Gene bank**: content-addressed store, alleles across the corpus, lineage, licence state; RevenantLib distributes genes
   from vanished authors (GD-3). The store's payloads live under `data_root()`, like `Done/`, never in this public
   repository; only manifests of the owner's own or permitted content become committed fixtures (2026-11-19).

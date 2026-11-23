@@ -204,7 +204,10 @@ def build_carrier(root: Path, gene: dict, dest: Path, *, vanilla_core: Path | No
                     "author": "BridgeForge gene proof", "description": f"Isolation carrier for {gene['anchors'][0]} (94.G2).",
                     "gameVersion": info.get("gameVersion"), "dependencies": [{"id": mod} for mod in gene["needs"]["mods"]]}
     settings: dict[str, dict] = {}
-    for member in gene["members"]:
+    # Slice 20: donor parts the gene needs and does not own (a shared hull style and its files) are copied too.
+    donor = [{"what": "json-entry" if "#" in path else "file", "path": path}
+             for path in (gene.get("needs") or {}).get("donor") or []]
+    for member in [*gene["members"], *donor]:
         path = member["path"]
         if member["what"] == "file":
             (dest / path).parent.mkdir(parents=True, exist_ok=True)
@@ -430,6 +433,9 @@ def prove(mod: Path, anchor: str, out: Path, *, vanilla_core: Path | None = None
         if isolation["load_gaps"]:
             isolation["verdict"] = "FAIL"
     inputs = [("member", path) for path in sorted({member_file(m["path"]) for m in gene["members"]})]
+    # Slice 20: the donor parts it needs are inputs too: they are not in the identity, so a changed style would leave stale
+    # evidence looking valid (advisor 2026-11-23).
+    inputs += [("need", path) for path in sorted({member_file(p) for p in gene["needs"].get("donor") or []} - {i[1] for i in inputs})]
     atomic_write_text(out / "gene.json", dumps(gene), newline="")
     written = {}
     halves = (("subtraction-proof", subtraction, {"rewritten": notes, **({"registration_cut": cut} if cut else {})}),
