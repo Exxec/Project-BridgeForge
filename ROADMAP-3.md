@@ -1054,16 +1054,15 @@ unproven).
   `initStar(id, "nebula_center_young", 0, 0)` is vanilla's own pattern, RC7's `star_gen_data.csv` gives radius 0; a library used
   behind an `isModEnabled` guard is optional, not undeclared); (d, S) a one-page owner summary per mod at archive time: fixes,
   rebuilt classes, acceptances, shipped changes; (e, M) rig bring-up on a new machine in one command (93.3, 93.5), with the
-  licence-key presence check, preference pins and the mods' declared libraries (AshLib was copied by hand for UAF);
-  **Owner 2026-11-22:** (e) parked ("For everything else I will follow your recommendations."): one working rig; parked until
-  a new machine or game build;
-  (f, S) the
+  licence-key presence check, preference pins and the mods' declared libraries (AshLib was copied by hand for UAF); (f, S) the
   live run minimises its own console window and records the desktop size (93.24); (g, M) probe combat rounds sized by hull count,
   one progress line per round (UAF's 86 hulls took two rounds, "hulls 61-86 of 86"); (h, S) a revive with `--providers` passes
   them to the report draft's compile check (93.36); (i, S) `TARGET_IMPACT.md` shortens obfuscated member names (one Station
   Augments descriptor ran to hundreds of characters). **(i) Done 2026-11-17:** names over 160 characters are cut in the markdown with
   their length; the JSON keeps them whole (`tests/test_target_impact.py`
   `test_render_shortens_obfuscated_member_names_and_the_json_keeps_them`).
+  **Owner 2026-11-22:** (e) parked ("For everything else I will follow your recommendations."): one working rig; parked until
+  a new machine or game build.
 - 95.13 (S) **target-impact points at `relink`.** The three RELINK mods (AoTD Vaults of Knowledge 5.0.7, Broken Star, Nightcross)
   and Sunrider share one member: `StarSystemGenerator.addStableLocations(StarSystemAPI, int)` returns a `List` on RC7.
   `bridgeforge relink` already recompiles return-type-only calls from shipped or decompiled source, unedited; target-impact's next
