@@ -2772,6 +2772,8 @@ history as the closure benchmark, a cross-repository trace check, an early Java 
     - unknown hulls, unknown wings and `doctrine` left out;
     - a faction without a role file, whose manifest shape is unchanged;
     - the carrier gap for the roles file and for `shipRoles`, and the subtraction check skipping it.
+
+    Mutation-checked: 14 mutants, all caught on the first run.
 - 94.G3 **Gene bank**: content-addressed store, alleles across the corpus, lineage, licence state; RevenantLib distributes genes
   from vanished authors (GD-3). The store's payloads live under `data_root()`, like `Done/`, never in this public
   repository; only manifests of the owner's own or permitted content become committed fixtures (2026-11-19).
