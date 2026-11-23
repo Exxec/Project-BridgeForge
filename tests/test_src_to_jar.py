@@ -159,7 +159,7 @@ class SrcToJarTests(unittest.TestCase):
         self.assertEqual(before, after)
 
     def test_a_java_8_jar_stays_java_8(self) -> None:
-        # Eridani Combine's ECE.jar is class version 52 (2026-11-16): the proof and the patch compile for Java 8.
+        # Eridani Combine's jar is class version 52 (2026-11-16): the proof and the patch compile for Java 8.
         with resolved_temp_dir() as root:
             ws = self._workspace(root, release="8")
             self._agent_edit(ws)

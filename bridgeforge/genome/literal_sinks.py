@@ -41,8 +41,8 @@ MENTION_SINKS = {
 }
 NOT_LOADED = "a static final constant no instruction of its class loads"
 # Slice 15 (advisor 2026-11-20): the mention sinks that test for the id rather than use it as a key or a label. A gene whose
-# code only checks for an id may still need it present to act: ECE_Dlorica's isApplicableToShip is
-# `getHullMods().contains("ECE_FluxEMPHullMod")` (javap), so it installs only on a ship that has that hull mod. Such an id
+# code only checks for an id may still need it present to act: one Eridani hull mod's isApplicableToShip is
+# `getHullMods().contains(<another hull mod's id>)` (javap), so it installs only on a ship that has that hull mod. Such an id
 # is a condition of the gene (FEATURE_GENOME_ROADMAP: a regulator, "what switches a gene on or off"), not a member.
 CHECK_SINKS = frozenset({"java/util/Collection.contains#0", "java/util/LinkedHashSet.contains#0",
                          "com/fs/starfarer/api/combat/ShipVariantAPI.hasHullMod#0", "com/fs/starfarer/api/loading/WeaponSpecAPI.hasTag#0"})
@@ -126,7 +126,7 @@ def class_literal_sinks(data: bytes, constants: list[str] | set[str]) -> dict[st
 
 
 # Slice 14 (owner 2026-11-20, "Lookup-only keys = suspect"): a literal put as a key into a map field is a mention when every
-# load of that field in the mod's loaded code ends in a lookup. ECE_FluxEMPHullMod's public HULLMOD_POINTS maps 10 hull
+# load of that field in the mod's loaded code ends in a lookup. one Eridani hull mod's public points table maps 10 hull
 # mod ids to points, read only by containsKey and get (javap 2026-11-20).
 MAP_OWNERS = ("java/util/Map", "java/util/HashMap", "java/util/LinkedHashMap", "java/util/TreeMap")
 _PUTS = {f"{owner}.put#0" for owner in MAP_OWNERS}

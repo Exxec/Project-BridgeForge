@@ -2,7 +2,7 @@
 
 **Anchor.** `star-system:<name>` is the constant name a loaded mod class passes to `SectorAPI.createStarSystem`, as
 `combat-plugin:<key>` is a key of settings.json's `plugins` map: the gene's closure starts from that one class. The name may
-reach the call through a local (Eridani's `String systemName = "Pantheon"; sector.createStarSystem(systemName)`), so the
+reach the call through a local (Eridani's `String systemName = <constant>; sector.createStarSystem(systemName)`), so the
 call's argument is followed through a local assigned only from that one constant. A computed name, no such class, or several
 are refused. Loose-script generators are not closed yet and are refused by name.
 
@@ -17,7 +17,7 @@ gene is registered: a recorded choice, unlike `combat-plugin`, whose registratio
 - planet, custom-entity and terrain types (JSON keys);
 - factions (`.faction` ids);
 - graphics keys of `settings.json`, only when the category is also a literal of the code
-  (`setInteractionImage("intel", "ECE_illAurora")`). Without that rule `nav_buoy` read as a core graphics key in two
+  (`setInteractionImage("intel", <key>)`). Without that rule `nav_buoy` read as a core graphics key in two
   categories the code never names.
 
 The mod's own definitions are members: a CSV row with the classes and files its cells name, a JSON key as a json-entry, a

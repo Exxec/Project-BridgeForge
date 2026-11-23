@@ -176,7 +176,7 @@ From the six-mod batch, chosen to exercise different kinds and difficulties (loc
 |---|---|---|
 | P1 | Scrapyard Armories `sa_lobster_tanks` hull mod: hull_mods.csv row, its script, the seven `sa_lobster_tanks_*` settings keys, the vanilla lobster commodity | small, data plus loose script plus settings; phenotype is visible in cargo over days |
 | P2 | Navarchy of Tania's junkyard spawner: `tania_CombatHandlerSpawner`, the spawner hull mods, the amalgam hulls and variants | jar-backed, combat plugin, already fixed this batch (captains, src-to-jar) |
-| P3 | Eridani Combine's Pantheon system: `ECE_StarSystem`, its planets and the two markets it creates (`addMarketplace`), and its faction ties | campaign gene; registration slicing in onNewGame; save safety |
+| P3 | Eridani Combine's star system: its generator class, its planets and the two markets it creates (`addMarketplace`), and its faction ties | campaign gene; registration slicing in onNewGame; save safety |
 | P4 | Bultach Coalition's custom start | a regulated gene: exists only when Nexerelin loads it |
 
 ## 9. Measures

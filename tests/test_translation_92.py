@@ -1,4 +1,4 @@
-"""Translated jar strings reach the class's shipped source too (ROADMAP-3 item 92.33, 2026-11-16): Eridani Combine's 18 ECE.jar
+"""Translated jar strings reach the class's shipped source too (ROADMAP-3 item 92.33, 2026-11-16): Eridani Combine's 18 jar
 strings were translated while src/ kept the Chinese, so a src-to-jar rebuild would have reverted them."""
 from __future__ import annotations
 

@@ -176,7 +176,7 @@ public class User { void all(ShipVariantAPI v) { for (String id : Tables.ITERATE
 
 @unittest.skipUnless(_javac(), "needs javac")
 class LookupOnlyMapTests(unittest.TestCase):
-    # Slice 14 (owner 2026-11-20, "Lookup-only keys = suspect"): ECE_FluxEMPHullMod's HULLMOD_POINTS table.
+    # Slice 14 (owner 2026-11-20, "Lookup-only keys = suspect"): one Eridani hull mod's points table.
     def test_a_key_of_a_map_only_looked_up_is_a_mention_and_one_iterated_elsewhere_is_a_need(self) -> None:
         with resolved_temp_dir() as root:
             classes = _compile(root, {"demo/Tables.java": TABLES, "demo/User.java": USER})
@@ -242,7 +242,7 @@ class LookupOnlyMapTests(unittest.TestCase):
 
 class SamePackageLiteralTests(unittest.TestCase):
     def test_a_string_equal_to_a_same_package_class_name_is_no_use_of_it(self) -> None:
-        # Eridani: hasHullMod("ECE_FluxEMPHullMod") in data.hullmods, where a class of that name also lives (slice 13).
+        # Eridani: hasHullMod for one hull mod in data.hullmods, where a class of that name also lives (slice 13).
         with resolved_temp_dir() as root:
             mod = root / "mod"
             _write(mod / "mod_info.json", json.dumps({"id": "demo", "name": "Demo"}))
