@@ -104,6 +104,8 @@ def report(done: int, total: int, name: str, detail: str, seconds: float | None)
 LONG_RUNNING_COMMANDS = (
     ("gene", "census"),
     ("gene", "prove-set"),
+    ("gene", "bank", "put"),
+    ("gene", "bank", "rebuild"),
     ("portfolio-scan",),
     ("recipe-trial",),
     ("local-kit", "build"),

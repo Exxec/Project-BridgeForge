@@ -1437,8 +1437,9 @@ history as the closure benchmark, a cross-repository trace check, an early Java 
   | P3 | Eridani Combine, a star system and its 79-gene set | P3B-CAR4-20261123: BOOTED | P3B-SUB-20261123: BOOTED |
   | P4 | Bultach Coalition, custom start | P4B-CAR2-20261123: BOOTED | P4B-SUB-20261123: BOOTED |
 
-  Each boot was judged by `gene boot evaluate` against a fresh proof on Test1, whose identity, carrier id and tree hash
-  matched White_Legion's.
+  Each boot was judged by `gene boot evaluate` against a fresh proof on Test1 whose identity matched White_Legion's.
+  Only P3B-CAR4 and P4B-CAR2 also had their carrier id and tree hash compared; the other six were compared by identity.
+  This was corrected 2026-11-23 on the advisor's review; 94.G3 slice 1's cross-machine rebuild is the full check.
   - **Evidence:** `gene evidence check` passed every proof and boot file of those folders: 18 of 18, inputs re-hashed.
     The static proofs are checked against the donor's `working/`, the boot files against their proof folder.
   - **Suspects:** each is listed in the gene's `unknowns`.
@@ -2869,6 +2870,68 @@ history as the closure benchmark, a cross-repository trace check, an early Java 
 - 94.G3 **Gene bank**: content-addressed store, alleles across the corpus, lineage, licence state; RevenantLib distributes genes
   from vanished authors (GD-3). The store's payloads live under `data_root()`, like `Done/`, never in this public
   repository; only manifests of the owner's own or permitted content become committed fixtures (2026-11-19).
+  **Started 2026-11-23,** after 94.G2 was accepted, under GD-1. The design is `docs/GENE_BANK_DESIGN.md`, with keys set
+  with the advisor:
+  - manifests stored by the hash of their canonical bytes, because needs are not in the identity;
+  - a describer stamp and the core build on every record;
+  - blobs that are exactly the bytes each member's `sha256` covers;
+  - no machine paths or timestamps, so a rebuild gives one ROOT anywhere.
+
+  **Slice 1 Done 2026-11-23: store, put, verify, rebuild, list.** Branch `feat/g3-bank-slice1`.
+  - **`bridgeforge/genome/bank.py`** stores under `<data root>/Genes` (gitignored).
+    - `gene bank put` describes a gene and every gene its needs name (`gene_set.walk`, with its checkpoint and progress
+      lines), then stores the manifests, their member and donor-need blobs, and one record per manifest, source and build.
+    - `entries.json` maps each line of `sources.json` to the records its last put produced. A record no line holds is
+      history: kept and verified, but outside the ROOT.
+    - The ROOT covers `entries.json`, the current records' bytes, and the manifests and blobs they name.
+    - `verify` re-hashes every blob and manifest, and checks each record's blobs and file name. It checks that each
+      source has an entries row holding its anchor, and that each needed gene of a current record resolves to a current
+      record from the same source. Then it recomputes the ROOT.
+    - `rebuild` puts every `sources.json` line again, into the bank as it is, and deletes nothing. It refuses before
+      writing anything when the core reports another build or a source is missing. It is resumable.
+    - `list` shows the current records; `--history` adds the rest.
+  - **The pilots, banked against RC7:** each from `working/` and from its original release, its first second allele. That
+    gives 166 records: P1 1+1, P2 1+1, P3 79+79, P4 2+2. All three runs gave ROOT `6aa8f7bdac6a1c07...e770c`, with 0
+    problems:
+    - White_Legion, into an empty folder seeded with `sources.json`: 1123 s.
+    - White_Legion again, in place: 1249 s; `entries.json` identical.
+    - Test1, into an empty folder from the same `sources.json` and the committed package (0.4.2): 166 current records,
+      and `entries.json` hashes the same (`d985f95c...`).
+
+    The first draft's bank, from before the review, is kept locally, not deleted.
+  - **Found while banking:** records were filed by manifest alone, so an unchanged gene in a second release would have
+    overwritten the first source's record. They are now filed by manifest, source and build.
+  - **Independent review:** one critical, three high and three medium findings, each reproduced; all fixed.
+    - *Critical.* `rebuild` wiped the folder `--bank` named, with the bank's parent as the allowed root: `--bank <data
+      root>` deleted `In operation/`, `Done/` and `bridgeforge-state/`. Fix:
+      - rebuild deletes nothing;
+      - `put` and `rebuild` refuse a folder holding anything a bank does not, and a bank inside its source;
+      - `bank.py` holds no `rmtree`.
+    - *High.* `rebuild` wiped before checking the sources, and a missing one left only `sources.json`. It now refuses
+      before writing anything.
+    - *High.* A source changed and changed back left no current record, and `verify` reported nothing.
+    - *High.* The ROOT could not be reproduced once anything was superseded. Records no longer carry history state; the
+      `entries.json` design above replaces it.
+    - *Medium.* Refusal reasons held absolute paths. They now read `<source>`, `<core>` and `<data root>`.
+    - *Medium.* A strict JSON read refused bytes that describe had hashed, and the CLI crashed on a corrupt record.
+    - *Medium.* The checkpoint sat beside the bank, in the data root. It now lives inside the bank.
+    - *Low, also fixed:* `put` had no progress lines or checkpoint (it is now listed as long-running); a workspace was
+      accepted as `--folder original`; two tests checked nothing; the design doc and the code disagreed.
+  - **Tests:** `tests/test_gene_bank.py`:
+    - a put and a clean ROOT;
+    - a rebuild into an empty folder at another data root, with another core and a refused need naming both, giving the
+      same ROOT;
+    - history kept, with a rebuild in place matching a fresh one;
+    - a source changed and changed back;
+    - tampering, an unreadable record, a missing need, a missing entries row and a stale ROOT, reported;
+    - two sources of one manifest;
+    - refused: a source outside the data root, a workspace as `original`, a core of another build, a source changed after
+      describe, a bank folder holding anything else, a bank inside its source, a missing source (bank unchanged);
+    - the CLI's list, `--history`, verify and exit code 2;
+    - each member kind's bytes hashing as its member does, including a stray Latin-1 byte.
+  - **Mutation check:** 25 mutants, all caught, eleven of them for the review's findings. The first version's 13 were
+    caught too, one only after its test was added.
+  - **Full suite:** 3534 tests, OK (skipped=13); hermeticity PASS.
 - 94.G4 **Adaptation**: target-impact, gated fixers and `src-to-jar` at gene scope; Project Go carries translations; SpriteForge
   validates sprites and slots.
   **Project Go's part, slice 1 (2026-11-22, Project-Go #19): `ssmt-cli gene-carry`, a read-only report.**
