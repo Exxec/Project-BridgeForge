@@ -341,15 +341,44 @@ def _skin_hulls(mod_root: Path, deployable: list[str]) -> list[str]:
         return []
     own = {(row.get("id") or "").strip() for row in _read_csv_rows(hulls_dir / "ship_data.csv") or []}
     allowed = set(deployable)
-    found = set()
+    bases: dict[str, str] = {}
     for path in sorted(hulls_dir.rglob("*.skin")):
         data = _load_lenient_json_file(path)
-        if not isinstance(data, dict):
-            continue
-        skin, base = data.get("skinHullId"), data.get("baseHullId")
-        if isinstance(skin, str) and skin and isinstance(base, str) and (base in allowed or base not in own):
+        if isinstance(data, dict) and isinstance(data.get("skinHullId"), str) and data["skinHullId"] \
+                and isinstance(data.get("baseHullId"), str):
+            bases[data["skinHullId"]] = data["baseHullId"]
+    not_ships = _wing_or_module_hulls(mod_root)
+    found = set()
+    for skin in bases:
+        base, hops = bases[skin], 0
+        while base in bases and hops < 8:  # a skin of a skin: judge it by the first real base (review of #217)
+            base, hops = bases[base], hops + 1
+        # A skin a wing or a module uses is a fighter or a module whatever its base (a vanilla fighter's skin is not in `own`).
+        if skin not in not_ships and (base in allowed or base not in own):
             found.add(skin)
     return sorted(found - allowed)
+
+
+def _wing_or_module_hulls(mod_root: Path) -> set[str]:
+    """Hull ids the mod uses as a fighter (a wing_data.csv variant's hull) or as a station module (a variant named in another
+    variant's `modules`): never deployable as a ship (PRB-FIGHTER-01). Read from the mod's own data, as a vanilla base's hints
+    are not at hand here."""
+    variants_root = mod_root / "data" / "variants"
+    hull_of: dict[str, str] = {}
+    module_variants: set[str] = set()
+    for path in sorted(variants_root.rglob("*.variant")) if variants_root.is_dir() else []:
+        data = _load_lenient_json_file(path)
+        if not isinstance(data, dict) or not isinstance(data.get("hullId"), str):
+            continue
+        hull_of[str(data.get("variantId") or data.get("id") or path.stem)] = data["hullId"]
+        modules = data.get("modules")
+        entries = modules if isinstance(modules, list) else [modules] if isinstance(modules, dict) else []
+        for entry in entries:
+            if isinstance(entry, dict):
+                module_variants.update(v for v in entry.values() if isinstance(v, str))
+    wing_variants = {(row.get("variant") or "").strip()
+                     for row in _read_csv_rows(mod_root / "data" / "hulls" / "wing_data.csv") or []}
+    return {hull_of[v] for v in (wing_variants | module_variants) if v in hull_of}
 
 
 def _variant_by_hull(mod_root: Path, hulls: list[str]) -> dict[str, str]:
@@ -599,7 +628,7 @@ def build_probe_config(
         "factions": _mod_faction_ids(mod_root),
         "patched_factions": _mod_patched_faction_ids(mod_root),
         "content_variants": _content_variants(mod_root, deployable),
-        "content_ship_hulls": _content_ship_hulls(mod_root, hulls),
+        "content_ship_hulls": _content_ship_hulls(mod_root, deployable),  # skins too: the substitution check (review of #217)
         "content_special_items": _content_special_items(mod_root),
         "mod_systems": mod_systems,
         # systems only unreachable jar code creates (EPTA's retired Alicerce): not expected in the sector; for the report

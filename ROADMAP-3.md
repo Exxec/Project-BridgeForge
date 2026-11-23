@@ -2973,6 +2973,14 @@ fixes of 93.28. 93.26-93.35 are that day's findings.
     - skins fight, with their own variant or `<id>_Hull`, unless the base is the mod's module or fighter.
 
     The probe contract lists `hulls_empty_variant` as Python-only. Mutation-checked: 5 mutants, all caught.
+  - **Review of #217:**
+    - **Substitution check:** `content_ship_hulls` covers the deployable list too, so a skin's variant gets the check
+      for a ship swapped for a default hull.
+    - **Fighter and module skins stay out:** a skin a wing flies (`wing_data.csv`), or that another variant mounts as
+      a module, stays out whatever its base. A vanilla fighter's skin is not one of the mod's hulls, so only its use
+      shows it.
+    - **Skin chains:** a skin of a skin is judged by its first real base.
+    - **Tests and coverage:** 3 more mutants, all caught. Coverage on the five mods is unchanged.
   - **Left:**
     - fighting every variant, not only the first, would mean more rounds; the owner's call;
     - modules fight only attached to their parent;
