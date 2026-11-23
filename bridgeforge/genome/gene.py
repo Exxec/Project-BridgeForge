@@ -183,6 +183,8 @@ def _nested_classes(root: Path, members: list[dict]) -> list[dict]:
     first uses them, but vendor-plan follows source imports, which never name them. P4 (2026-11-22): `bt_murtach_start$1`,
     the Script the custom start's execute() adds, was missing, and so were 7 listener and enum classes in P3's set closure
     (`ECE_FluxEMPHullMod$ECE_EMPStateDamageTakenListener`, `ECE_EngineController$Side`, ...), so its carrier lacked them."""
+    from bridgeforge.scan.scan_classfile import iter_class_files_in_jars
+
     have = {m["path"] for m in members if m["what"] == "jar-class"}
     outers: dict[str, list[str]] = {}
     for path in sorted(have):
@@ -190,18 +192,19 @@ def _nested_classes(root: Path, members: list[dict]) -> list[dict]:
         outers.setdefault(jar, []).append(entry[: -len(".class")])
     found = []
     for jar, stems in outers.items():
-        try:
-            with zipfile.ZipFile(Path(root) / jar) as archive:
-                for name in sorted(archive.namelist()):
-                    outer = next((stem for stem in stems if name.startswith(stem + "$")), None)
-                    if outer is None or not name.endswith(".class") or f"{jar}!{name}" in have:
-                        continue
-                    data = read_limited(archive, name, MAX_CLASS_BYTES)
-                    found.append({"what": "jar-class", "path": f"{jar}!{name}", "sha256": hashlib.sha256(data).hexdigest(),
-                                  "reason": f"a nested class of {outer.replace('/', '.')}"})
-        except (OSError, zipfile.BadZipFile, ValueError) as exc:
-            raise GeneError(f"{jar}: cannot read the jar for the nested classes of its members: {exc}") from exc
-    return found
+        unreadable: list[str] = []
+        skipped: list[str] = []
+        for _path, name, data in iter_class_files_in_jars([Path(root) / jar], unreadable, skipped_entries=skipped):
+            # the longest outer first, so a class nested twice names its nearest member; `Outer$` alone is not nested
+            outer = max((stem for stem in stems if name.startswith(stem + "$") and len(name) > len(stem) + len("$.class")),
+                        key=len, default=None)
+            if outer is not None and f"{jar}!{name}" not in have:
+                found.append({"what": "jar-class", "path": f"{jar}!{name}", "sha256": hashlib.sha256(data).hexdigest(),
+                              "reason": f"a nested class of {outer.replace('/', '.')}"})
+        unread = unreadable + [entry for entry in skipped if any(stem + "$" in entry for stem in stems)]
+        if unread:  # a gene silently missing a nested class would boot into NoClassDefFoundError
+            raise GeneError(f"{jar}: the nested classes of its members could not all be read: {'; '.join(unread[:3])}")
+    return sorted(found, key=lambda m: m["path"])
 
 
 _PACKAGE_DECL = re.compile(r"^\s*package\s+([\w.]+)\s*;", re.MULTILINE)
@@ -393,7 +396,9 @@ def _code_members(root: Path, plan: dict) -> list[dict]:
             # so resolve the jar's path in the mod. Before P3 (2026-11-20) a class with no source under src/ was skipped
             # silently and its literals named nothing.
             found.append(_jar_member(root, entry["path"]))
-    return found
+    # Review of P4: a nested class's literals and campaign rows count as the gene's code too (an anonymous Script may name
+    # an id its outer class does not), so the closure follows them.
+    return found + _nested_classes(root, found)
 
 
 def _combat_plugin(mod: Path, key: str) -> tuple[str, dict]:
@@ -425,10 +430,14 @@ def custom_start_entry(root: Path, ident: str) -> dict:
     if not path.is_file():
         raise GeneError(f"custom-start:{ident}: {path} does not exist")
     data = _load_lenient_json_file(path)
-    starts = data.get("starts") if isinstance(data, dict) else None
+    if data is None:
+        raise GeneError(f"custom-start:{ident}: {CUSTOM_STARTS_FILE} cannot be read as JSON")
+    if not isinstance(data, dict):
+        raise GeneError(f"custom-start:{ident}: {CUSTOM_STARTS_FILE} is not a JSON object")
+    starts = data.get("starts")
     if not isinstance(starts, list) or sorted(data) != ["starts"] or len(starts) != 1 or not isinstance(starts[0], dict):
         held = f"{len(starts)} start(s)" if isinstance(starts, list) else "no starts list"
-        others = sorted(k for k in data if k != "starts") if isinstance(data, dict) else []
+        others = sorted(k for k in data if k != "starts")
         raise GeneError(f"custom-start:{ident}: {CUSTOM_STARTS_FILE} holds {held}" + (f" and other keys ({', '.join(others)})"
                         if others else "") + "; a custom-start gene takes the whole file, so only a file with exactly one start "
                         "and nothing else closes (the contract has no array-element member)")

@@ -67,6 +67,11 @@ class CustomStartTests(unittest.TestCase):
             "another key": ('{"starts":[{"id":"demoStart","className":"data.scripts.demo_Start"}], "config":{}}', "other keys"),
             "another id": ('{"starts":[{"id":"elsewhere","className":"data.scripts.demo_Start"}]}', "registers 'elsewhere'"),
             "no class": ('{"starts":[{"id":"demoStart"}]}', "names no className"),
+            "blank class": ('{"starts":[{"id":"demoStart","className":"  "}]}', "names no className"),
+            "not JSON": ("{starts: [ unclosed", "cannot be read as JSON"),
+            "a list": ('[{"id":"demoStart"}]', "is not a JSON object"),
+            "starts not a list": ('{"starts":{"id":"demoStart"}}', "no starts list"),
+            "an entry not an object": ('{"starts":["demoStart"]}', "holds 1 start"),
         }
         for name, (text, message) in cases.items():
             with self.subTest(name), resolved_temp_dir() as root, self.assertRaisesRegex(GeneError, message):
@@ -146,7 +151,32 @@ class NestedClassTests(unittest.TestCase):
             found = _nested_classes(root, members)
         self.assertEqual([m["path"] for m in found], ["jars/j.jar!a/Gene$1.class", "jars/j.jar!a/Gene$Inner$2.class"])
         self.assertEqual(found[0]["reason"], "a nested class of a.Gene")
+        self.assertEqual(found[1]["reason"], "a nested class of a.Gene$Inner")  # its nearest outer member
         self.assertEqual(len(found[0]["sha256"]), 64)
+
+    def test_each_jar_is_read_apart_and_a_bare_dollar_is_not_nested(self) -> None:
+        with resolved_temp_dir() as root:
+            (root / "jars").mkdir()
+            for jar, names in (("one.jar", ("a/G.class", "a/G$1.class", "a/G$.class")), ("two.jar", ("a/G.class", "a/G$2.class"))):
+                with zipfile.ZipFile(root / "jars" / jar, "w") as archive:
+                    for name in names:
+                        archive.writestr(name, name.encode("utf-8"))
+            members = [{"what": "jar-class", "path": "jars/one.jar!a/G.class", "sha256": "0" * 64}]
+            found = _nested_classes(root, members)
+        self.assertEqual([m["path"] for m in found], ["jars/one.jar!a/G$1.class"])  # not two.jar's, not `G$`
+
+    def test_a_nested_class_that_cannot_be_read_stops_the_gene(self) -> None:
+        from unittest import mock
+
+        with resolved_temp_dir() as root:
+            (root / "jars").mkdir()
+            with zipfile.ZipFile(root / "jars" / "j.jar", "w") as jar:
+                jar.writestr("a/Gene.class", b"x")
+                jar.writestr("a/Gene$1.class", b"a class larger than the limit")
+            members = [{"what": "jar-class", "path": "jars/j.jar!a/Gene.class", "sha256": "0" * 64}]
+            with mock.patch("bridgeforge.scan.scan_classfile.MAX_CLASS_BYTES", 4), \
+                    self.assertRaisesRegex(GeneError, "could not all be read"):
+                _nested_classes(root, members)
 
 
 if __name__ == "__main__":
