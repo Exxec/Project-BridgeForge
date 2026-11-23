@@ -2790,7 +2790,7 @@ history as the closure benchmark, a cross-repository trace check, an early Java 
     Recorded, not changed: a variant whose `hullId` is a skin the faction does not list, while it lists the base hull,
     is not taken. That matches vanilla data (core factions list skin ids), but the game's check is not javap-verified.
 
-    Mutation check after the fixes: 17 mutants, all caught.
+    Mutation check after the fixes: 17 mutants, all caught. Full suite: 3518 tests, OK (skipped=13); hermeticity PASS.
 - 94.G3 **Gene bank**: content-addressed store, alleles across the corpus, lineage, licence state; RevenantLib distributes genes
   from vanished authors (GD-3). The store's payloads live under `data_root()`, like `Done/`, never in this public
   repository; only manifests of the owner's own or permitted content become committed fixtures (2026-11-19).
