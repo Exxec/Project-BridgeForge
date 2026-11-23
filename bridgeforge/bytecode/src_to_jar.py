@@ -1,7 +1,7 @@
 """Carry edited jar sources into the jar the game loads (ROADMAP-3 item 92.25, 2026-11-16).
 
 `escalation run --apply` and the source fixers edit `src/**/*.java`; nothing rebuilt the jar, so Navarchy of Tania's eight
-applied agent fixes and Eridani Combine's one were inert in `tania.jar` / `ECE.jar` until done by hand. This module:
+applied agent fixes and Eridani Combine's one were inert in `tania.jar` and its own jar until done by hand. This module:
 
 1. finds the sources to rebuild: `working/<source_root>` files that differ from the author's `original/` copy (plus any
    relink-only classes named by the caller);
@@ -168,7 +168,7 @@ def src_to_jar(workspace: Path, jar_rel: str, *, vanilla_core: Path, reference_c
         raise SrcToJarError(f"{working / jar_rel} is not a file.")
     if reference_jar is None:
         # Prove against the author's untouched jar: the working jar may already hold an earlier patch or translated strings,
-        # which no original source reproduces (Tania needed --reference-jar by hand; Eridani's ECE.jar was translated;
+        # which no original source reproduces (Tania needed --reference-jar by hand; Eridani's jar was translated;
         # ROADMAP-3 item 92.33, 2026-11-16).
         orig = original_root(workspace)
         if orig is not None and (orig / jar_rel).is_file():

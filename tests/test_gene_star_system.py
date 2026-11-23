@@ -1,4 +1,4 @@
-"""94.G2 P3: star-system genes (Eridani's Pantheon is the pilot) and the campaign ids a gene's code names."""
+"""94.G2 P3: star-system genes (Eridani's star system is the pilot) and the campaign ids a gene's code names."""
 from __future__ import annotations
 
 import hashlib
@@ -420,7 +420,7 @@ class CutTests(unittest.TestCase):
     def test_a_javap_line_is_compared_by_meaning(self) -> None:
         from bridgeforge.genome.registration_cut import normalise
 
-        # Eridani's cut ECEModPlugin, 2026-11-20: the same getstatic, padded after #99 and after #100.
+        # Eridani's cut mod plugin, 2026-11-20: the same getstatic, padded after #99 and after #100.
         before = "      60: getstatic     #99                 // Field com/fs/starfarer/api/campaign/RepLevel.INHOSPITABLE"
         after = "      55: getstatic     #100                // Field com/fs/starfarer/api/campaign/RepLevel.INHOSPITABLE"
         self.assertEqual(normalise(before), normalise(after))

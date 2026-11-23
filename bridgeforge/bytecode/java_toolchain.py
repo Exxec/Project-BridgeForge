@@ -364,7 +364,7 @@ def run_javac(javac: Path, classpath: str, sources: list[Path], out_dir: Path, e
 
     Applies DEFAULT_JAVAC_ARGS (`--release 17 -proc:none -nowarn -encoding UTF-8 -Xmaxerrs 10000 -sourcepath "" -Xdiags:verbose`);
     `extra_args`, if given, are appended after them. `release` replaces 17: a class patched into a jar built for Java 8
-    (Eridani Combine's ECE.jar, class version 52, 2026-11-16) is compiled for 8 so the rest of the jar stays consistent.
+    (Eridani Combine's jar, class version 52, 2026-11-16) is compiled for 8 so the rest of the jar stays consistent.
     """
     out_dir = Path(out_dir)
     out_dir.mkdir(parents=True, exist_ok=True)

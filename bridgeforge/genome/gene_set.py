@@ -1,6 +1,6 @@
 """94.G2 slice 11: a gene set's carrier and its static isolation proof (2026-11-20).
 
-P3's star system (`star-system:Pantheon`) needs `faction:EridaniCombine`, and the faction needs 54 of Eridani's content genes.
+P3's star system needs its faction, and the faction needs 54 of Eridani's content genes.
 A carrier holding only the system cannot boot, so this builds one carrier from the anchor gene and every gene its
 `needs.genes` name, in turn (measured on P3: 56 genes, 183 of 471 shipped files, 26 of 36 jar classes).
 

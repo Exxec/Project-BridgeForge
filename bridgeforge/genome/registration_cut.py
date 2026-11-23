@@ -7,7 +7,7 @@ shown, and refused otherwise (the proof then keeps its "needs the call cut" boot
 
 1. **The source is the shipped class.** The donor's own build source of the call site, compiled against the donor's own
    classpath for the shipped class's Java release, gives the shipped class instruction for instruction (javap, constant-pool
-   numbers aside). Eridani's ECEModPlugin.java did, 2026-11-20.
+   numbers aside). Eridani's mod plugin source did, 2026-11-20.
 2. **Only whole statements go.** A line naming the generator may only be its `import` or `new <Generator>().<method>(...);`
    with the recorded method, and the line before such a call must end a statement or open or close a block (after a bare
    `if (c)` the call is the whole body, and cutting it would make the next statement the body). Any other mention refuses.
@@ -202,7 +202,7 @@ def _jar_bytes(jar: Path, replaced: dict[str, bytes]) -> bytes:
 
 def _put(path: Path, data: bytes) -> None:
     """Write `path` through a temp file and a replace, retrying while an indexer holds it: VS Code's Java extension held P3's
-    subtracted ECE.jar (WinError 5, 2026-11-20), as it held Arkgneisis's for patch-jar-class (2026-09-30)."""
+    subtracted mod jar (WinError 5, 2026-11-20), as it held Arkgneisis's for patch-jar-class (2026-09-30)."""
     fresh = path.with_name(path.name + ".cut")
     try:
         fresh.write_bytes(data)

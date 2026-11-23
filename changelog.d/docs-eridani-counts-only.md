@@ -1,0 +1,1 @@
+- Docs: the public repository describes Eridani Combine by counts only (owner 2026-11-23); mod content ids in roadmap entries, code comments, a changelog fragment and test comments are now neutral roles.
