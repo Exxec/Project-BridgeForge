@@ -2722,6 +2722,23 @@ history as the closure benchmark, a cross-repository trace check, an early Java 
 
     Mutation check after the fixes: 25 mutants (the earlier 20 plus 5 for the review's fixes), all caught. Full suite: 3511
     tests, OK (skipped=13); hermeticity PASS.
+  **Boot halves after slice 22, 2026-11-23** (Test1 `_rig-genes`, after #231). Both sets were proved on Test1 into fresh
+  `-s22-t1` folders and matched White_Legion's identity, carrier id and tree hash. The tree hash reads a jar by its
+  entries, because every proof rewrites the carrier's jars with new zip timestamps.
+  - **P4B-CAR2-20261123: BOOTED** (LIVE_DONE: main menu, campaign, combat). The custom start reads NOT_OBSERVED, as
+    designed: Nexerelin loads it only when the new-game dialog builds its start menu (slice 18), which the probe never
+    opens. With P4B-SUB-20261123 (BOOTED), **P4 is proven on both halves.**
+  - **P3B-CAR3-20261123:** LIVE_DONE with no Fatal, so the carrier loads and its ships fight. `gene boot evaluate` reads
+    FAIL on one probe line: `faction-fleet-gen` FAIL, because the fleet factory built an empty patrol for the carried
+    faction.
+    - The carried `.faction` knows 21 hulls; the carrier holds 17 of them and 6 variants.
+    - The donor's `data/world/factions/default_ship_roles.json`, which gives those hulls variants to field, is not
+      carried.
+    - The faction gene reads its `.faction`'s own `shipRoles`, but not this shared file.
+    - So the carried faction exists but cannot field a fleet.
+    - **Owner question (2026-11-23):** is a faction's fleet part of its gene? Under "Separate, needed", the shared role
+      entries for its known hulls would be `needs.donor`, and the variants they name would be genes the faction needs,
+      as a custom start's ship is. That grows P3's set by every variant of its known hulls.
 - 94.G3 **Gene bank**: content-addressed store, alleles across the corpus, lineage, licence state; RevenantLib distributes genes
   from vanished authors (GD-3). The store's payloads live under `data_root()`, like `Done/`, never in this public
   repository; only manifests of the owner's own or permitted content become committed fixtures (2026-11-19).
