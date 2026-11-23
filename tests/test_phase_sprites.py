@@ -115,6 +115,31 @@ class RuleTests(unittest.TestCase):
                                     "graphics/ships/fx_unphased_glow2.png", "graphics/ships/fx_unphased_hi.png"])
 
 
+    def test_a_skin_that_removes_the_phase_hint_is_no_phase_hull(self) -> None:
+        skins = {"fx_base.ship": _ship("fx_base", "graphics/ships/fx_base.png"),
+                 "fx_solid.skin": {"baseHullId": "fx_base", "skinHullId": "fx_solid", "removeHints": ["PHASE"],
+                                   "spriteName": "graphics/ships/fx_solid.png"}}
+        systems = {"fx_dive": {"id": "fx_dive", "phaseHighlight": "_glow1", "phaseDiffuse": "_glow2"}}
+        with resolved_temp_dir() as root:
+            mod = _mod(root, "Base,fx_base,fx_dive,,FRONT,PHASE\n", skins, systems=systems)
+            indexes = [light_index(mod), light_index(_core(root))]
+            found = phase_systems(indexes)
+            base = [p for p, _ in phase_sprite_paths("fx_base", indexes, found)]
+            solid = phase_sprite_paths("fx_solid", indexes, found)
+        self.assertEqual(base, ["graphics/ships/fx_base_glow1.png", "graphics/ships/fx_base_glow2.png"])
+        self.assertEqual(solid, [])  # without the hint and with a FRONT shield it is no phase hull
+
+    def test_a_mod_s_system_replaces_the_core_s_of_the_same_id(self) -> None:
+        with resolved_temp_dir() as root:
+            mod = _mod(root, "Ghost,fx_ghost,emp,phasecloak,PHASE,\n", {"fx_ghost.ship": _ship("fx_ghost", "graphics/ships/fx_ghost.png")},
+                       systems={"phasecloak": {**PHASECLOAK, "phaseHighlight": "_m1", "phaseDiffuse": "_m2"}})
+            indexes = [light_index(mod), light_index(_core(root))]
+            found = phase_systems(indexes)
+            paths = [p for p, _ in phase_sprite_paths("fx_ghost", indexes, found)]
+        self.assertEqual(found, {"phasecloak": ("_m1", "_m2")})
+        self.assertEqual(paths, ["graphics/ships/fx_ghost_m1.png", "graphics/ships/fx_ghost_m2.png"])
+
+
 class ClosureAndLoadTests(unittest.TestCase):
     def test_the_closure_takes_the_mod_s_phase_sprites_and_reports_one_nobody_has(self) -> None:
         with resolved_temp_dir() as root:
