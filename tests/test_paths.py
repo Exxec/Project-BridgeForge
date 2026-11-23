@@ -67,6 +67,15 @@ class PathsTests(unittest.TestCase):
                 _, parsed = run_recorded_suite(ROOT, probe)
         self.assertIn("seen=False", parsed["lines"])
 
+    def test_importing_the_test_support_drops_the_variable(self) -> None:
+        # A test module run alone (not through test_guard) is protected by tests/support itself (mutation re-run
+        # 2026-11-22: without the pop, no test failed, because this process never had the variable).
+        code = f"import os, tests.support; print('seen=' + str('{paths.DATA_ROOT_ENV}' in os.environ))"
+        done = subprocess.run([sys.executable, "-c", code], cwd=ROOT, capture_output=True, text=True, check=False,
+                              env=dict(os.environ, **{paths.DATA_ROOT_ENV: "C:/somewhere"}), timeout=60)
+        self.assertEqual(done.returncode, 0, done.stderr)
+        self.assertIn("seen=False", done.stdout)
+
 
 class _Dist:
     def __init__(self, version: str, direct: dict | None) -> None:

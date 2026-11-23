@@ -1,0 +1,815 @@
+{
+ "about": "Re-run batch B of 2026-11-22 (ROADMAP-3 94.G2 'Mutation re-run'). Replay from the checkout root: python .claude/skills/bridgeforge-pr/scripts/mutate_batch.py SPEC RESULTS. Snippets are main at 2d8115e; a later edit makes a mutant NOT RUN.",
+ "mutants": [
+  {
+   "claim": "L784 96.9",
+   "name": "no second Exit-OK retry",
+   "module": "bridgeforge/live/live_run.py",
+   "old": "        _leave_campaign(hands)\n        shown = _main_menu_shown(hands)\n        if shown is False:\n            return False",
+   "new": "        if shown is False:\n            return False",
+   "selector": "tests.test_live_run.DriveTests",
+   "source": "reconstructed",
+   "verdict_2026_11_22": "CAUGHT"
+  },
+  {
+   "claim": "L784 96.9",
+   "name": "no action recording",
+   "module": "bridgeforge/live/live_run.py",
+   "old": "hands = recording(hands, log, result.actions)",
+   "new": "hands = hands",
+   "selector": "tests.test_live_run.DriveTests",
+   "source": "reconstructed",
+   "verdict_2026_11_22": "CAUGHT"
+  },
+  {
+   "claim": "L804 96.10",
+   "name": "no previous-build rename",
+   "module": "bridgeforge/workspace_tools.py",
+   "old": "(reports / report).replace(previous)",
+   "new": "pass",
+   "selector": "tests.test_workspace_tools",
+   "source": "reconstructed",
+   "verdict_2026_11_22": "CAUGHT"
+  },
+  {
+   "claim": "L804 96.10",
+   "name": "original/ counted as a mod folder",
+   "module": "bridgeforge/workspace_tools.py",
+   "old": "ARCHIVE_OWN_FOLDERS = (\"original\", \"workspace\")",
+   "new": "ARCHIVE_OWN_FOLDERS = (\"workspace\",)",
+   "selector": "tests.test_workspace_tools",
+   "source": "reconstructed",
+   "verdict_2026_11_22": "CAUGHT"
+  },
+  {
+   "claim": "L924 95.3",
+   "name": "stuck run recorded",
+   "module": "bridgeforge/live_queue.py",
+   "old": "        return\n    config = json.loads((rig / CONFIG_RELATIVE)",
+   "new": "    config = json.loads((rig / CONFIG_RELATIVE)",
+   "selector": "tests.test_live_queue",
+   "source": "reconstructed",
+   "verdict_2026_11_22": "CAUGHT"
+  },
+  {
+   "claim": "L924 95.3",
+   "name": "recorded without --archive",
+   "module": "bridgeforge/live_queue.py",
+   "old": "    if not archive:\n        return\n    recorded = record(",
+   "new": "    recorded = record(",
+   "selector": "tests.test_live_queue",
+   "source": "reconstructed",
+   "verdict_2026_11_22": "CAUGHT"
+  },
+  {
+   "claim": "L924 95.3",
+   "name": "unarchived-PASS rule dropped",
+   "module": "bridgeforge/live_queue.py",
+   "old": "    return archive and (bool(row.get(\"record_stopped\")) or len(row.get(\"archived\") or []) < len(verdicts))",
+   "new": "    return False",
+   "selector": "tests.test_live_queue",
+   "source": "reconstructed",
+   "verdict_2026_11_22": "CAUGHT"
+  },
+  {
+   "claim": "L951 95.4",
+   "name": "always click the launcher",
+   "module": "bridgeforge/live/live_run.py",
+   "old": "    if direct is not None:\n        from .direct_start import place_window",
+   "new": "    if False:\n        from .direct_start import place_window",
+   "selector": "tests.test_direct_start",
+   "source": "reconstructed",
+   "verdict_2026_11_22": "CAUGHT"
+  },
+  {
+   "claim": "L951 95.4",
+   "name": "start_game drops env",
+   "module": "bridgeforge/launch.py",
+   "old": "return subprocess.Popen(command_line(bat, log, err), cwd=str(rig), env=env)",
+   "new": "return subprocess.Popen(command_line(bat, log, err), cwd=str(rig))",
+   "selector": "tests.test_direct_start",
+   "source": "reconstructed",
+   "verdict_2026_11_22": "CAUGHT"
+  },
+  {
+   "claim": "L971 95.5",
+   "name": "stamp ignores mtime",
+   "module": "bridgeforge/file_hash.py",
+   "old": "entry[0] == size and entry[1] == mtime",
+   "new": "entry[0] == size",
+   "selector": "tests.test_hash_cache",
+   "source": "reconstructed",
+   "verdict_2026_11_22": "CAUGHT"
+  },
+  {
+   "claim": "L971 95.5",
+   "name": "stamp ignores size",
+   "module": "bridgeforge/file_hash.py",
+   "old": "entry[0] == size and entry[1] == mtime",
+   "new": "entry[1] == mtime",
+   "selector": "tests.test_hash_cache",
+   "source": "reconstructed",
+   "verdict_2026_11_22": "CAUGHT"
+  },
+  {
+   "claim": "L971 95.5",
+   "name": "cache never saved",
+   "module": "bridgeforge/file_hash.py",
+   "old": "        _active.reset(token)\n        cache.save()",
+   "new": "        _active.reset(token)",
+   "selector": "tests.test_hash_cache",
+   "source": "reconstructed",
+   "verdict_2026_11_22": "CAUGHT"
+  },
+  {
+   "claim": "L1094 94.G1 WP1",
+   "name": "no line-ending normalization",
+   "module": "bridgeforge/genome/gene.py",
+   "old": "data.replace(b\"\\r\\n\", b\"\\n\").replace(b\"\\r\", b\"\\n\").split(b\"\\n\")",
+   "new": "data.split(b\"\\n\")",
+   "selector": "tests.test_gene.GeneManifestTests",
+   "source": "reconstructed",
+   "verdict_2026_11_22": "CAUGHT"
+  },
+  {
+   "claim": "L1094 94.G1 WP1",
+   "name": "junction followed",
+   "module": "bridgeforge/genome/gene.py",
+   "old": "Path(folder, d).is_symlink() or Path(folder, d).is_junction()",
+   "new": "Path(folder, d).is_symlink()",
+   "selector": "tests.test_gene.GeneManifestTests",
+   "source": "reconstructed",
+   "verdict_2026_11_22": "CAUGHT"
+  },
+  {
+   "claim": "L1106 94.G1 WP2",
+   "name": "identity unsorted",
+   "module": "bridgeforge/genome/gene.py",
+   "old": "sorted(members, key=lambda m: (m[\"what\"], m[\"path\"]))",
+   "new": "members",
+   "selector": "tests.test_gene_contract",
+   "source": "reconstructed",
+   "verdict_2026_11_22": "CAUGHT"
+  },
+  {
+   "claim": "L1106 94.G1 WP2",
+   "name": "duplicate-member check dropped",
+   "module": "bridgeforge/genome/gene.py",
+   "old": "if len(set(keys)) != len(keys):",
+   "new": "if False:",
+   "selector": "tests.test_gene_contract",
+   "source": "reconstructed",
+   "verdict_2026_11_22": "CAUGHT"
+  },
+  {
+   "claim": "L1134 94.G1 WP3",
+   "name": "id trailing boundary dropped",
+   "module": "bridgeforge/genome/trace.py",
+   "old": "re.escape(item_id) + r\"(?![\\w]|\\.\\d)\")",
+   "new": "re.escape(item_id))",
+   "selector": "tests.test_gene_trace",
+   "source": "reconstructed",
+   "verdict_2026_11_22": "CAUGHT"
+  },
+  {
+   "claim": "L1134 94.G1 WP3",
+   "name": "pin comparison dropped",
+   "module": "bridgeforge/genome/sisters.py",
+   "old": "elif pinned.group(0) != current_pin:",
+   "new": "elif False:",
+   "selector": "tests.test_gene_trace",
+   "source": "reconstructed",
+   "verdict_2026_11_22": "CAUGHT"
+  },
+  {
+   "claim": "L1180 94.G1 WP4 ReviewTests",
+   "name": "R1 unmatchable prefix accepted",
+   "module": "bridgeforge/release.py",
+   "old": "if prefix != prefix.strip() or any(segment in (\"\", \".\") for segment in prefix.rstrip(\"/\").split(\"/\")):",
+   "new": "if False:",
+   "selector": "tests.test_licence_ledger",
+   "source": "reconstructed",
+   "verdict_2026_11_22": "CAUGHT"
+  },
+  {
+   "claim": "L1180 94.G1 WP4 ReviewTests",
+   "name": "R2 case-fold dropped",
+   "module": "bridgeforge/licence_ledger.py",
+   "old": "prefix, path = prefix.rstrip(\"/\").casefold(), path.casefold()",
+   "new": "prefix, path = prefix.rstrip(\"/\"), path",
+   "selector": "tests.test_licence_ledger",
+   "source": "reconstructed",
+   "verdict_2026_11_22": "CAUGHT"
+  },
+  {
+   "claim": "L1180 94.G1 WP4 ReviewTests",
+   "name": "R3 jar-name cover dropped",
+   "module": "bridgeforge/licence_ledger.py",
+   "old": "return \"/\" not in path and path.endswith(\".jar\") and prefix.rsplit(\"/\", 1)[-1] == path",
+   "new": "return False",
+   "selector": "tests.test_licence_ledger",
+   "source": "reconstructed",
+   "verdict_2026_11_22": "CAUGHT"
+  },
+  {
+   "claim": "L1180 94.G1 WP4 ReviewTests",
+   "name": "R4 any ! splits a member",
+   "module": "bridgeforge/licence_ledger.py",
+   "old": "_JAR_CLASS = re.compile(r\"^(?P<file>.+?\\.jar)!.\")",
+   "new": "_JAR_CLASS = re.compile(r\"^(?P<file>.+?)!.\")",
+   "selector": "tests.test_licence_ledger",
+   "source": "reconstructed",
+   "verdict_2026_11_22": "CAUGHT"
+  },
+  {
+   "claim": "L1180 94.G1 WP4 ReviewTests",
+   "name": "R5 old-writer fragment drops paths",
+   "module": "bridgeforge/release.py",
+   "old": "        if \"paths\" not in data and (mods.get(key) or {}).get(\"paths\"):",
+   "new": "        if False:",
+   "selector": "tests.test_licence_ledger",
+   "source": "reconstructed",
+   "verdict_2026_11_22": "CAUGHT"
+  },
+  {
+   "claim": "L1180 94.G1 WP4 ReviewTests",
+   "name": "R6 punctuation-twin fragments share a file",
+   "module": "bridgeforge/release.py",
+   "old": "if _fragment_mod(fragment) not in (None, key.lower()):",
+   "new": "if False:",
+   "selector": "tests.test_licence_ledger",
+   "source": "reconstructed",
+   "verdict_2026_11_22": "CAUGHT"
+  },
+  {
+   "claim": "L1190 94.G1 WP4",
+   "name": "carry-over dropped",
+   "module": "bridgeforge/release.py",
+   "old": "kept_paths = paths if paths is not None else (previous or {}).get(\"paths\")",
+   "new": "kept_paths = paths",
+   "selector": "tests.test_licence_ledger",
+   "source": "reconstructed",
+   "verdict_2026_11_22": "CAUGHT"
+  },
+  {
+   "claim": "L1190 94.G1 WP4",
+   "name": "plain prefix match",
+   "module": "bridgeforge/licence_ledger.py",
+   "old": "if path == prefix or path.startswith(prefix + \"/\"):",
+   "new": "if path == prefix or path.startswith(prefix):",
+   "selector": "tests.test_licence_ledger",
+   "source": "reconstructed",
+   "verdict_2026_11_22": "CAUGHT"
+  },
+  {
+   "claim": "L1190 94.G1 WP4",
+   "name": "vendor-copy path check dropped",
+   "module": "bridgeforge/strip_plan.py",
+   "old": "[\"data/hullmods/hull_mods.csv\"] + [entry[\"relative\"] for entry in copy_plan])",
+   "new": "[\"data/hullmods/hull_mods.csv\"])",
+   "selector": "tests.test_licence_ledger",
+   "source": "reconstructed",
+   "verdict_2026_11_22": "CAUGHT"
+  },
+  {
+   "claim": "L1211 94.G1 schema 2",
+   "name": "licence narrowing dropped",
+   "module": "bridgeforge/genome/gene.py",
+   "old": "    restricted = local_only_paths(info.get(\"id\"), info.get(\"name\"), member_paths, policy_path)",
+   "new": "    restricted = []",
+   "selector": "tests.test_gene",
+   "source": "reconstructed",
+   "verdict_2026_11_22": "CAUGHT"
+  },
+  {
+   "claim": "L1211 94.G1 schema 2",
+   "name": "element check dropped",
+   "module": "bridgeforge/genome/gene.py",
+   "old": "            problems += sorted({p for p in (_element_problem(key, e) for e in gene[key]) if p})",
+   "new": "            pass",
+   "selector": "tests.test_gene",
+   "source": "reconstructed",
+   "verdict_2026_11_22": "CAUGHT"
+  },
+  {
+   "claim": "L1211 94.G1 schema 2",
+   "name": "derived_from check dropped",
+   "module": "bridgeforge/genome/gene.py",
+   "old": "    derived = _derived_problem(gene[\"derived_from\"])\n    if derived:\n        problems.append(derived)",
+   "new": "    pass",
+   "selector": "tests.test_gene",
+   "source": "reconstructed",
+   "verdict_2026_11_22": "CAUGHT"
+  },
+  {
+   "claim": "L1211 94.G1 schema 2",
+   "name": "local-only rule dropped",
+   "module": "bridgeforge/genome/gene.py",
+   "old": "    if local and licence[\"decision\"] != \"LOCAL_ONLY\":",
+   "new": "    if False:",
+   "selector": "tests.test_gene",
+   "source": "reconstructed",
+   "verdict_2026_11_22": "CAUGHT"
+  },
+  {
+   "claim": "L1239 94.G1 WP5",
+   "name": "identity comparison dropped",
+   "module": "bridgeforge/genome/evidence.py",
+   "old": "    if evidence[\"gene\"][\"identity\"] != gene.get(\"identity\"):",
+   "new": "    if False:",
+   "selector": "tests.test_gene_evidence",
+   "source": "reconstructed",
+   "verdict_2026_11_22": "CAUGHT"
+  },
+  {
+   "claim": "L1239 94.G1 WP5",
+   "name": "re-hash dropped",
+   "module": "bridgeforge/genome/evidence.py",
+   "old": "            elif _sha256(path) != row[\"sha256\"]:",
+   "new": "            elif False:",
+   "selector": "tests.test_gene_evidence",
+   "source": "reconstructed",
+   "verdict_2026_11_22": "CAUGHT"
+  },
+  {
+   "claim": "L1239 94.G1 WP5",
+   "name": "withdrawn rule dropped",
+   "module": "bridgeforge/genome/evidence.py",
+   "old": "    elif gene[\"schema_version\"] in WITHDRAWN_GENE_VERSIONS:",
+   "new": "    elif False:",
+   "selector": "tests.test_gene_evidence",
+   "source": "reconstructed",
+   "verdict_2026_11_22": "CAUGHT"
+  },
+  {
+   "claim": "L1239 94.G1 WP5",
+   "name": "path rule dropped",
+   "module": "bridgeforge/genome/evidence.py",
+   "old": "if \"\\\\\" in path or path.startswith(\"/\") or \":\" in path or any(s in (\"\", \".\", \"..\") for s in segments):",
+   "new": "if False:",
+   "selector": "tests.test_gene_evidence",
+   "source": "reconstructed",
+   "verdict_2026_11_22": "CAUGHT"
+  },
+  {
+   "claim": "L1280 94.G1 WP6",
+   "name": "writer exclusion dropped",
+   "module": "bridgeforge/duplication_audit.py",
+   "old": " and not called & {\"writestr\", \"write\"}",
+   "new": "",
+   "selector": "tests.test_duplication_audit",
+   "source": "reconstructed",
+   "verdict_2026_11_22": "CAUGHT"
+  },
+  {
+   "claim": "L1280 94.G1 WP6",
+   "name": "nested crediting dropped",
+   "module": "bridgeforge/duplication_audit.py",
+   "old": "                hits -= set(_rules_hit(by_id[nested], relative))",
+   "new": "                pass",
+   "selector": "tests.test_duplication_audit",
+   "source": "reconstructed",
+   "verdict_2026_11_22": "CAUGHT"
+  },
+  {
+   "claim": "L1280 94.G1 WP6",
+   "name": "self-exclusion dropped",
+   "module": "bridgeforge/duplication_audit.py",
+   "old": "        if relative == SELF:\n            continue",
+   "new": "        if False:\n            continue",
+   "selector": "tests.test_duplication_audit",
+   "source": "reconstructed",
+   "verdict_2026_11_22": "CAUGHT"
+  },
+  {
+   "claim": "L1280 94.G1 WP6",
+   "name": "save/ limit dropped",
+   "module": "bridgeforge/duplication_audit.py",
+   "old": "    if not module.startswith(\"save/\"):\n        return False",
+   "new": "    if False:\n        return False",
+   "selector": "tests.test_duplication_audit",
+   "source": "reconstructed",
+   "verdict_2026_11_22": "CAUGHT"
+  },
+  {
+   "claim": "L1280 94.G1 WP6",
+   "name": "read_mod_info exclusion dropped",
+   "module": "bridgeforge/duplication_audit.py",
+   "old": " and \"read_mod_info\" not in called",
+   "new": "",
+   "selector": "tests.test_duplication_audit",
+   "source": "reconstructed",
+   "verdict_2026_11_22": "CAUGHT"
+  },
+  {
+   "claim": "L1356 94.G1 GR-2",
+   "name": "registration exclusion dropped",
+   "module": "bridgeforge/genome/census.py",
+   "old": " and _MUTATION.match(name) and name not in REGISTRATION_CALLS}),",
+   "new": " and _MUTATION.match(name)}),",
+   "selector": "tests.test_gene_census",
+   "source": "reconstructed",
+   "verdict_2026_11_22": "CAUGHT"
+  },
+  {
+   "claim": "L1356 94.G1 GR-2",
+   "name": "in-class following dropped",
+   "module": "bridgeforge/genome/census.py",
+   "old": "if owner == plugin.name and name in bodies and name not in seen:",
+   "new": "if False:",
+   "selector": "tests.test_gene_census",
+   "source": "reconstructed",
+   "verdict_2026_11_22": "CAUGHT"
+  },
+  {
+   "claim": "L1356 94.G1 GR-2",
+   "name": "archive preference: first seen wins",
+   "module": "bridgeforge/genome/census.py",
+   "old": "keep = chosen[key] if chosen[key][2] == \"archive\" or source == \"raw\" else (folder, root, source)",
+   "new": "keep = chosen[key]",
+   "selector": "tests.test_gene_census",
+   "source": "reconstructed",
+   "verdict_2026_11_22": "CAUGHT"
+  },
+  {
+   "claim": "L1356 94.G1 GR-2",
+   "name": "archive preference: last seen wins",
+   "module": "bridgeforge/genome/census.py",
+   "old": "keep = chosen[key] if chosen[key][2] == \"archive\" or source == \"raw\" else (folder, root, source)",
+   "new": "keep = (folder, root, source)",
+   "selector": "tests.test_gene_census",
+   "source": "reconstructed",
+   "verdict_2026_11_22": "MISSED"
+  },
+  {
+   "claim": "L1356 94.G1 GR-2",
+   "name": "underscore skip dropped",
+   "module": "bridgeforge/genome/census.py",
+   "old": "p.is_dir() and not p.name.startswith(\"_\")",
+   "new": "p.is_dir()",
+   "selector": "tests.test_gene_census",
+   "source": "reconstructed",
+   "verdict_2026_11_22": "CAUGHT"
+  },
+  {
+   "claim": "L1356 94.G1 GR-2",
+   "name": "checkpoint finish dropped",
+   "module": "bridgeforge/genome/census.py",
+   "old": "            checkpoint.finish()",
+   "new": "            pass",
+   "selector": "tests.test_gene_census",
+   "source": "reconstructed",
+   "verdict_2026_11_22": "CAUGHT"
+  },
+  {
+   "claim": "L1400 94.G2 slice 1",
+   "name": "literal key not read",
+   "module": "bridgeforge/genome/closure.py",
+   "old": "        if literal:\n            keys.add(literal)",
+   "new": "        if literal:\n            pass",
+   "selector": "tests.test_gene_closure",
+   "source": "reconstructed",
+   "verdict_2026_11_22": "CAUGHT"
+  },
+  {
+   "claim": "L1400 94.G2 slice 1",
+   "name": "constant key not resolved",
+   "module": "bridgeforge/genome/closure.py",
+   "old": "            keys.add(constants[name.rsplit(\".\", 1)[-1]])",
+   "new": "            pass",
+   "selector": "tests.test_gene_closure",
+   "source": "reconstructed",
+   "verdict_2026_11_22": "CAUGHT"
+  },
+  {
+   "claim": "L1400 94.G2 slice 1",
+   "name": "integral float not canonical",
+   "module": "bridgeforge/genome/closure.py",
+   "old": "    if isinstance(value, float) and value.is_integer():\n        return int(value)",
+   "new": "    if False:\n        return int(value)",
+   "selector": "tests.test_gene_closure",
+   "source": "reconstructed",
+   "verdict_2026_11_22": "CAUGHT"
+  },
+  {
+   "claim": "L1400 94.G2 slice 1",
+   "name": "missing settings key dropped",
+   "module": "bridgeforge/genome/closure.py",
+   "old": "            missing.append(f\"setting:{key} (read by a member script; in neither the mod's nor the core's settings.json)\")",
+   "new": "            pass",
+   "selector": "tests.test_gene_closure",
+   "source": "reconstructed",
+   "verdict_2026_11_22": "CAUGHT"
+  },
+  {
+   "claim": "L1400 94.G2 slice 1",
+   "name": "vanilla settings need dropped",
+   "module": "bridgeforge/genome/closure.py",
+   "old": "            vanilla.append(f\"setting:{key}\")",
+   "new": "            pass",
+   "selector": "tests.test_gene_closure",
+   "source": "reconstructed",
+   "verdict_2026_11_22": "CAUGHT"
+  },
+  {
+   "claim": "L1400 94.G2 slice 1",
+   "name": "unknown Commodities constant dropped",
+   "module": "bridgeforge/genome/closure.py",
+   "old": "                missing.append(f\"commodity:Commodities.{constant} (the core's Commodities class has no such constant)\")",
+   "new": "                pass",
+   "selector": "tests.test_gene_closure",
+   "source": "reconstructed",
+   "verdict_2026_11_22": "CAUGHT"
+  },
+  {
+   "claim": "L1400 94.G2 slice 1",
+   "name": "retired commodity id dropped silently",
+   "module": "bridgeforge/genome/closure.py",
+   "old": "                missing.append(f\"commodity:{ident} (Commodities.{constant}; not in the core's commodities.csv)\")",
+   "new": "                pass",
+   "selector": "tests.test_gene_closure",
+   "source": "reconstructed",
+   "verdict_2026_11_22": "CAUGHT"
+  },
+  {
+   "claim": "L1400 94.G2 slice 1",
+   "name": "bytecode owner filter dropped",
+   "module": "bridgeforge/genome/closure.py",
+   "old": "return owner.endswith(\"SettingsAPI\") and name in GETTERS and",
+   "new": "return name in GETTERS and",
+   "selector": "tests.test_gene_closure",
+   "source": "reconstructed",
+   "verdict_2026_11_22": "CAUGHT"
+  },
+  {
+   "claim": "L1439 94.G2 slice 2",
+   "name": "csv id column fixed at 0",
+   "module": "bridgeforge/genome/proof.py",
+   "old": "column = header_row.index(key)",
+   "new": "column = 0",
+   "selector": "tests.test_gene_proof",
+   "source": "reconstructed",
+   "verdict_2026_11_22": "CAUGHT"
+  },
+  {
+   "claim": "L1439 94.G2 slice 2",
+   "name": "multi-line csv row not cut whole",
+   "module": "bridgeforge/genome/proof.py",
+   "old": "\"\".join(physical[:first] + physical[end:])",
+   "new": "\"\".join(physical[:first] + physical[first + 1:])",
+   "selector": "tests.test_gene_proof",
+   "source": "reconstructed",
+   "verdict_2026_11_22": "MISSED"
+  },
+  {
+   "claim": "L1439 94.G2 slice 2",
+   "name": "multi-line json value no longer refused",
+   "module": "bridgeforge/genome/proof.py",
+   "old": "(?![\\s\\[{{]).*?,?",
+   "new": ".*?,?",
+   "selector": "tests.test_gene_proof",
+   "source": "reconstructed",
+   "verdict_2026_11_22": "CAUGHT"
+  },
+  {
+   "claim": "L1439 94.G2 slice 2",
+   "name": "dependent not recognised",
+   "module": "bridgeforge/genome/proof.py",
+   "old": "provided = [p for p in gene[\"provides\"] if _id_named(line, p) or _id_named(line, p.split(\":\", 1)[1])]",
+   "new": "provided = []",
+   "selector": "tests.test_gene_proof",
+   "source": "reconstructed",
+   "verdict_2026_11_22": "CAUGHT"
+  },
+  {
+   "claim": "L1439 94.G2 slice 2",
+   "name": "leak not recognised",
+   "module": "bridgeforge/genome/proof.py",
+   "old": "elif any(_id_named(line, name) for name in others):",
+   "new": "elif False:",
+   "selector": "tests.test_gene_proof",
+   "source": "reconstructed",
+   "verdict_2026_11_22": "CAUGHT"
+  },
+  {
+   "claim": "L1439 94.G2 slice 2",
+   "name": "new reference in a known finding ignored",
+   "module": "bridgeforge/genome/proof.py",
+   "old": "for line in lines - old.get(key, set())",
+   "new": "for line in (lines if key not in old else set())",
+   "selector": "tests.test_gene_proof",
+   "source": "reconstructed",
+   "verdict_2026_11_22": "CAUGHT"
+  },
+  {
+   "claim": "L1439 94.G2 slice 2",
+   "name": "isolation inherited rule dropped",
+   "module": "bridgeforge/genome/proof.py",
+   "old": "elif (finding, file) in donor_keys:",
+   "new": "elif False:",
+   "selector": "tests.test_gene_proof",
+   "source": "reconstructed",
+   "verdict_2026_11_22": "CAUGHT"
+  },
+  {
+   "claim": "L1439 94.G2 slice 2",
+   "name": "dotted class name hides a leak",
+   "module": "bridgeforge/genome/proof.py",
+   "old": "rf\"(?<!\\w){re.escape(ident)}(?!\\w)\"",
+   "new": "rf\"(?<![\\w.]){re.escape(ident)}(?!\\w)\"",
+   "selector": "tests.test_gene_proof",
+   "source": "reconstructed",
+   "verdict_2026_11_22": "CAUGHT"
+  },
+  {
+   "claim": "L1456 94.G2 slice 3",
+   "name": "jar class no longer wins",
+   "module": "bridgeforge/genome/gene.py",
+   "old": "    if f\"{expected}.class\" in loaded:",
+   "new": "    if False:",
+   "selector": "tests.test_gene_loaded_class",
+   "source": "reconstructed",
+   "verdict_2026_11_22": "CAUGHT"
+  },
+  {
+   "claim": "L1456 94.G2 slice 3",
+   "name": "source under src/ becomes a member",
+   "module": "bridgeforge/genome/gene.py",
+   "old": "    if path == f\"{expected}.java\":",
+   "new": "    if True:",
+   "selector": "tests.test_gene_loaded_class",
+   "source": "reconstructed",
+   "verdict_2026_11_22": "CAUGHT"
+  },
+  {
+   "claim": "L1456 94.G2 slice 3",
+   "name": "package path ignored",
+   "module": "bridgeforge/genome/gene.py",
+   "old": "    expected = (package.group(1).replace(\".\", \"/\") + \"/\" if package else \"\") + stem",
+   "new": "    expected = stem",
+   "selector": "tests.test_gene_loaded_class",
+   "source": "reconstructed",
+   "verdict_2026_11_22": "CAUGHT"
+  },
+  {
+   "claim": "L1498 94.G2 slice 4",
+   "name": "unclosable kinds not refused",
+   "module": "bridgeforge/genome/gene.py",
+   "old": "    if kind not in CLOSABLE_KINDS:",
+   "new": "    if False:",
+   "selector": "tests.test_gene_schema4",
+   "source": "reconstructed",
+   "verdict_2026_11_22": "CAUGHT"
+  },
+  {
+   "claim": "L1498 94.G2 slice 4",
+   "name": "unregistered key not refused",
+   "module": "bridgeforge/genome/gene.py",
+   "old": "    if not isinstance(plugin_class, str) or not plugin_class.strip():",
+   "new": "    if False:",
+   "selector": "tests.test_gene_schema4",
+   "source": "reconstructed",
+   "verdict_2026_11_22": "CAUGHT"
+  },
+  {
+   "claim": "L1498 94.G2 slice 4",
+   "name": "registration not a member",
+   "module": "bridgeforge/genome/gene.py",
+   "old": "members = ([registration[\"member\"]] if registration else []) + campaign[\"members\"]",
+   "new": "members = campaign[\"members\"]",
+   "selector": "tests.test_gene_schema4",
+   "source": "reconstructed",
+   "verdict_2026_11_22": "CAUGHT"
+  },
+  {
+   "claim": "L1498 94.G2 slice 4",
+   "name": "ids the code names not followed",
+   "module": "bridgeforge/genome/closure.py",
+   "old": "    return sorted({f\"{kind}:{value}\" for value in literals for kind in KINDS if any(index.defines(kind, value) for index in indexes)})",
+   "new": "    return []",
+   "selector": "tests.test_gene_schema4",
+   "source": "reconstructed",
+   "verdict_2026_11_22": "CAUGHT"
+  },
+  {
+   "claim": "L1498 94.G2 slice 4",
+   "name": "pointer tokens not unescaped",
+   "module": "bridgeforge/genome/proof.py",
+   "old": "return [token.replace(\"~1\", \"/\").replace(\"~0\", \"~\") for token in ptr[1:].split(\"/\")]",
+   "new": "return [token for token in ptr[1:].split(\"/\")]",
+   "selector": "tests.test_gene_schema4",
+   "source": "reconstructed",
+   "verdict_2026_11_22": "CAUGHT"
+  },
+  {
+   "claim": "L1498 94.G2 slice 4",
+   "name": "jar copied before rewrite",
+   "module": "bridgeforge/genome/proof.py",
+   "old": "return {n for n in names if (Path(folder) / n).resolve() in skip}",
+   "new": "return set()",
+   "selector": "tests.test_gene_schema4",
+   "source": "reconstructed",
+   "verdict_2026_11_22": "CAUGHT"
+  },
+  {
+   "claim": "L1498 94.G2 slice 4",
+   "name": "nested key not popped",
+   "module": "bridgeforge/genome/proof.py",
+   "old": "        data.pop(tokens[-1], None)",
+   "new": "        pass",
+   "selector": "tests.test_gene_schema4",
+   "source": "reconstructed",
+   "verdict_2026_11_22": "CAUGHT"
+  },
+  {
+   "claim": "L1498 94.G2 slice 4",
+   "name": "nested-key guard dropped (the claimed equivalent)",
+   "module": "bridgeforge/genome/proof.py",
+   "old": "cut = cut_json_key(text, tokens[0]) if len(tokens) == 1 else None",
+   "new": "cut = cut_json_key(text, tokens[0])",
+   "selector": "tests.test_gene_schema4",
+   "source": "reconstructed",
+   "verdict_2026_11_22": "MISSED"
+  },
+  {
+   "claim": "L1523 94.G2 slice 5",
+   "name": "build source not removed",
+   "module": "bridgeforge/genome/proof.py",
+   "old": "    outer = {entry.split(\"$\", 1)[0].removesuffix(\".class\") for entries in dropped.values() for entry in entries}",
+   "new": "    outer = set()",
+   "selector": "tests.test_gene_proof_fixes",
+   "source": "reconstructed",
+   "verdict_2026_11_22": "CAUGHT"
+  },
+  {
+   "claim": "L1523 94.G2 slice 5",
+   "name": "every source removed",
+   "module": "bridgeforge/genome/proof.py",
+   "old": "        if name in classes:",
+   "new": "        if True:",
+   "selector": "tests.test_gene_proof_fixes",
+   "source": "reconstructed",
+   "verdict_2026_11_22": "CAUGHT"
+  },
+  {
+   "claim": "L1523 94.G2 slice 5",
+   "name": "summaries never set aside",
+   "module": "bridgeforge/genome/proof.py",
+   "old": "        if _SUMMARY_LINE.match(line.strip()) and not any(_id_named(line, p.split(\":\", 1)[1]) for p in gene[\"provides\"]):",
+   "new": "        if False:",
+   "selector": "tests.test_gene_proof_fixes",
+   "source": "reconstructed",
+   "verdict_2026_11_22": "CAUGHT"
+  },
+  {
+   "claim": "L1523 94.G2 slice 5",
+   "name": "count line naming the gene set aside",
+   "module": "bridgeforge/genome/proof.py",
+   "old": "        if _SUMMARY_LINE.match(line.strip()) and not any(_id_named(line, p.split(\":\", 1)[1]) for p in gene[\"provides\"]):",
+   "new": "        if _SUMMARY_LINE.match(line.strip()):",
+   "selector": "tests.test_gene_proof_fixes",
+   "source": "reconstructed",
+   "verdict_2026_11_22": "CAUGHT"
+  },
+  {
+   "claim": "L1523 94.G2 slice 5",
+   "name": "known library kept though unreferenced",
+   "module": "bridgeforge/genome/closure.py",
+   "old": "or DECLARED_ID_LIBRARY[mod.lower()] in used)",
+   "new": "or True)",
+   "selector": "tests.test_gene_proof_fixes",
+   "source": "reconstructed",
+   "verdict_2026_11_22": "CAUGHT"
+  },
+  {
+   "claim": "L1523 94.G2 slice 5",
+   "name": "unknown library dropped",
+   "module": "bridgeforge/genome/closure.py",
+   "old": "if DECLARED_ID_LIBRARY.get(mod.lower()) is None or DECLARED_ID_LIBRARY[mod.lower()] in used)",
+   "new": "if DECLARED_ID_LIBRARY.get(mod.lower()) in used)",
+   "selector": "tests.test_gene_proof_fixes",
+   "source": "reconstructed",
+   "verdict_2026_11_22": "CAUGHT"
+  },
+  {
+   "claim": "L2748 93.59",
+   "name": "no wait for the probe's save",
+   "module": "bridgeforge/live/live_run.py",
+   "old": "        if not wait_for(log, PROBE_SAVED, PROBE_SAVE_TIMEOUT, hands):",
+   "new": "        if False:",
+   "selector": "tests.test_live_run.DriveTests",
+   "source": "reconstructed",
+   "verdict_2026_11_22": "CAUGHT"
+  },
+  {
+   "claim": "L2758 93.60",
+   "name": "shaderLib cache entry removed",
+   "module": "bridgeforge/run_manifest.py",
+   "old": "RUNTIME_OUTPUT_DIRS = {\"starsector_prepatcher\": (\"logs\",), \"shaderLib\": (\"cache\",)}",
+   "new": "RUNTIME_OUTPUT_DIRS = {\"starsector_prepatcher\": (\"logs\",)}",
+   "selector": "tests.test_run_manifest.NegativeTests",
+   "source": "reconstructed",
+   "verdict_2026_11_22": "CAUGHT"
+  }
+ ]
+}

@@ -1,0 +1,845 @@
+{
+ "about": "Re-run batch A of 2026-11-22 (ROADMAP-3 94.G2 'Mutation re-run'). Replay from the checkout root: python .claude/skills/bridgeforge-pr/scripts/mutate_batch.py SPEC RESULTS. Snippets are main at 2d8115e; a later edit makes a mutant NOT RUN.",
+ "mutants": [
+  {
+   "claim": "L2613 93.45",
+   "name": "javap_batch passes raw entry name (the call-site guard moved here by P1)",
+   "module": "bridgeforge/bytecode/javap_batch.py",
+   "old": "if (name := javap_class_name(entry)) is not None:",
+   "new": "if (name := entry[:-6].replace(\"/\", \".\")) is not None:",
+   "selector": "tests.test_untrusted_input.JavapClassNameTests",
+   "source": "reconstructed",
+   "verdict_2026_11_22": "CAUGHT"
+  },
+  {
+   "claim": "L2613 93.45",
+   "name": "zipsafe drops .class suffix refusal",
+   "module": "bridgeforge/zipsafe.py",
+   "old": "if not _PLAIN_BINARY_NAME.fullmatch(name) or name.endswith(\".class\"):",
+   "new": "if not _PLAIN_BINARY_NAME.fullmatch(name):",
+   "selector": "tests.test_untrusted_input.JavapClassNameTests",
+   "source": "transcript",
+   "verdict_2026_11_22": "CAUGHT"
+  },
+  {
+   "claim": "L2613 93.45",
+   "name": "zipsafe regex widened to \\w",
+   "module": "bridgeforge/zipsafe.py",
+   "old": "_PLAIN_BINARY_NAME = re.compile(r\"[A-Za-z0-9_$]+(?:\\.[A-Za-z0-9_$]+)*\")",
+   "new": "_PLAIN_BINARY_NAME = re.compile(r\"[\\w$]+(?:\\.[\\w$]+)*\")",
+   "selector": "tests.test_untrusted_input.JavapClassNameTests",
+   "source": "transcript",
+   "verdict_2026_11_22": "CAUGHT"
+  },
+  {
+   "claim": "L2648 93.46",
+   "name": "declared jar control-char guard",
+   "module": "bridgeforge/bytecode/java_toolchain.py",
+   "old": "if isinstance(entry, str) and not _has_control_character(entry) and (folder / entry).is_file()]",
+   "new": "if isinstance(entry, str) and (folder / entry).is_file()]",
+   "selector": "tests.test_untrusted_input.JavacArgumentFileTests",
+   "source": "transcript",
+   "verdict_2026_11_22": "CAUGHT"
+  },
+  {
+   "claim": "L2648 93.46",
+   "name": "argument line break refusal",
+   "module": "bridgeforge/bytecode/java_toolchain.py",
+   "old": "    if \"\\n\" in argument or \"\\r\" in argument:",
+   "new": "    if False:",
+   "selector": "tests.test_untrusted_input.JavacArgumentFileTests",
+   "source": "transcript",
+   "verdict_2026_11_22": "CAUGHT"
+  },
+  {
+   "claim": "L2648 93.46",
+   "name": "build profile -proc:none",
+   "module": "bridgeforge/build.py",
+   "old": "\"--release\", str(target.java), \"-proc:none\", \"-d\"",
+   "new": "\"--release\", str(target.java), \"-d\"",
+   "selector": "tests.test_untrusted_input.JavacArgumentFileTests",
+   "source": "transcript",
+   "verdict_2026_11_22": "CAUGHT"
+  },
+  {
+   "claim": "L2648 93.46",
+   "name": "run_compile older-profile -proc:none insert",
+   "module": "bridgeforge/build.py",
+   "old": "        command.insert(1, \"-proc:none\")  # a profile written before 93.46",
+   "new": "        pass",
+   "selector": "tests.test_untrusted_input.JavacArgumentFileTests",
+   "source": "transcript",
+   "verdict_2026_11_22": "CAUGHT"
+  },
+  {
+   "claim": "L2849 93.52",
+   "name": "version stored as str() repr",
+   "module": "bridgeforge/save/save_doctor.py",
+   "old": "\"version\": version_text(info.get(\"version\") or \"\"),",
+   "new": "\"version\": str(info.get(\"version\") or \"\"),",
+   "selector": "tests.test_save_doctor",
+   "source": "transcript",
+   "verdict_2026_11_22": "CAUGHT"
+  },
+  {
+   "claim": "L2877 93.53",
+   "name": "no loose-script classes indexed",
+   "module": "bridgeforge/save/save_compat.py",
+   "old": "            self.canonical |= _vanilla_loose_script_fqns(self.source)",
+   "new": "            pass",
+   "selector": "tests.test_save_doctor",
+   "source": "transcript",
+   "verdict_2026_11_22": "CAUGHT"
+  },
+  {
+   "claim": "L2877 93.53",
+   "name": "no configureXStream aliases",
+   "module": "bridgeforge/save/save_compat.py",
+   "old": "    if parsed is None or \"configureXStream\" not in parsed.utf8_values:",
+   "new": "    if True:",
+   "selector": "tests.test_save_doctor",
+   "source": "transcript",
+   "verdict_2026_11_22": "CAUGHT"
+  },
+  {
+   "claim": "L2877 93.53",
+   "name": "capital-led package rule",
+   "module": "bridgeforge/save/save_doctor.py",
+   "old": "if re.fullmatch(r\"[A-Z]+\", token.split(\".\", 1)[0]):",
+   "new": "if not re.match(r\"[a-z]\", token):",
+   "selector": "tests.test_save_doctor",
+   "source": "transcript",
+   "verdict_2026_11_22": "CAUGHT"
+  },
+  {
+   "claim": "L243 96.5 P3",
+   "name": "provider_roots not registered",
+   "module": "bridgeforge/revive.py",
+   "old": "\"provider_roots\": last[\"provider_roots\"]})",
+   "new": "})",
+   "selector": "tests.test_revive.ReviveTests.test_the_registered_scan_is_the_last_one_revive_decided_on",
+   "source": "transcript",
+   "verdict_2026_11_22": "CAUGHT"
+  },
+  {
+   "claim": "L243 96.5 P3",
+   "name": "companions compiled every time",
+   "module": "bridgeforge/compile_check.py",
+   "old": "        if cached is not None and cached[0].is_dir():\n            return cached",
+   "new": "        pass",
+   "selector": "tests.test_compile_check.CompileLooseScriptsEndToEndTests.test_the_vanilla_companions_compile_once_per_process",
+   "source": "transcript",
+   "verdict_2026_11_22": "CAUGHT"
+  },
+  {
+   "claim": "L243 96.5 P3",
+   "name": "companion errors dropped",
+   "module": "bridgeforge/compile_check.py",
+   "old": "vanilla_errors = list(companion_errors) + [",
+   "new": "vanilla_errors = [",
+   "selector": "tests.test_compile_check.CompileLooseScriptsEndToEndTests.test_a_broken_vanilla_companion_is_still_reported",
+   "source": "transcript",
+   "verdict_2026_11_22": "CAUGHT"
+  },
+  {
+   "claim": "L361 96.5 C3",
+   "name": "code folders ignored",
+   "module": "tools/ci-scope.py",
+   "old": " or path.parts[0] in CODE_FOLDERS:",
+   "new": ":",
+   "selector": "tests.test_ci_scope.ScopeTests",
+   "source": "transcript",
+   "verdict_2026_11_22": "CAUGHT"
+  },
+  {
+   "claim": "L361 96.5 C3",
+   "name": "any suffix counts as docs",
+   "module": "tools/ci-scope.py",
+   "old": " or path.suffix.lower() != \".md\"",
+   "new": "",
+   "selector": "tests.test_ci_scope.ScopeTests",
+   "source": "transcript",
+   "verdict_2026_11_22": "CAUGHT"
+  },
+  {
+   "claim": "L361 96.5 C3",
+   "name": "empty change list is docs",
+   "module": "tools/ci-scope.py",
+   "old": "    if not names:\n        return False",
+   "new": "    if not names:\n        return True",
+   "selector": "tests.test_ci_scope.ScopeTests",
+   "source": "transcript",
+   "verdict_2026_11_22": "CAUGHT"
+  },
+  {
+   "claim": "L361 96.5 C3",
+   "name": "matrix job loses !cancelled()",
+   "module": ".github/workflows/ci.yml",
+   "old": "    needs: scope\n    if: ${{ !cancelled() }}",
+   "new": "    needs: scope",
+   "selector": "tests.test_ci_scope.WorkflowTests",
+   "source": "transcript",
+   "verdict_2026_11_22": "CAUGHT"
+  },
+  {
+   "claim": "L361 96.5 C3",
+   "name": "coverage loses !cancelled()",
+   "module": ".github/workflows/ci.yml",
+   "old": "    if: ${{ !cancelled() && needs.scope.outputs.docs_only != 'true' && needs.test.result == 'success' }}",
+   "new": "    if: ${{ needs.scope.outputs.docs_only != 'true' && needs.test.result == 'success' }}",
+   "selector": "tests.test_ci_scope.WorkflowTests",
+   "source": "reconstructed",
+   "verdict_2026_11_22": "CAUGHT"
+  },
+  {
+   "claim": "L361 96.5 C3",
+   "name": "doc test list entry removed",
+   "module": "tests/doc_tests.json",
+   "old": "    \"test_scan_port\": [\"docs/TEMPLAR_CRUSADE_PLAN.md\"],",
+   "new": "",
+   "selector": "tests.test_ci_scope.DocTestListTests",
+   "source": "transcript",
+   "verdict_2026_11_22": "CAUGHT"
+  },
+  {
+   "claim": "L378 96.5 C1",
+   "name": "hooks check always passes",
+   "module": "bridgeforge/hygiene.py",
+   "old": "    if configured and (top / configured).resolve() == hooks.resolve():",
+   "new": "    if True:",
+   "selector": "tests.test_hygiene.HooksTests",
+   "source": "transcript",
+   "verdict_2026_11_22": "CAUGHT"
+  },
+  {
+   "claim": "L378 96.5 C1",
+   "name": "pre-commit drops docs-index step",
+   "module": "tools/precommit-check.ps1",
+   "old": "try{ & $venvPy -m bridgeforge docs-index --check *> $null; $docsExit=$LASTEXITCODE }finally{Pop-Location}",
+   "new": "$docsExit=0; Pop-Location",
+   "selector": "tests.test_hygiene.HooksTests",
+   "source": "transcript",
+   "verdict_2026_11_22": "CAUGHT"
+  },
+  {
+   "claim": "L516 96.5 A3",
+   "name": "auto-open dropped from list",
+   "module": "bridgeforge/progress.py",
+   "old": "    (\"auto-open\",),\n",
+   "new": "",
+   "selector": "tests.test_progress.LongRunningListTests",
+   "source": "transcript",
+   "verdict_2026_11_22": "CAUGHT"
+  },
+  {
+   "claim": "L516 96.5 A3",
+   "name": "escalation run-all no checkpoint",
+   "module": "bridgeforge/cmd_revive.py",
+   "old": "    path = escalation.packets_dir(args.workspace) / \"run-all.partial.jsonl\" if args.all else None",
+   "new": "    path = None",
+   "selector": "tests.test_progress.LongRunningListTests",
+   "source": "transcript",
+   "verdict_2026_11_22": "CAUGHT"
+  },
+  {
+   "claim": "L516 96.5 A3",
+   "name": "auto-open ignores its cache",
+   "module": "bridgeforge/auto_open.py",
+   "old": "            cached = done.get(workspace.name)",
+   "new": "            cached = None",
+   "selector": "tests.test_progress.LongRunningListTests",
+   "source": "transcript",
+   "verdict_2026_11_22": "CAUGHT"
+  },
+  {
+   "claim": "L516 96.5 A3",
+   "name": "atlas migrations ignores its cache",
+   "module": "bridgeforge/atlas/atlas_migrations.py",
+   "old": "            cached = done.get(pair.label)",
+   "new": "            cached = None",
+   "selector": "tests.test_progress.LongRunningListTests",
+   "source": "transcript",
+   "verdict_2026_11_22": "CAUGHT"
+  },
+  {
+   "claim": "L516 96.5 A3",
+   "name": "escalation header drops packet digests",
+   "module": "bridgeforge/cmd_revive.py",
+   "old": "\"packet_sha256\": {name: packet_digest(name) for name in names} if path else {}",
+   "new": "\"packet_sha256\": {}",
+   "selector": "tests.test_progress.LongRunningListTests",
+   "source": "transcript",
+   "verdict_2026_11_22": "CAUGHT"
+  },
+  {
+   "claim": "L516 96.5 A3",
+   "name": "escalation header drops timeout",
+   "module": "bridgeforge/cmd_revive.py",
+   "old": "\"timeout\": args.timeout,",
+   "new": "",
+   "selector": "tests.test_progress.LongRunningListTests",
+   "source": "transcript",
+   "verdict_2026_11_22": "CAUGHT"
+  },
+  {
+   "claim": "L516 96.5 A3",
+   "name": "escalation header drops auto_accept",
+   "module": "bridgeforge/cmd_revive.py",
+   "old": "\"auto_accept\": bool(args.auto_accept),",
+   "new": "",
+   "selector": "tests.test_progress.LongRunningListTests",
+   "source": "transcript",
+   "verdict_2026_11_22": "CAUGHT"
+  },
+  {
+   "claim": "L516 96.5 A3",
+   "name": "auto-open header drops workspace inputs",
+   "module": "bridgeforge/auto_open.py",
+   "old": "header[\"inputs\"] = {w.name: _inputs_stamp(w) for w in workspaces}",
+   "new": "pass",
+   "selector": "tests.test_progress.LongRunningListTests",
+   "source": "transcript",
+   "verdict_2026_11_22": "CAUGHT"
+  },
+  {
+   "claim": "L516 96.5 A3",
+   "name": "REVIVE.json left out of the stamp",
+   "module": "bridgeforge/auto_open.py",
+   "old": "reports / \"revive\" / \"REVIVE.json\", ",
+   "new": "",
+   "selector": "tests.test_progress.LongRunningListTests",
+   "source": "transcript",
+   "verdict_2026_11_22": "CAUGHT"
+  },
+  {
+   "claim": "L516 96.5 A3",
+   "name": "atlas api identity reduced to bool",
+   "module": "bridgeforge/atlas/atlas_migrations.py",
+   "old": "\"api_jars_sha256\": api}",
+   "new": "\"api_jars_sha256\": bool(api)}",
+   "selector": "tests.test_progress.LongRunningListTests",
+   "source": "transcript",
+   "verdict_2026_11_22": "CAUGHT"
+  },
+  {
+   "claim": "L516 96.5 A3",
+   "name": "approved fixers back to a list",
+   "module": "bridgeforge/auto_open.py",
+   "old": "\"approved_fixers\": json.dumps(sorted(standing))}",
+   "new": "\"approved_fixers\": sorted(standing)}",
+   "selector": "tests.test_progress.LongRunningListTests",
+   "source": "transcript",
+   "verdict_2026_11_22": "CAUGHT"
+  },
+  {
+   "claim": "L516 96.5 A3",
+   "name": "api jars back to a list",
+   "module": "bridgeforge/atlas/atlas_migrations.py",
+   "old": "api = {side: (catalogue.get(side) or {}).get(\"sha256\") for side in (\"old\", \"new\")} if catalogue else None",
+   "new": "api = [(catalogue.get(side) or {}).get(\"sha256\") for side in (\"old\", \"new\")] if catalogue else None",
+   "selector": "tests.test_progress.LongRunningListTests",
+   "source": "transcript",
+   "verdict_2026_11_22": "CAUGHT"
+  },
+  {
+   "claim": "L2648 93.46",
+   "name": "found-jar control-char guard",
+   "module": "bridgeforge/bytecode/java_toolchain.py",
+   "old": "        and not _has_control_character(str(jar))\n",
+   "new": "",
+   "selector": "tests.test_untrusted_input.JavacArgumentFileTests",
+   "source": "reconstructed",
+   "verdict_2026_11_22": "MISSED"
+  },
+  {
+   "claim": "L2648 93.46",
+   "name": "build.run_compile writes lines without refusal",
+   "module": "bridgeforge/build.py",
+   "old": "lines = [javac_argument_line(argument) for argument in command[1:]]",
+   "new": "lines = [argument for argument in command[1:]]",
+   "selector": "tests.test_untrusted_input.JavacArgumentFileTests",
+   "source": "reconstructed",
+   "verdict_2026_11_22": "CAUGHT"
+  },
+  {
+   "claim": "L2648 93.46",
+   "name": "run_javac writes lines without refusal",
+   "module": "bridgeforge/bytecode/java_toolchain.py",
+   "old": "lines = [javac_argument_line(argument) for argument in args]",
+   "new": "lines = [argument for argument in args]",
+   "selector": "tests.test_untrusted_input.JavacArgumentFileTests",
+   "source": "reconstructed",
+   "verdict_2026_11_22": "CAUGHT"
+  },
+  {
+   "claim": "L2648 93.46",
+   "name": "probe javac without -proc:none",
+   "module": "bridgeforge/probe/probe_mod_build.py",
+   "old": "command = [str(javac), \"--release\", \"17\", \"-proc:none\", \"-nowarn\", \"-cp\", classpath, \"-d\", str(out_dir)]",
+   "new": "command = [str(javac), \"--release\", \"17\", \"-nowarn\", \"-cp\", classpath, \"-d\", str(out_dir)]",
+   "selector": "tests.test_untrusted_input.JavacArgumentFileTests",
+   "source": "reconstructed",
+   "verdict_2026_11_22": "CAUGHT"
+  },
+  {
+   "claim": "L178 96.5 A1",
+   "name": "revival_build takes the first candidate, not the newer",
+   "module": "bridgeforge/game_version.py",
+   "old": "        found.append(target.strip())\n    return max(found, key=_key) if found else None",
+   "new": "        found.append(target.strip())\n    return found[0] if found else None",
+   "selector": "tests.test_build_labels",
+   "source": "reconstructed",
+   "verdict_2026_11_22": "CAUGHT"
+  },
+  {
+   "claim": "L178 96.5 A1",
+   "name": "a dry run's target counts",
+   "module": "bridgeforge/game_version.py",
+   "old": "target = revive.get(\"target\") if isinstance(revive, dict) and revive.get(\"apply\") is True else None",
+   "new": "target = revive.get(\"target\") if isinstance(revive, dict) else None",
+   "selector": "tests.test_build_labels",
+   "source": "reconstructed",
+   "verdict_2026_11_22": "CAUGHT"
+  },
+  {
+   "claim": "L178 96.5 A1",
+   "name": "note with no credit line not told from a credit naming no build",
+   "module": "bridgeforge/mod_changelog.py",
+   "old": "return None if NO_BUILD_CREDIT in text else \"0.98a-RC8\"",
+   "new": "return None",
+   "selector": "tests.test_build_labels",
+   "source": "reconstructed",
+   "verdict_2026_11_22": "CAUGHT"
+  },
+  {
+   "claim": "L178 96.5 A1",
+   "name": "GENERIC matches a prefix, not a whole line",
+   "module": "bridgeforge/master_log.py",
+   "old": "GENERIC = re.compile(r\"^revived (?:for \\S+ )?and archived \\([^)]*\\)$\", re.I)",
+   "new": "GENERIC = re.compile(r\"revived (?:for \\S+ )?and archived\", re.I)",
+   "selector": "tests.test_build_labels",
+   "source": "reconstructed",
+   "verdict_2026_11_22": "CAUGHT"
+  },
+  {
+   "claim": "L178 96.5 A1",
+   "name": "rig_label ignores the manifest's recorded core",
+   "module": "bridgeforge/game_version.py",
+   "old": "path = Path(core) if core else (Path(rig) / \"starsector-core\" if rig else None)",
+   "new": "path = (Path(rig) / \"starsector-core\" if rig else None)",
+   "selector": "tests.test_build_labels",
+   "source": "reconstructed",
+   "verdict_2026_11_22": "CAUGHT"
+  },
+  {
+   "claim": "L178 96.5 A1",
+   "name": "report draft title drops the build",
+   "module": "bridgeforge/revival_report_draft.py",
+   "old": "+ (f\" ({build})\" if build else \"\"),",
+   "new": "+ \"\",",
+   "selector": "tests.test_build_labels",
+   "source": "reconstructed",
+   "verdict_2026_11_22": "CAUGHT"
+  },
+  {
+   "claim": "L254 96.5 P4",
+   "name": "cache never hits (once guard)",
+   "module": "bridgeforge/scan/scan_javatext.py",
+   "old": "        if found is not None:\n            _blank_cache.move_to_end(key)",
+   "new": "        if False:\n            _blank_cache.move_to_end(key)",
+   "selector": "tests.test_blank_comments_cache",
+   "source": "reconstructed",
+   "verdict_2026_11_22": "CAUGHT"
+  },
+  {
+   "claim": "L254 96.5 P4",
+   "name": "no eviction (budget guard)",
+   "module": "bridgeforge/scan/scan_javatext.py",
+   "old": "            while _blank_cache and _blank_cache_size + cost > BLANK_CACHE_MAX_CHARS:",
+   "new": "            while False:",
+   "selector": "tests.test_blank_comments_cache",
+   "source": "reconstructed",
+   "verdict_2026_11_22": "CAUGHT"
+  },
+  {
+   "claim": "L254 96.5 P4",
+   "name": "oversize text is kept (budget guard)",
+   "module": "bridgeforge/scan/scan_javatext.py",
+   "old": "    if cost > BLANK_CACHE_MAX_CHARS:\n        return result",
+   "new": "    if False:\n        return result",
+   "selector": "tests.test_blank_comments_cache",
+   "source": "reconstructed",
+   "verdict_2026_11_22": "CAUGHT"
+  },
+  {
+   "claim": "L402 96.5 C5",
+   "name": "import match dropped",
+   "module": "bridgeforge/merge_train.py",
+   "old": "return dotted in imported or f\"bridgeforge.{leaf}\" in imported",
+   "new": "return f\"bridgeforge.{leaf}\" in imported",
+   "selector": "tests.test_merge_train.MergeTrainTests",
+   "source": "reconstructed",
+   "verdict_2026_11_22": "CAUGHT"
+  },
+  {
+   "claim": "L402 96.5 C5",
+   "name": "facade match dropped",
+   "module": "bridgeforge/merge_train.py",
+   "old": "return dotted in imported or f\"bridgeforge.{leaf}\" in imported",
+   "new": "return dotted in imported",
+   "selector": "tests.test_merge_train.MergeTrainTests",
+   "source": "reconstructed",
+   "verdict_2026_11_22": "CAUGHT"
+  },
+  {
+   "claim": "L402 96.5 C5",
+   "name": "central-module cap dropped",
+   "module": "bridgeforge/merge_train.py",
+   "old": "        if len(importers) > MAX_IMPORTERS:",
+   "new": "        if False:",
+   "selector": "tests.test_merge_train.MergeTrainTests",
+   "source": "reconstructed",
+   "verdict_2026_11_22": "CAUGHT"
+  },
+  {
+   "claim": "L402 96.5 C5",
+   "name": "from-import submodule names dropped",
+   "module": "bridgeforge/merge_train.py",
+   "old": "            found.update(f\"{node.module}.{alias.name}\" for alias in node.names)\n",
+   "new": "",
+   "selector": "tests.test_merge_train.MergeTrainTests",
+   "source": "reconstructed",
+   "verdict_2026_11_22": "CAUGHT"
+  },
+  {
+   "claim": "L414 96.5 C6",
+   "name": "setup-java no longer reads .java-version",
+   "module": ".github/actions/setup-bridgeforge/action.yml",
+   "old": "java-version-file: .java-version",
+   "new": "java-version: 17",
+   "selector": "tests.test_jdk_consistency",
+   "source": "reconstructed",
+   "verdict_2026_11_22": "CAUGHT"
+  },
+  {
+   "claim": "L414 96.5 C6",
+   "name": "preferred JDK major ignored",
+   "module": "bridgeforge/bytecode/java_toolchain.py",
+   "old": "if jdk_major(info.home) == prefer_major:",
+   "new": "if False:",
+   "selector": "tests.test_jdk_consistency",
+   "source": "reconstructed",
+   "verdict_2026_11_22": "CAUGHT"
+  },
+  {
+   "claim": "L414 96.5 C6",
+   "name": "a test javac list without -encoding",
+   "module": "tests/test_src_to_jar.py",
+   "old": "\"-nowarn\", \"-encoding\", \"UTF-8\", \"-d\"",
+   "new": "\"-nowarn\", \"-d\"",
+   "selector": "tests.test_jdk_consistency",
+   "source": "reconstructed",
+   "verdict_2026_11_22": "CAUGHT"
+  },
+  {
+   "claim": "L431 96.5 C7/C8",
+   "name": "weekly job loses its timeout",
+   "module": ".github/workflows/weekly.yml",
+   "old": "    runs-on: ubuntu-latest\n    timeout-minutes: 20\n",
+   "new": "    runs-on: ubuntu-latest\n",
+   "selector": "tests.test_ci_setup",
+   "source": "reconstructed",
+   "verdict_2026_11_22": "CAUGHT"
+  },
+  {
+   "claim": "L431 96.5 C7/C8",
+   "name": "weekly job drops the shared setup",
+   "module": ".github/workflows/weekly.yml",
+   "old": "      - uses: ./.github/actions/setup-bridgeforge\n        with:\n          install: '\".[archives]\" \"setuptools>=68\"'\n",
+   "new": "      - uses: actions/setup-python@v6\n",
+   "selector": "tests.test_ci_setup",
+   "source": "reconstructed",
+   "verdict_2026_11_22": "CAUGHT"
+  },
+  {
+   "claim": "L431 96.5 C7/C8",
+   "name": "CI lint unpinned",
+   "module": ".github/workflows/ci.yml",
+   "old": "version: \"0.17.5\"",
+   "new": "version: \"latest\"",
+   "selector": "tests.test_ci_setup",
+   "source": "reconstructed",
+   "verdict_2026_11_22": "CAUGHT"
+  },
+  {
+   "claim": "L431 96.5 C7/C8",
+   "name": "pre-commit hook unpinned",
+   "module": "tools/precommit-check.ps1",
+   "old": "& $uvx.Source \"ruff@$ruffPin\" check -- @pyFiles }elseif",
+   "new": "& $uvx.Source ruff check -- @pyFiles }elseif",
+   "selector": "tests.test_ci_setup",
+   "source": "reconstructed",
+   "verdict_2026_11_22": "CAUGHT"
+  },
+  {
+   "claim": "L431 96.5 C7/C8",
+   "name": "checks.sh unpinned",
+   "module": ".claude/skills/bridgeforge-pr/scripts/checks.sh",
+   "old": "uvx \"ruff@${RUFF_PIN:-latest}\" check . || failed=1",
+   "new": "uvx ruff check . || failed=1",
+   "selector": "tests.test_ci_setup",
+   "source": "reconstructed",
+   "verdict_2026_11_22": "CAUGHT"
+  },
+  {
+   "claim": "L431 96.5 C7/C8",
+   "name": "run_partitioned unbuffered",
+   "module": "tests/run_partitioned.py",
+   "old": "resultclass=TimedResult, buffer=True)",
+   "new": "resultclass=TimedResult, buffer=False)",
+   "selector": "tests.test_ci_setup",
+   "source": "reconstructed",
+   "verdict_2026_11_22": "CAUGHT"
+  },
+  {
+   "claim": "L449 96.5 C2",
+   "name": "shard K picks index K, not K-1",
+   "module": "tests/run_partitioned.py",
+   "old": "count)[index - 1])",
+   "new": "count)[index])",
+   "selector": "tests.test_test_shards",
+   "source": "reconstructed",
+   "verdict_2026_11_22": "CAUGHT"
+  },
+  {
+   "claim": "L449 96.5 C2",
+   "name": "shard range check admits 0",
+   "module": "tests/run_partitioned.py",
+   "old": "    if not 1 <= index <= count:",
+   "new": "    if not 0 <= index <= count:",
+   "selector": "tests.test_test_shards",
+   "source": "reconstructed",
+   "verdict_2026_11_22": "CAUGHT"
+  },
+  {
+   "claim": "L449 96.5 C2",
+   "name": "matrix lists a wrong shard",
+   "module": ".github/workflows/ci.yml",
+   "old": "        shard: [1, 2, 3, 4]",
+   "new": "        shard: [1, 2, 3, 5]",
+   "selector": "tests.test_ci_scope",
+   "source": "reconstructed",
+   "verdict_2026_11_22": "CAUGHT"
+  },
+  {
+   "claim": "L449 96.5 C2",
+   "name": "coverage shards run /3",
+   "module": ".github/workflows/ci.yml",
+   "old": "coverage run -p -m tests.run_partitioned --shard ${{ matrix.shard }}/4",
+   "new": "coverage run -p -m tests.run_partitioned --shard ${{ matrix.shard }}/3",
+   "selector": "tests.test_ci_scope",
+   "source": "reconstructed",
+   "verdict_2026_11_22": "CAUGHT"
+  },
+  {
+   "claim": "L472 96.5 C4",
+   "name": "guard removed",
+   "module": "tests/support.py",
+   "old": "        if not _registry_allowed(key, sub_key):",
+   "new": "        if False:",
+   "selector": "tests.test_registry_guard",
+   "source": "reconstructed",
+   "verdict_2026_11_22": "CAUGHT"
+  },
+  {
+   "claim": "L472 96.5 C4",
+   "name": "test-root prefix widened",
+   "module": "tests/support.py",
+   "old": "(path == prefix or path.startswith(prefix + \"\\\\\"))",
+   "new": "path.startswith(prefix)",
+   "selector": "tests.test_registry_guard",
+   "source": "reconstructed",
+   "verdict_2026_11_22": "CAUGHT"
+  },
+  {
+   "claim": "L472 96.5 C4",
+   "name": "guard error is an OSError",
+   "module": "tests/support.py",
+   "old": "class RegistryGuardError(RuntimeError):",
+   "new": "class RegistryGuardError(OSError):",
+   "selector": "tests.test_registry_guard",
+   "source": "reconstructed",
+   "verdict_2026_11_22": "CAUGHT"
+  },
+  {
+   "claim": "L472 96.5 C4",
+   "name": "any registry root allowed under the test path",
+   "module": "tests/support.py",
+   "old": "return root == winreg.HKEY_CURRENT_USER and (path == prefix",
+   "new": "return (path == prefix",
+   "selector": "tests.test_registry_guard",
+   "source": "reconstructed",
+   "verdict_2026_11_22": "MISSED"
+  },
+  {
+   "claim": "L535 96.5 A8",
+   "name": "rig base version fixed again",
+   "module": "bridgeforge/rig/rig_doctor.py",
+   "old": "return _base_game_version(build) if build else TARGET_BASE_GAME_VERSION",
+   "new": "return TARGET_BASE_GAME_VERSION",
+   "selector": "tests.test_rig_doctor",
+   "source": "reconstructed",
+   "verdict_2026_11_22": "CAUGHT"
+  },
+  {
+   "claim": "L535 96.5 A8",
+   "name": "target series fixed again",
+   "module": "bridgeforge/substitutes.py",
+   "old": "return _base_game_version(build) if build else TARGET_SERIES",
+   "new": "return TARGET_SERIES",
+   "selector": "tests.test_substitutes",
+   "source": "reconstructed",
+   "verdict_2026_11_22": "CAUGHT"
+  },
+  {
+   "claim": "L535 96.5 A8",
+   "name": "a named core no longer wins",
+   "module": "bridgeforge/substitutes.py",
+   "old": "    if vanilla_core is not None:\n        from bridgeforge.rig.rig_doctor import core_build",
+   "new": "    if False:\n        from bridgeforge.rig.rig_doctor import core_build",
+   "selector": "tests.test_substitutes",
+   "source": "reconstructed",
+   "verdict_2026_11_22": "CAUGHT"
+  },
+  {
+   "claim": "L548 96.5 A9",
+   "name": "NOT_REVIVABLE dropped from the check",
+   "module": "tools/report-status-check.py",
+   "old": "sorted(REPORT_STATUSES, key=len, reverse=True)",
+   "new": "sorted(REPORT_STATUSES - {\"NOT_REVIVABLE\"}, key=len, reverse=True)",
+   "selector": "tests.test_report_status_check",
+   "source": "reconstructed",
+   "verdict_2026_11_22": "CAUGHT"
+  },
+  {
+   "claim": "L573 96.5 A2",
+   "name": "data_root ignores the variable",
+   "module": "bridgeforge/paths.py",
+   "old": "return Path(configured).expanduser().resolve() if configured else checkout_root()",
+   "new": "return checkout_root()",
+   "selector": "tests.test_paths",
+   "source": "reconstructed",
+   "verdict_2026_11_22": "CAUGHT"
+  },
+  {
+   "claim": "L573 96.5 A2",
+   "name": "substitutes.REPO_ROOT computed from __file__",
+   "module": "bridgeforge/substitutes.py",
+   "old": "REPO_ROOT = data_root()  # In operation/",
+   "new": "REPO_ROOT = Path(__file__).resolve().parent.parent  # In operation/",
+   "selector": "tests.test_paths",
+   "source": "reconstructed",
+   "verdict_2026_11_22": "CAUGHT"
+  },
+  {
+   "claim": "L573 96.5 A2",
+   "name": "plain install is not a finding",
+   "module": "bridgeforge/hygiene.py",
+   "old": "    if not editable:\n        return {\"status\": FINDING",
+   "new": "    if False:\n        return {\"status\": FINDING",
+   "selector": "tests.test_paths",
+   "source": "reconstructed",
+   "verdict_2026_11_22": "CAUGHT"
+  },
+  {
+   "claim": "L573 96.5 A2",
+   "name": "editable at another version passes",
+   "module": "bridgeforge/hygiene.py",
+   "old": "    if wanted and installed != wanted:",
+   "new": "    if False:",
+   "selector": "tests.test_paths",
+   "source": "reconstructed",
+   "verdict_2026_11_22": "CAUGHT"
+  },
+  {
+   "claim": "L573 96.5 A2",
+   "name": "tests/support keeps the variable",
+   "module": "tests/support.py",
+   "old": "os.environ.pop(\"BRIDGEFORGE_DATA_ROOT\", None)",
+   "new": "pass",
+   "selector": "tests.test_paths",
+   "source": "reconstructed",
+   "verdict_2026_11_22": "MISSED"
+  },
+  {
+   "claim": "L573 96.5 A2",
+   "name": "test_guard passes the variable on",
+   "module": "bridgeforge/test_guard.py",
+   "old": "if name != \"BRIDGEFORGE_DATA_ROOT\"}",
+   "new": "if True}",
+   "selector": "tests.test_paths",
+   "source": "reconstructed",
+   "verdict_2026_11_22": "CAUGHT"
+  },
+  {
+   "claim": "L576 96.5 A2 follow-up",
+   "name": "checkout's own folder not skipped",
+   "module": "bridgeforge/hygiene.py",
+   "old": "            if Path(entry or \".\").resolve() != top:",
+   "new": "            if True:",
+   "selector": "tests.test_paths",
+   "source": "reconstructed",
+   "verdict_2026_11_22": "CAUGHT"
+  },
+  {
+   "claim": "L593 96.5 A7",
+   "name": "release decisions not overlaid",
+   "module": "bridgeforge/release.py",
+   "old": "    _overlay_policy_fragments(policy, path)\n    for entry in",
+   "new": "    for entry in",
+   "selector": "tests.test_record_fragments",
+   "source": "reconstructed",
+   "verdict_2026_11_22": "CAUGHT"
+  },
+  {
+   "claim": "L593 96.5 A7",
+   "name": "assemble does not fold the changelog",
+   "module": "bridgeforge/mod_changelog.py",
+   "old": "        atomic_write_text(path, merged_text(path), newline=\"\")",
+   "new": "        pass",
+   "selector": "tests.test_record_fragments",
+   "source": "reconstructed",
+   "verdict_2026_11_22": "CAUGHT"
+  },
+  {
+   "claim": "L593 96.5 A7",
+   "name": "duplicate check dropped",
+   "module": "bridgeforge/mod_changelog.py",
+   "old": "    if line not in sections(path).get(day, []):",
+   "new": "    if True:",
+   "selector": "tests.test_record_fragments",
+   "source": "reconstructed",
+   "verdict_2026_11_22": "CAUGHT"
+  },
+  {
+   "claim": "L2930 93.56",
+   "name": "collects no list values",
+   "module": "bridgeforge/save/save_doctor.py",
+   "old": "            elif tag == \"st\" and top[\"name\"] in FACTION_LISTS and len(self._open) > 1:",
+   "new": "            elif False:",
+   "selector": "tests.test_save_doctor",
+   "source": "reconstructed",
+   "verdict_2026_11_22": "CAUGHT"
+  },
+  {
+   "claim": "L2930 93.56",
+   "name": "collects lists outside a Faction",
+   "module": "bridgeforge/save/save_doctor.py",
+   "old": "                if frame[\"faction\"] and frame[\"lists\"]:",
+   "new": "                if frame[\"lists\"]:",
+   "selector": "tests.test_save_doctor",
+   "source": "reconstructed",
+   "verdict_2026_11_22": "CAUGHT"
+  }
+ ]
+}

@@ -2164,6 +2164,42 @@ history as the closure benchmark, a cross-repository trace check, an early Java 
     Past BridgeForge claims used the old script and were not re-run. Its gaps were narrower than Project Go's:
     - a mistyped selector or an import-breaking mutant counted as caught;
     - a same-length mutant applied within a second of a compile could run unmutated.
+  - **Mutation re-run, Done 2026-11-22 (owner: "Yes").** All 54 claims of 2026-11-17 to 2026-11-22 made with the old
+    script were re-run with the fixed one: every "mutation-checked" line of those days, except the two made with the fixed
+    script (this item's own fix note, and slice 16).
+    - **Method:**
+      - three dedicated worktrees at main `2d8115e`, mutants run one at a time through the new
+        `scripts/mutate_batch.py`;
+      - the checkout was checked clean after every mutant;
+      - the wiring was proved first with one real and one harmless mutant.
+    - **Where the mutants came from:**
+      - from the old session transcripts where they survived and still matched the code;
+      - otherwise rebuilt from each claim's named guards and tests, and labelled so.
+    - **The specs**, with each verdict, are in `.claude/skills/bridgeforge-pr/mutations/2026-11-22-rerun/`, ready to
+      replay.
+    - **Result:** 309 mutants: 303 caught, 6 missed, none invalid, none timed out, and no claim superseded.
+    - **Five misses were real test gaps.** Each now has a test, and each mutant was re-run and caught:
+      - 93.46, the found-jar control-character guard in `_mod_jars`: never exercised, because Windows cannot create such
+        a name. Now tested with a mocked walk;
+      - 96.5 C4, the registry guard's HKEY_CURRENT_USER requirement: now checked without opening a key;
+      - 96.5 A2, `tests/support`'s drop of `BRIDGEFORGE_DATA_ROOT`: now checked in a subprocess that has the variable;
+      - GR-2, an archive seen before its raw copy: the old test always met the raw copy first;
+      - slice 2, `cut_csv_row` on a row whose own cell spans lines: only neighbouring rows did before.
+    - **The sixth miss** is slice 4's nested-key guard, already recorded above as equivalent; the re-run confirms it.
+    - **Counts that differ from the claims:**
+      - slice 8 ran 11 of 13: one mutant targets code since redesigned, and one cannot be found in the transcripts;
+      - slice 9's final 12 exclude two mutants of a folder search that a review fix in that slice removed;
+      - GR-2 and slice 5 each ran one guard both ways.
+    - **The script, two changes:**
+      - `mutate_check.py` now reads `@FILE` snippets byte for byte. Before, a multi-line snippet never matched a CRLF
+        module: SPW's working tree, 2026-11-22;
+      - `mutate_batch.py` runs and records a spec, and the skill says to keep the spec with the claim.
+    - **Tests:**
+      - `tests/test_untrusted_input.py` `test_a_found_jar_with_a_control_character_is_left_off_the_classpath`;
+      - `tests/test_registry_guard.py` `test_the_test_root_under_another_hive_is_refused`;
+      - `tests/test_paths.py` `test_importing_the_test_support_drops_the_variable`;
+      - `tests/test_gene_census.py` `test_an_archive_seen_before_its_raw_copy_is_still_kept`;
+      - `tests/test_gene_proof.py`, the spanning cut row.
 
   **Slice 16 Done 2026-11-22: a row the game drops is not a member, and a faction gene carries its description.**
   - **Evidence (RC8_BEHAVIOUR RC8-47):** the game drops a CSV row whose raw line starts with `#`, whatever its id.
@@ -2234,8 +2270,9 @@ history as the closure benchmark, a cross-repository trace check, an early Java 
     pack.
   - **Flags:** host text still in CJK, and CSV cells that differ only in CRLF against LF. The verdict judges data units
     only.
-  - **P3 across builds** (the original Chinese build into `working/`): 271 unchanged, and 18 changed, exactly the ones
-    that were Chinese. PASS.
+  - **P3 across builds** (the original Chinese build into `working/`): 271 unchanged and 18 changed. PASS.
+    - **Corrected 2026-11-22:** 17 of the 18 were Chinese. The 18th, a `hull_mods.csv` description, changed only a
+      full-width comma to `, `: the hand fix that `reports/ESCALATION_REVIEW.md` records.
   - **P3 into the s16 carrier:** 35 data cells changed, every one only in line endings. `gene prove-set`'s carrier writes
     LF inside multi-line quoted cells, where the donor had CRLF. To the game that is the same text: RC7's CSV parser
     begins with `replaceAll("\r\n", "\n")` (`com.fs.starfarer.loading.void.o00000`, javap 2026-11-22). Nothing to fix.
@@ -2243,6 +2280,17 @@ history as the closure benchmark, a cross-repository trace check, an early Java 
   - **Open:** writing or approving carried translations. Eridani has no Project Go pack, and one derived from
     `original/` against `working/` would be inferred, so that is the owner's call. The exit criterion waits on a real
     host (94.G5).
+  **Slice 2 (2026-11-22, Project-Go #20): P3's pack.**
+  - **The owner's ruling (2026-11-22):** "1 and 2, consult advisor then follow recommendation". The advisor's
+    recommendation was to build the pack narrowly.
+  - **Its source:** not inferred, as feared. BridgeForge's translate-batch record of 2026-11-16
+    (`scratch/translate-work/translations.json`) holds each unit's source and translation, recorded as reviewed.
+  - **What it holds:** 33 entries (17 data, 16 jar), each a unit whose original text has CJK and whose working text has
+    none. Every translation equals `working/`'s text.
+  - **Where it lives:** the pack and its `PROVENANCE.json` (inputs and hashes, the rule, "NOT APPROVED") stay in the
+    LOCAL_ONLY workspace. Nothing is approved, and nothing is written into a mod.
+  - **The run it made possible:** given with the translated build's export, the pack's entries do not apply. Every one
+    read NEEDS_TRANSLATION, and the report did not say why. Project Go now flags `pack_for_other_text` per unit.
 - 94.G5 **Insertion**: carrier mod first, then integration on workspace copies (GD-5); collision checks; XStream aliases
   (`ModPlugin.configureXStream`, 0.98.5a API) proven with Salvor; VoidSmith variants and faction-knowledge proposals;
   SpriteForge restyles on request.

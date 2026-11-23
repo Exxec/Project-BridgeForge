@@ -30,6 +30,16 @@ class RegistryGuardTests(unittest.TestCase):
         with self.assertRaises(RegistryGuardError):
             winreg.OpenKey(winreg.HKEY_LOCAL_MACHINE, r"SYSTEM\CurrentControlSet\Control\FileSystem")
 
+    def test_the_test_root_under_another_hive_is_refused(self) -> None:
+        # Only HKEY_CURRENT_USER's test root is allowed; checked without opening any key (mutation re-run 2026-11-22).
+        import winreg
+
+        from tests import support
+
+        self.assertTrue(support._registry_allowed(winreg.HKEY_CURRENT_USER, TEST_REGISTRY_ROOT))
+        self.assertFalse(support._registry_allowed(winreg.HKEY_LOCAL_MACHINE, TEST_REGISTRY_ROOT))
+        self.assertFalse(support._registry_allowed(winreg.HKEY_USERS, TEST_REGISTRY_ROOT + r"\x"))
+
     def test_product_code_cannot_swallow_the_refusal(self) -> None:
         # rig_doctor catches OSError as "unreadable"; the guard's error is not one, so the access shows.
         self.assertFalse(issubclass(RegistryGuardError, OSError))

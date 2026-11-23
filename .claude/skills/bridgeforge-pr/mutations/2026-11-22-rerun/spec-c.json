@@ -1,0 +1,1445 @@
+{
+ "about": "Re-run batch C of 2026-11-22 (ROADMAP-3 94.G2 'Mutation re-run'). Replay from the checkout root: python .claude/skills/bridgeforge-pr/scripts/mutate_batch.py SPEC RESULTS. Snippets are main at 2d8115e; a later edit makes a mutant NOT RUN.",
+ "mutants": [
+  {
+   "claim": "L1590 slice 6",
+   "name": "jump target ignored",
+   "module": "bridgeforge/atlas/atlas_classfile.py",
+   "old": "if i == 0 or steps[i][0] in targets:",
+   "new": "if i == 0:",
+   "selector": "tests.test_gene_star_system.StarSystemGeneTests.test_a_name_through_a_local_resolves_and_a_computed_one_does_not",
+   "source": "transcript",
+   "verdict_2026_11_22": "CAUGHT"
+  },
+  {
+   "claim": "L1590 slice 6",
+   "name": "parameters not counted",
+   "module": "bridgeforge/atlas/atlas_classfile.py",
+   "old": "assigned: dict[int, set] = {slot: {None} for slot in range(params)}",
+   "new": "assigned: dict[int, set] = {}",
+   "selector": "tests.test_gene_star_system.StarSystemGeneTests.test_a_name_through_a_local_resolves_and_a_computed_one_does_not",
+   "source": "transcript",
+   "verdict_2026_11_22": "CAUGHT"
+  },
+  {
+   "claim": "L1590 slice 6",
+   "name": "local constant not followed",
+   "module": "bridgeforge/atlas/atlas_classfile.py",
+   "old": "found.append((owner, name, descriptor, next(iter(values)) if len(values) == 1 else None))",
+   "new": "found.append((owner, name, descriptor, None))",
+   "selector": "tests.test_gene_star_system.StarSystemGeneTests.test_the_gene_holds_its_generator_campaign_rows_and_graphics_but_not_the_plugin",
+   "source": "transcript",
+   "verdict_2026_11_22": "CAUGHT"
+  },
+  {
+   "claim": "L1590 slice 6",
+   "name": "mod hides every core kind",
+   "module": "bridgeforge/genome/campaign.py",
+   "old": "for kind, detail in core_hits if kind not in own_kinds]",
+   "new": "for kind, detail in core_hits if not own_kinds]",
+   "selector": "tests.test_gene_star_system.StarSystemGeneTests.test_a_mod_row_hides_only_the_core_definition_of_the_same_kind",
+   "source": "transcript",
+   "verdict_2026_11_22": "CAUGHT"
+  },
+  {
+   "claim": "L1590 slice 6",
+   "name": "plugin-only reach",
+   "module": "bridgeforge/genome/campaign.py",
+   "old": "calls.setdefault((owner, name), set()).update(t for t in targets if t[0] in classes)",
+   "new": "calls.setdefault((owner, name), set()).update(t for t in targets if t[0] == plugin)",
+   "selector": "tests.test_gene_star_system.StarSystemGeneTests.test_a_generator_reached_through_a_helper_class_is_registered_there",
+   "source": "transcript",
+   "verdict_2026_11_22": "CAUGHT"
+  },
+  {
+   "claim": "L1590 slice 6",
+   "name": "graphics category rule off",
+   "module": "bridgeforge/genome/campaign.py",
+   "old": "if key == literal and category in literals]",
+   "new": "if key == literal]",
+   "selector": "tests.test_gene_star_system.StarSystemGeneTests.test_needs_are_typed_by_table_and_the_faction_is_a_gene_need",
+   "source": "transcript",
+   "verdict_2026_11_22": "CAUGHT"
+  },
+  {
+   "claim": "L1590 slice 6",
+   "name": "two-arg getString counted",
+   "module": "bridgeforge/genome/closure.py",
+   "old": "descriptor.startswith(\"(Ljava/lang/String;)\")",
+   "new": "descriptor.startswith(\"(Ljava/lang/String;\")",
+   "selector": "tests.test_gene_star_system.StarSystemGeneTests.test_getstring_with_a_category_is_not_a_settings_key",
+   "source": "transcript",
+   "verdict_2026_11_22": "CAUGHT"
+  },
+  {
+   "claim": "L1590 slice 6",
+   "name": "jar path not resolved",
+   "module": "bridgeforge/genome/gene.py",
+   "old": "found.append(_jar_member(root, entry[\"path\"]))",
+   "new": "found.append({\"what\": \"jar-class\", \"path\": entry[\"path\"]})",
+   "selector": "tests.test_gene_star_system.StarSystemGeneTests.test_the_gene_holds_its_generator_campaign_rows_and_graphics_but_not_the_plugin",
+   "source": "transcript",
+   "verdict_2026_11_22": "CAUGHT"
+  },
+  {
+   "claim": "L1590 slice 6",
+   "name": "row classes not followed",
+   "module": "bridgeforge/genome/gene.py",
+   "old": "more = [c for c in campaign[\"classes\"] if c not in classes]",
+   "new": "more = []",
+   "selector": "tests.test_gene_star_system.StarSystemGeneTests.test_the_gene_holds_its_generator_campaign_rows_and_graphics_but_not_the_plugin",
+   "source": "transcript",
+   "verdict_2026_11_22": "CAUGHT"
+  },
+  {
+   "claim": "L1590 slice 6",
+   "name": "faction as vanilla",
+   "module": "bridgeforge/genome/campaign.py",
+   "old": "return {\"genes\": [f\"faction:{literal}\"]}",
+   "new": "return {}",
+   "selector": "tests.test_gene_star_system.StarSystemGeneTests.test_needs_are_typed_by_table_and_the_faction_is_a_gene_need",
+   "source": "transcript",
+   "verdict_2026_11_22": "CAUGHT"
+  },
+  {
+   "claim": "L1632 slice 7",
+   "name": "registration rule off",
+   "module": "bridgeforge/genome/proof.py",
+   "old": "        if any(_id_named(line, name) for name in names):",
+   "new": "        if False:",
+   "selector": "tests.test_gene_star_system.ClassifierTests",
+   "source": "reconstructed",
+   "verdict_2026_11_22": "CAUGHT"
+  },
+  {
+   "claim": "L1632 slice 7",
+   "name": "genes not allowed",
+   "module": "bridgeforge/genome/proof.py",
+   "old": " | set(gene[\"needs\"].get(\"genes\") or [])",
+   "new": "",
+   "selector": "tests.test_gene_star_system.ClassifierTests",
+   "source": "transcript",
+   "verdict_2026_11_22": "CAUGHT"
+  },
+  {
+   "claim": "L1632 slice 7",
+   "name": "escaped rewrite",
+   "module": "bridgeforge/genome/proof.py",
+   "old": "cut = json.dumps(data, indent=2, ensure_ascii=False) + \"\\n\"",
+   "new": "cut = json.dumps(data, indent=2) + \"\\n\"",
+   "selector": "tests.test_gene_star_system.CarrierPluginTests",
+   "source": "transcript",
+   "verdict_2026_11_22": "CAUGHT"
+  },
+  {
+   "claim": "L1632 slice 7",
+   "name": "no jars listed",
+   "module": "bridgeforge/genome/proof.py",
+   "old": "        carrier_info[\"jars\"] = jars",
+   "new": "        pass",
+   "selector": "tests.test_gene_star_system.StarSystemGeneTests.test_prove_passes_both_static_halves_with_a_generated_carrier_plugin",
+   "source": "transcript",
+   "verdict_2026_11_22": "CAUGHT"
+  },
+  {
+   "claim": "L1632 slice 7",
+   "name": "names not validated",
+   "module": "bridgeforge/genome/carrier_plugin.py",
+   "old": "    if not _JAVA_NAME.match(generator) or not _JAVA_IDENT.match(method):",
+   "new": "    if False:",
+   "selector": "tests.test_gene_star_system.CarrierPluginTests",
+   "source": "transcript",
+   "verdict_2026_11_22": "CAUGHT"
+  },
+  {
+   "claim": "L1632 slice 7",
+   "name": "slice-8 note gone",
+   "module": "bridgeforge/genome/proof.py",
+   "old": "    if kind == \"subtraction-proof\" and gene[\"kind\"] == \"star-system\" and not (cut and cut.get(\"cut\")):",
+   "new": "    if False:",
+   "selector": "tests.test_gene_star_system.CarrierPluginTests",
+   "source": "reconstructed",
+   "verdict_2026_11_22": "CAUGHT"
+  },
+  {
+   "claim": "L1632 slice 7",
+   "name": "hook by name",
+   "module": "bridgeforge/genome/carrier_plugin.py",
+   "old": "        hooks = [hook for hook in HOOK_SIGNATURES if hook in (element.get(\"hooks\") or [])]",
+   "new": "        hooks = [h for h in (element.get(\"hooks\") or []) if h in HOOK_SIGNATURES] or (element.get(\"hooks\") or [])",
+   "selector": "tests.test_gene_star_system.CarrierPluginTests",
+   "source": "transcript",
+   "verdict_2026_11_22": "CAUGHT"
+  },
+  {
+   "claim": "L1632 slice 7",
+   "name": "simple name everywhere",
+   "module": "bridgeforge/genome/proof.py",
+   "old": "        names = qualified | (simple if re.search(r\"import|class\", key[0]) else set())",
+   "new": "        names = qualified | simple",
+   "selector": "tests.test_gene_star_system.ClassifierTests",
+   "source": "transcript",
+   "verdict_2026_11_22": "CAUGHT"
+  },
+  {
+   "claim": "L1632 slice 7",
+   "name": "nested accepted",
+   "module": "bridgeforge/genome/carrier_plugin.py",
+   "old": "    if \"$\" in generator or \".\" not in generator:",
+   "new": "    if False:",
+   "selector": "tests.test_gene_star_system.CarrierPluginTests",
+   "source": "transcript",
+   "verdict_2026_11_22": "CAUGHT"
+  },
+  {
+   "claim": "L1632 slice 7",
+   "name": "CRLF source",
+   "module": "bridgeforge/genome/carrier_plugin.py",
+   "old": "atomic_write_text(source, text, newline=\"\")",
+   "new": "atomic_write_text(source, text, newline=\"\\n\")",
+   "selector": "tests.test_gene_star_system.StarSystemGeneTests.test_prove_passes_both_static_halves_with_a_generated_carrier_plugin",
+   "source": "transcript",
+   "verdict_2026_11_22": "CAUGHT"
+  },
+  {
+   "claim": "L1690 slice 8",
+   "name": "precondition skipped",
+   "module": "bridgeforge/genome/registration_cut.py",
+   "old": "    if before != javap_lines(jdk.javap, site / \"shipped.class\"):",
+   "new": "    if False:",
+   "selector": "tests.test_gene_star_system.StarSystemGeneTests.test_a_source_that_is_not_the_shipped_class_refuses_the_cut_and_leaves_the_copy",
+   "source": "reconstructed",
+   "verdict_2026_11_22": "CAUGHT"
+  },
+  {
+   "claim": "L1690 slice 8",
+   "name": "lost-lines check skipped",
+   "module": "bridgeforge/genome/registration_cut.py",
+   "old": "    added = only_lost_lines(before, after)",
+   "new": "    added = []",
+   "selector": "tests.test_gene_star_system.StarSystemGeneTests.test_a_cut_that_changes_more_than_the_call_is_refused_and_the_copy_restored",
+   "source": "reconstructed",
+   "verdict_2026_11_22": "CAUGHT"
+  },
+  {
+   "claim": "L1690 slice 8",
+   "name": "class not swapped",
+   "module": "bridgeforge/genome/registration_cut.py",
+   "old": "        by_jar.setdefault(plan[\"jar\"], {})[plan[\"entry\"]] = plan[\"data\"]",
+   "new": "        by_jar.setdefault(plan[\"jar\"], {})",
+   "selector": "tests.test_gene_star_system.StarSystemGeneTests.test_prove_passes_both_static_halves_with_a_generated_carrier_plugin",
+   "source": "reconstructed",
+   "verdict_2026_11_22": "CAUGHT"
+  },
+  {
+   "claim": "L1690 slice 8",
+   "name": "boot note ignores cut",
+   "module": "bridgeforge/genome/proof.py",
+   "old": " and not (cut and cut.get(\"cut\")):",
+   "new": ":",
+   "selector": "tests.test_gene_star_system.StarSystemGeneTests.test_prove_passes_both_static_halves_with_a_generated_carrier_plugin",
+   "source": "transcript",
+   "verdict_2026_11_22": "CAUGHT"
+  },
+  {
+   "claim": "L1690 slice 8",
+   "name": "jump targets kept (normalise)",
+   "module": "bridgeforge/genome/registration_cut.py",
+   "old": "    return re.sub(r\"\\s+\", \" \", _JUMP.sub(r\"\\1 L\", line))",
+   "new": "    return re.sub(r\"\\s+\", \" \", line)",
+   "selector": "tests.test_gene_star_system.CutTests",
+   "source": "transcript",
+   "verdict_2026_11_22": "CAUGHT"
+  },
+  {
+   "claim": "L1690 slice 8",
+   "name": "whitespace not collapsed (normalise)",
+   "module": "bridgeforge/genome/registration_cut.py",
+   "old": "    return re.sub(r\"\\s+\", \" \", _JUMP.sub(r\"\\1 L\", line))",
+   "new": "    return _JUMP.sub(r\"\\1 L\", line)",
+   "selector": "tests.test_gene_star_system.CutTests",
+   "source": "transcript",
+   "verdict_2026_11_22": "CAUGHT"
+  },
+  {
+   "claim": "L1690 slice 8",
+   "name": "boundary rule off",
+   "module": "bridgeforge/genome/registration_cut.py",
+   "old": "                if not previous.endswith(_STATEMENT_BOUNDARY):",
+   "new": "                if False:",
+   "selector": "tests.test_gene_star_system.CutTests",
+   "source": "transcript",
+   "verdict_2026_11_22": "CAUGHT"
+  },
+  {
+   "claim": "L1690 slice 8",
+   "name": "no put-back",
+   "module": "bridgeforge/genome/registration_cut.py",
+   "old": "            _put(path, originals[path])",
+   "new": "            pass",
+   "selector": "tests.test_gene_star_system.StarSystemGeneTests.test_a_failed_write_puts_back_what_was_already_written",
+   "source": "transcript",
+   "verdict_2026_11_22": "CAUGHT"
+  },
+  {
+   "claim": "L1690 slice 8",
+   "name": "broad catch off",
+   "module": "bridgeforge/genome/registration_cut.py",
+   "old": "        except Exception as error:  # noqa: BLE001 - planning writes nothing in the copy; any failure is a recorded refusal",
+   "new": "        except ZeroDivisionError as error:",
+   "selector": "tests.test_gene_star_system.StarSystemGeneTests.test_an_unexpected_error_while_planning_is_a_recorded_refusal_and_the_copy_is_untouched",
+   "source": "transcript",
+   "verdict_2026_11_22": "CAUGHT"
+  },
+  {
+   "claim": "L1690 slice 8",
+   "name": "switch offsets stripped",
+   "module": "bridgeforge/genome/registration_cut.py",
+   "old": "_OFFSET = re.compile(r\"^\\d+:\\s+(?=[a-z])\")",
+   "new": "_OFFSET = re.compile(r\"^\\d+:\\s*\")",
+   "selector": "tests.test_gene_star_system.CutTests",
+   "source": "transcript",
+   "verdict_2026_11_22": "CAUGHT"
+  },
+  {
+   "claim": "L1690 slice 8",
+   "name": "same-class guard off",
+   "module": "bridgeforge/genome/registration_cut.py",
+   "old": "    if len({element[\"locus\"].rsplit(\".\", 1)[0] for element in sites}) != len(sites):",
+   "new": "    if False:",
+   "selector": "tests.test_gene_star_system.CutTests",
+   "source": "transcript",
+   "verdict_2026_11_22": "CAUGHT"
+  },
+  {
+   "claim": "L1778 slice 9",
+   "name": "folder depth rule off",
+   "module": "bridgeforge/genome/dependents.py",
+   "old": "    folder = literal.endswith(\"/\") and literal.count(\"/\") >= 3 and path.rsplit(\"/\", 1)[0] + \"/\" == literal",
+   "new": "    folder = literal.endswith(\"/\") and path.startswith(literal)",
+   "selector": "tests.test_gene_dependents",
+   "source": "transcript",
+   "verdict_2026_11_22": "CAUGHT"
+  },
+  {
+   "claim": "L1778 slice 9",
+   "name": "whole token off",
+   "module": "bridgeforge/genome/dependents.py",
+   "old": "            idents = [i for i in idents if _named(text, i)]",
+   "new": "            pass",
+   "selector": "tests.test_gene_dependents",
+   "source": "transcript",
+   "verdict_2026_11_22": "CAUGHT"
+  },
+  {
+   "claim": "L1778 slice 9",
+   "name": "not-located kept",
+   "module": "bridgeforge/genome/dependents.py",
+   "old": "    return [row for row in result if not (row[\"from\"] == \"(not located)\" and row[\"to\"] in referenced)]",
+   "new": "    return result",
+   "selector": "tests.test_gene_dependents",
+   "source": "reconstructed",
+   "verdict_2026_11_22": "CAUGHT"
+  },
+  {
+   "claim": "L1778 slice 9",
+   "name": "mission rule off",
+   "module": "bridgeforge/genome/dependents.py",
+   "old": "    if _MISSION.match(relative):",
+   "new": "    if False:",
+   "selector": "tests.test_gene_dependents",
+   "source": "transcript",
+   "verdict_2026_11_22": "CAUGHT"
+  },
+  {
+   "claim": "L1778 slice 9",
+   "name": "template off",
+   "module": "bridgeforge/genome/dependents.py",
+   "old": "    if _PLACEHOLDER in literal:",
+   "new": "    if False:",
+   "selector": "tests.test_gene_dependents",
+   "source": "transcript",
+   "verdict_2026_11_22": "CAUGHT"
+  },
+  {
+   "claim": "L1778 slice 9",
+   "name": "context off",
+   "module": "bridgeforge/genome/proof.py",
+   "old": "    unexplained = [u for u in unexplained if not is_context(u)]",
+   "new": "    pass",
+   "selector": "tests.test_gene_dependents",
+   "source": "reconstructed",
+   "verdict_2026_11_22": "CAUGHT"
+  },
+  {
+   "claim": "L1778 slice 9",
+   "name": "greedy regex off",
+   "module": "bridgeforge/probe/probe_record.py",
+   "old": "_MOD_LOAD_ERROR = re.compile(r\"ModManager\\s+-\\s+Error loading mod from \\[(?P<path>.+)\\]\\s*$\")",
+   "new": "_MOD_LOAD_ERROR = re.compile(r\"ModManager\\s+-\\s+Error loading mod from \\[(?P<path>[^\\]]+)\\]\")",
+   "selector": "tests.test_probe_group.MergeAndReportTests",
+   "source": "transcript",
+   "verdict_2026_11_22": "CAUGHT"
+  },
+  {
+   "claim": "L1778 slice 9",
+   "name": "dedupe off",
+   "module": "bridgeforge/probe/probe_record.py",
+   "old": "        if entry not in found:  # the launcher and the game may log the same failure twice",
+   "new": "        if True:",
+   "selector": "tests.test_probe_group.MergeAndReportTests",
+   "source": "transcript",
+   "verdict_2026_11_22": "CAUGHT"
+  },
+  {
+   "claim": "L1778 slice 9",
+   "name": "spec folders off",
+   "module": "bridgeforge/genome/dependents.py",
+   "old": "    if any(relative.startswith(folder) and relative.endswith(suffix) for folder, suffix in SPEC_FOLDERS):",
+   "new": "    if False:",
+   "selector": "tests.test_gene_dependents",
+   "source": "transcript",
+   "verdict_2026_11_22": "CAUGHT"
+  },
+  {
+   "claim": "L1778 slice 9",
+   "name": "template guard off",
+   "module": "bridgeforge/genome/dependents.py",
+   "old": "        if _PLACEHOLDER in directory or directory.count(\"/\") < 2 or not name.replace(_PLACEHOLDER, \"\"):",
+   "new": "        if False:",
+   "selector": "tests.test_gene_dependents",
+   "source": "transcript",
+   "verdict_2026_11_22": "CAUGHT"
+  },
+  {
+   "claim": "L1778 slice 9",
+   "name": "not-located yields to mentions",
+   "module": "bridgeforge/genome/dependents.py",
+   "old": "    referenced = {row[\"to\"] for row in result if row[\"grade\"] == \"reference\"}",
+   "new": "    referenced = {row[\"to\"] for row in result}",
+   "selector": "tests.test_gene_dependents",
+   "source": "transcript",
+   "verdict_2026_11_22": "CAUGHT"
+  },
+  {
+   "claim": "L1778 slice 9",
+   "name": "context too broad",
+   "module": "bridgeforge/genome/proof.py",
+   "old": "        return (item[\"finding\"], item[\"file\"]) in dependent_keys and (located or _PROSE.match(line) is not None)",
+   "new": "        return (item[\"finding\"], item[\"file\"]) in dependent_keys",
+   "selector": "tests.test_gene_dependents",
+   "source": "transcript",
+   "verdict_2026_11_22": "CAUGHT"
+  },
+  {
+   "claim": "L1832 slice 10",
+   "name": "core faction accepted",
+   "module": "bridgeforge/genome/faction.py",
+   "old": "    if ident in _CampaignIndex(core_root).factions:",
+   "new": "    if False:",
+   "selector": "tests.test_gene_faction",
+   "source": "reconstructed",
+   "verdict_2026_11_22": "CAUGHT"
+  },
+  {
+   "claim": "L1832 slice 10",
+   "name": "row keyed by id",
+   "module": "bridgeforge/genome/gene.py",
+   "old": "TABLE_KEYS = {\"data/world/factions/factions.csv\": \"faction\"}",
+   "new": "TABLE_KEYS = {}",
+   "selector": "tests.test_gene_faction",
+   "source": "transcript",
+   "verdict_2026_11_22": "CAUGHT"
+  },
+  {
+   "claim": "L1832 slice 10",
+   "name": "mod ids as vanilla",
+   "module": "bridgeforge/genome/faction.py",
+   "old": "        if mod_index.defines(kind, item):",
+   "new": "        if False:",
+   "selector": "tests.test_gene_faction",
+   "source": "transcript",
+   "verdict_2026_11_22": "CAUGHT"
+  },
+  {
+   "claim": "L1832 slice 10",
+   "name": "missing dropped",
+   "module": "bridgeforge/genome/faction.py",
+   "old": "            missing.append(f\"{kind}:{item} (listed by the faction; neither the mod nor the core defines it)\")",
+   "new": "            pass",
+   "selector": "tests.test_gene_faction",
+   "source": "transcript",
+   "verdict_2026_11_22": "CAUGHT"
+  },
+  {
+   "claim": "L1832 slice 10",
+   "name": "any constant registers",
+   "module": "bridgeforge/genome/faction.py",
+   "old": "            named = sorted({name for _o, name, _d, constant in calls if name in _CALLS and constant == ident})",
+   "new": "            named = sorted({name for _o, name, _d, constant in calls if name in _CALLS})",
+   "selector": "tests.test_gene_faction",
+   "source": "transcript",
+   "verdict_2026_11_22": "CAUGHT"
+  },
+  {
+   "claim": "L1832 slice 10",
+   "name": "tags dropped",
+   "module": "bridgeforge/genome/faction.py",
+   "old": "    suspects = ([{\"path\": path, \"mentions\": tags, \"reason\": \"the faction's lists name tags: sets of hulls, weapons or wings, \"",
+   "new": "    suspects = ([] if True else [{\"path\": path, \"mentions\": tags, \"reason\": \"",
+   "selector": "tests.test_gene_faction",
+   "source": "transcript",
+   "verdict_2026_11_22": "CAUGHT"
+  },
+  {
+   "claim": "L1832 slice 10",
+   "name": "named files skipped",
+   "module": "bridgeforge/genome/faction.py",
+   "old": "    members += [{**_file_member(root, f), \"reason\": \"a file the faction names (logo, crest, portraits)\"} for f in files]",
+   "new": "    pass",
+   "selector": "tests.test_gene_faction",
+   "source": "transcript",
+   "verdict_2026_11_22": "CAUGHT"
+  },
+  {
+   "claim": "L1832 slice 10",
+   "name": "string split",
+   "module": "bridgeforge/genome/faction.py",
+   "old": "if isinstance(value, list) else []",
+   "new": "if isinstance(value, (list, str)) else []",
+   "selector": "tests.test_gene_faction",
+   "source": "transcript",
+   "verdict_2026_11_22": "CAUGHT"
+  },
+  {
+   "claim": "L1832 slice 10",
+   "name": "outside path",
+   "module": "bridgeforge/genome/faction.py",
+   "old": "found = _inside_file(root, value)",
+   "new": "found = value if (root / value).is_file() else None",
+   "selector": "tests.test_gene_faction",
+   "source": "transcript",
+   "verdict_2026_11_22": "CAUGHT"
+  },
+  {
+   "claim": "L1832 slice 10",
+   "name": "no core ok",
+   "module": "bridgeforge/genome/faction.py",
+   "old": "if not vanilla_core:  #",
+   "new": "if False:  #",
+   "selector": "tests.test_gene_faction",
+   "source": "transcript",
+   "verdict_2026_11_22": "CAUGHT"
+  },
+  {
+   "claim": "L1832 slice 10",
+   "name": "note path",
+   "module": "bridgeforge/genome/faction.py",
+   "old": "\"path\": _jar_entry(root, jar, member)",
+   "new": "\"path\": locus",
+   "selector": "tests.test_gene_faction",
+   "source": "transcript",
+   "verdict_2026_11_22": "CAUGHT"
+  },
+  {
+   "claim": "L1832 slice 10",
+   "name": "note always",
+   "module": "bridgeforge/genome/faction.py",
+   "old": "if any(name == \"setRelationship\" for _o, name, _d, _c in calls):",
+   "new": "if True:",
+   "selector": "tests.test_gene_faction",
+   "source": "transcript",
+   "verdict_2026_11_22": "CAUGHT"
+  },
+  {
+   "claim": "L1832 slice 10",
+   "name": "core file",
+   "module": "bridgeforge/genome/faction.py",
+   "old": "core.add(in_core)",
+   "new": "absent.add(value)",
+   "selector": "tests.test_gene_faction",
+   "source": "transcript",
+   "verdict_2026_11_22": "CAUGHT"
+  },
+  {
+   "claim": "L1866 slice 10 follow-up",
+   "name": "role keys as variants",
+   "module": "bridgeforge/genome/faction.py",
+   "old": "if i not in ROLE_NOT_VARIANTS]",
+   "new": "if True]",
+   "selector": "tests.test_gene_faction",
+   "source": "transcript",
+   "verdict_2026_11_22": "CAUGHT"
+  },
+  {
+   "claim": "L1866 slice 10 follow-up",
+   "name": "doctrine role read",
+   "module": "bridgeforge/genome/faction.py",
+   "old": "if role not in ROLE_SKIPPED:",
+   "new": "if True:",
+   "selector": "tests.test_gene_faction",
+   "source": "transcript",
+   "verdict_2026_11_22": "CAUGHT"
+  },
+  {
+   "claim": "L1866 slice 10 follow-up",
+   "name": "hullFrequency hulls",
+   "module": "bridgeforge/genome/faction.py",
+   "old": "ids += [(\"hull\", i) for i in _keys(frequency.get(\"hulls\"))]",
+   "new": "ids += []",
+   "selector": "tests.test_gene_faction",
+   "source": "transcript",
+   "verdict_2026_11_22": "CAUGHT"
+  },
+  {
+   "claim": "L1866 slice 10 follow-up",
+   "name": "hullFrequency tags",
+   "module": "bridgeforge/genome/faction.py",
+   "old": "tags += _keys(frequency.get(\"tags\"))",
+   "new": "tags += []",
+   "selector": "tests.test_gene_faction",
+   "source": "transcript",
+   "verdict_2026_11_22": "CAUGHT"
+  },
+  {
+   "claim": "L1866 slice 10 follow-up",
+   "name": "shipSellFrequency",
+   "module": "bridgeforge/genome/faction.py",
+   "old": "\"shipSellFrequency\": \"hull\", ",
+   "new": "",
+   "selector": "tests.test_gene_faction",
+   "source": "transcript",
+   "verdict_2026_11_22": "CAUGHT"
+  },
+  {
+   "claim": "L1866 slice 10 follow-up",
+   "name": "variantOverrides",
+   "module": "bridgeforge/genome/faction.py",
+   "old": ", \"variantOverrides\": \"variant\"}",
+   "new": "}",
+   "selector": "tests.test_gene_faction",
+   "source": "transcript",
+   "verdict_2026_11_22": "CAUGHT"
+  },
+  {
+   "claim": "L1866 slice 10 follow-up",
+   "name": "no weight keys",
+   "module": "bridgeforge/genome/faction.py",
+   "old": "weights = bool(value) and all(",
+   "new": "weights = False and all(",
+   "selector": "tests.test_gene_faction",
+   "source": "transcript",
+   "verdict_2026_11_22": "CAUGHT"
+  },
+  {
+   "claim": "L1866 slice 10 follow-up",
+   "name": "bool as weight",
+   "module": "bridgeforge/genome/faction.py",
+   "old": " and not isinstance(v, bool) for v in value.values())",
+   "new": " for v in value.values())",
+   "selector": "tests.test_gene_faction",
+   "source": "transcript",
+   "verdict_2026_11_22": "CAUGHT"
+  },
+  {
+   "claim": "L1866 slice 10 follow-up",
+   "name": "plain keys suspect",
+   "module": "bridgeforge/genome/faction.py",
+   "old": "if key in PLAIN_KEYS or (key in read and",
+   "new": "if (key in read and",
+   "selector": "tests.test_gene_faction",
+   "source": "reconstructed",
+   "verdict_2026_11_22": "CAUGHT"
+  },
+  {
+   "claim": "L1866 slice 10 follow-up",
+   "name": "mod commodity dropped",
+   "module": "bridgeforge/genome/faction.py",
+   "old": "mine = [c for c in listed if c not in core and c in own]",
+   "new": "mine = []",
+   "selector": "tests.test_gene_faction",
+   "source": "transcript",
+   "verdict_2026_11_22": "CAUGHT"
+  },
+  {
+   "claim": "L1866 slice 10 follow-up",
+   "name": "core commodity dropped",
+   "module": "bridgeforge/genome/faction.py",
+   "old": "vanilla = [f\"commodity:{c}\" for c in listed if c in core]",
+   "new": "vanilla = []",
+   "selector": "tests.test_gene_faction",
+   "source": "transcript",
+   "verdict_2026_11_22": "CAUGHT"
+  },
+  {
+   "claim": "L1866 slice 10 follow-up",
+   "name": "unread dropped",
+   "module": "bridgeforge/genome/faction.py",
+   "old": "suspects += commodity_suspects + _unread(path, faction) + notes",
+   "new": "suspects += commodity_suspects + notes",
+   "selector": "tests.test_gene_faction",
+   "source": "transcript",
+   "verdict_2026_11_22": "CAUGHT"
+  },
+  {
+   "claim": "L1866 slice 10 follow-up",
+   "name": "wing as variant",
+   "module": "bridgeforge/genome/faction.py",
+   "old": "(\"wing\" if i.endswith(\"_wing\") else \"variant\", i)",
+   "new": "(\"variant\", i)",
+   "selector": "tests.test_gene_faction",
+   "source": "transcript",
+   "verdict_2026_11_22": "CAUGHT"
+  },
+  {
+   "claim": "L1866 slice 10 follow-up",
+   "name": "shape always ok",
+   "module": "bridgeforge/genome/faction.py",
+   "old": "if key in PLAIN_KEYS or (key in read and _shape_read(key, faction[key])):",
+   "new": "if key in PLAIN_KEYS or key in read:",
+   "selector": "tests.test_gene_faction",
+   "source": "transcript",
+   "verdict_2026_11_22": "CAUGHT"
+  },
+  {
+   "claim": "L1866 slice 10 follow-up",
+   "name": "hullFrequency extra key ok",
+   "module": "bridgeforge/genome/faction.py",
+   "old": "all(k in (\"hulls\", \"tags\") and isinstance(v, dict) for k, v in value.items())",
+   "new": "True",
+   "selector": "tests.test_gene_faction",
+   "source": "transcript",
+   "verdict_2026_11_22": "CAUGHT"
+  },
+  {
+   "claim": "L1866 slice 10 follow-up",
+   "name": "list block extra ok",
+   "module": "bridgeforge/genome/faction.py",
+   "old": "all(k in allowed and isinstance(v, list) for k, v in value.items())",
+   "new": "True",
+   "selector": "tests.test_gene_faction",
+   "source": "transcript",
+   "verdict_2026_11_22": "CAUGHT"
+  },
+  {
+   "claim": "L1866 slice 10 follow-up",
+   "name": "empty suspects kept",
+   "module": "bridgeforge/genome/faction.py",
+   "old": "        if mentions:",
+   "new": "        if True:",
+   "selector": "tests.test_gene_faction",
+   "source": "transcript",
+   "verdict_2026_11_22": "CAUGHT"
+  },
+  {
+   "claim": "L1866 slice 10 follow-up",
+   "name": "custom plain",
+   "module": "bridgeforge/genome/faction.py",
+   "old": "\"fleetTypeNames\", \"ranks\"})",
+   "new": "\"fleetTypeNames\", \"ranks\", \"custom\"})",
+   "selector": "tests.test_gene_faction",
+   "source": "transcript",
+   "verdict_2026_11_22": "CAUGHT"
+  },
+  {
+   "claim": "L1866 slice 10 follow-up",
+   "name": "commodity shape",
+   "module": "bridgeforge/genome/faction.py",
+   "old": "{\"illegalCommodities\": list, \"logo\": str",
+   "new": "{\"illegalCommodities\": str, \"logo\": str",
+   "selector": "tests.test_gene_faction",
+   "source": "transcript",
+   "verdict_2026_11_22": "CAUGHT"
+  },
+  {
+   "claim": "L1923 slice 11",
+   "name": "no conflict check",
+   "module": "bridgeforge/genome/gene_set.py",
+   "old": "elif merged[key][\"sha256\"] != member[\"sha256\"]:",
+   "new": "elif False:",
+   "selector": "tests.test_gene_set",
+   "source": "transcript",
+   "verdict_2026_11_22": "CAUGHT"
+  },
+  {
+   "claim": "L1923 slice 11",
+   "name": "unsorted identity",
+   "module": "bridgeforge/genome/gene_set.py",
+   "old": "sorted(g[\"identity\"] for g in genes.values())",
+   "new": "list(g[\"identity\"] for g in genes.values())",
+   "selector": "tests.test_gene_set",
+   "source": "transcript",
+   "verdict_2026_11_22": "CAUGHT"
+  },
+  {
+   "claim": "L1923 slice 11",
+   "name": "all registrations made",
+   "module": "bridgeforge/genome/gene_set.py",
+   "old": "for anchor in sorted(genes) if anchor != made_by",
+   "new": "for anchor in sorted(genes) if False",
+   "selector": "tests.test_gene_set",
+   "source": "transcript",
+   "verdict_2026_11_22": "CAUGHT"
+  },
+  {
+   "claim": "L1923 slice 11",
+   "name": "star registration not made",
+   "module": "bridgeforge/genome/gene_set.py",
+   "old": "for anchor in sorted(genes) if anchor != made_by",
+   "new": "for anchor in sorted(genes)",
+   "selector": "tests.test_gene_set",
+   "source": "transcript",
+   "verdict_2026_11_22": "CAUGHT"
+  },
+  {
+   "claim": "L1923 slice 11",
+   "name": "vanilla counted absent",
+   "module": "bridgeforge/genome/gene_set.py",
+   "old": "if m not in provided and m not in vanilla}",
+   "new": "if m not in provided}",
+   "selector": "tests.test_gene_set",
+   "source": "transcript",
+   "verdict_2026_11_22": "CAUGHT"
+  },
+  {
+   "claim": "L1923 slice 11",
+   "name": "refusal passes",
+   "module": "bridgeforge/genome/gene_set.py",
+   "old": "verdict = \"FAIL\" if isolation[\"failures\"] or refused or unresolved else \"PASS\"",
+   "new": "verdict = \"FAIL\" if isolation[\"failures\"] or unresolved else \"PASS\"",
+   "selector": "tests.test_gene_set",
+   "source": "reconstructed",
+   "verdict_2026_11_22": "CAUGHT"
+  },
+  {
+   "claim": "L1923 slice 11",
+   "name": "checkpoint kept",
+   "module": "bridgeforge/genome/gene_set.py",
+   "old": "        checkpoint_path.unlink()  #",
+   "new": "        pass  #",
+   "selector": "tests.test_gene_set",
+   "source": "transcript",
+   "verdict_2026_11_22": "CAUGHT"
+  },
+  {
+   "claim": "L1923 slice 11",
+   "name": "two systems ok",
+   "module": "bridgeforge/genome/gene_set.py",
+   "old": "    if len(systems) > 1:",
+   "new": "    if len(systems) > 2:",
+   "selector": "tests.test_gene_set",
+   "source": "transcript",
+   "verdict_2026_11_22": "CAUGHT"
+  },
+  {
+   "claim": "L1923 slice 11",
+   "name": "conflicts ignored",
+   "module": "bridgeforge/genome/gene_set.py",
+   "old": "    if conflicts:",
+   "new": "    if False:",
+   "selector": "tests.test_gene_set",
+   "source": "transcript",
+   "verdict_2026_11_22": "CAUGHT"
+  },
+  {
+   "claim": "L1923 slice 11",
+   "name": "checkpoint unused",
+   "module": "bridgeforge/genome/gene_set.py",
+   "old": "            saved = checkpoint.get(current)",
+   "new": "            saved = None",
+   "selector": "tests.test_gene_set",
+   "source": "transcript",
+   "verdict_2026_11_22": "CAUGHT"
+  },
+  {
+   "claim": "L1923 slice 11",
+   "name": "anchor refusal ignored",
+   "module": "bridgeforge/genome/gene_set.py",
+   "old": "    if anchor in refused:",
+   "new": "    if False:",
+   "selector": "tests.test_gene_set",
+   "source": "transcript",
+   "verdict_2026_11_22": "CAUGHT"
+  },
+  {
+   "claim": "L1923 slice 11",
+   "name": "whole/part ignored",
+   "module": "bridgeforge/genome/gene_set.py",
+   "old": "        if what != \"file\" and member_file(path) in whole:",
+   "new": "        if False:",
+   "selector": "tests.test_gene_set",
+   "source": "transcript",
+   "verdict_2026_11_22": "CAUGHT"
+  },
+  {
+   "claim": "L1923 slice 11",
+   "name": "no fingerprint",
+   "module": "bridgeforge/genome/gene_set.py",
+   "old": "head[\"fingerprint\"] = [fingerprint(content), fingerprint(Path(vanilla_core) if vanilla_core else None)]",
+   "new": "head[\"fingerprint\"] = None",
+   "selector": "tests.test_gene_set",
+   "source": "transcript",
+   "verdict_2026_11_22": "CAUGHT"
+  },
+  {
+   "claim": "L1923 slice 11",
+   "name": "core not fingerprinted",
+   "module": "bridgeforge/genome/gene_set.py",
+   "old": "fingerprint(Path(vanilla_core) if vanilla_core else None)]",
+   "new": "None]",
+   "selector": "tests.test_gene_set",
+   "source": "transcript",
+   "verdict_2026_11_22": "CAUGHT"
+  },
+  {
+   "claim": "L1923 slice 11",
+   "name": "workspace fingerprinted",
+   "module": "bridgeforge/genome/gene_set.py",
+   "old": "            content = _mod_root(Path(mod))  #",
+   "new": "            content = Path(mod)  #",
+   "selector": "tests.test_gene_set",
+   "source": "transcript",
+   "verdict_2026_11_22": "CAUGHT"
+  },
+  {
+   "claim": "L1923 slice 11",
+   "name": "anchor sorted in",
+   "module": "bridgeforge/genome/gene_set.py",
+   "old": "    return [anchor] + sorted(a for a in genes if a != anchor)",
+   "new": "    return sorted(genes)",
+   "selector": "tests.test_gene_set",
+   "source": "transcript",
+   "verdict_2026_11_22": "CAUGHT"
+  },
+  {
+   "claim": "L1923 slice 11",
+   "name": "csv cut keyed (call 86)",
+   "module": "bridgeforge/genome/proof.py",
+   "old": "_rest, row = cut_csv_row(text, ident.rstrip(\"]\"), TABLE_KEYS.get(table, \"id\"))",
+   "new": "_rest, row = cut_csv_row(text, ident.rstrip(\"]\"))",
+   "selector": "tests.test_gene_set",
+   "source": "transcript",
+   "verdict_2026_11_22": "CAUGHT"
+  },
+  {
+   "claim": "L1978 slice 12",
+   "name": "content kinds pass",
+   "module": "bridgeforge/genome/gene_set.py",
+   "old": "return None if index.defines(kind, ident) else f\"no {kind} definition of {ident} in the carrier\"",
+   "new": "return None",
+   "selector": "tests.test_gene_set",
+   "source": "transcript",
+   "verdict_2026_11_22": "CAUGHT"
+  },
+  {
+   "claim": "L1978 slice 12",
+   "name": "faction row ignored",
+   "module": "bridgeforge/genome/gene_set.py",
+   "old": "return None if path in keyed_rows(carrier, FACTIONS_CSV) else",
+   "new": "return None if True else",
+   "selector": "tests.test_gene_set",
+   "source": "transcript",
+   "verdict_2026_11_22": "CAUGHT"
+  },
+  {
+   "claim": "L1978 slice 12",
+   "name": "faction file ignored",
+   "module": "bridgeforge/genome/gene_set.py",
+   "old": "            return \"no .faction file with that id in the carrier\"",
+   "new": "            return None",
+   "selector": "tests.test_gene_set",
+   "source": "transcript",
+   "verdict_2026_11_22": "CAUGHT"
+  },
+  {
+   "claim": "L1978 slice 12",
+   "name": "plugin class ignored",
+   "module": "bridgeforge/genome/gene_set.py",
+   "old": "return None if _class_present(index, plugin_class.strip()) else",
+   "new": "return None if True else",
+   "selector": "tests.test_gene_set",
+   "source": "transcript",
+   "verdict_2026_11_22": "CAUGHT"
+  },
+  {
+   "claim": "L1978 slice 12",
+   "name": "plugin key ignored",
+   "module": "bridgeforge/genome/gene_set.py",
+   "old": "            return \"the carrier's settings.json registers no plugin under that key\"",
+   "new": "            return None",
+   "selector": "tests.test_gene_set",
+   "source": "transcript",
+   "verdict_2026_11_22": "CAUGHT"
+  },
+  {
+   "claim": "L1978 slice 12",
+   "name": "campaign rows pass",
+   "module": "bridgeforge/genome/gene_set.py",
+   "old": "return None if ident in campaign.rows.get(kind, {}) else",
+   "new": "return None if True else",
+   "selector": "tests.test_gene_set",
+   "source": "transcript",
+   "verdict_2026_11_22": "CAUGHT"
+  },
+  {
+   "claim": "L1978 slice 12",
+   "name": "system passes",
+   "module": "bridgeforge/genome/gene_set.py",
+   "old": "            return str(exc)",
+   "new": "            return None",
+   "selector": "tests.test_gene_set",
+   "source": "transcript",
+   "verdict_2026_11_22": "CAUGHT"
+  },
+  {
+   "claim": "L1978 slice 12",
+   "name": "unknown kinds pass",
+   "module": "bridgeforge/genome/gene_set.py",
+   "old": "    return f\"kind {kind} is not checked in a carrier\"",
+   "new": "    return None",
+   "selector": "tests.test_gene_set",
+   "source": "transcript",
+   "verdict_2026_11_22": "CAUGHT"
+  },
+  {
+   "claim": "L1978 slice 12",
+   "name": "needs not checked",
+   "module": "bridgeforge/genome/gene_set.py",
+   "old": "for wanted in [*gene[\"provides\"], *(gene[\"needs\"].get(\"genes\") or [])]:",
+   "new": "for wanted in gene[\"provides\"]:",
+   "selector": "tests.test_gene_set",
+   "source": "transcript",
+   "verdict_2026_11_22": "CAUGHT"
+  },
+  {
+   "claim": "L1978 slice 12",
+   "name": "unresolved passes",
+   "module": "bridgeforge/genome/gene_set.py",
+   "old": "verdict = \"FAIL\" if isolation[\"failures\"] or refused or unresolved else \"PASS\"",
+   "new": "verdict = \"FAIL\" if isolation[\"failures\"] or refused else \"PASS\"",
+   "selector": "tests.test_gene_set",
+   "source": "transcript",
+   "verdict_2026_11_22": "CAUGHT"
+  },
+  {
+   "claim": "L1978 slice 12",
+   "name": "loose class unseen",
+   "module": "bridgeforge/genome/gene_set.py",
+   "old": "    return dotted in index.jar_classes or dotted in index.sources",
+   "new": "    return dotted in index.jar_classes",
+   "selector": "tests.test_gene_set",
+   "source": "transcript",
+   "verdict_2026_11_22": "CAUGHT"
+  },
+  {
+   "claim": "L1978 slice 12",
+   "name": "content kinds fail",
+   "module": "bridgeforge/genome/gene_set.py",
+   "old": "return None if index.defines(kind, ident) else",
+   "new": "return None if False else",
+   "selector": "tests.test_gene_set",
+   "source": "transcript",
+   "verdict_2026_11_22": "CAUGHT"
+  },
+  {
+   "claim": "L1978 slice 12",
+   "name": "campaign rows fail",
+   "module": "bridgeforge/genome/gene_set.py",
+   "old": "return None if ident in campaign.rows.get(kind, {}) else",
+   "new": "return None if False else",
+   "selector": "tests.test_gene_set",
+   "source": "transcript",
+   "verdict_2026_11_22": "CAUGHT"
+  },
+  {
+   "claim": "L1978 slice 12",
+   "name": "campaign keys fail",
+   "module": "bridgeforge/genome/gene_set.py",
+   "old": "return None if ident in campaign.keys.get(kind, {}) else",
+   "new": "return None if False else",
+   "selector": "tests.test_gene_set",
+   "source": "transcript",
+   "verdict_2026_11_22": "CAUGHT"
+  },
+  {
+   "claim": "L1978 slice 12",
+   "name": "campaign keys pass",
+   "module": "bridgeforge/genome/gene_set.py",
+   "old": "return None if ident in campaign.keys.get(kind, {}) else",
+   "new": "return None if True else",
+   "selector": "tests.test_gene_set",
+   "source": "transcript",
+   "verdict_2026_11_22": "CAUGHT"
+  },
+  {
+   "claim": "L2045 slice 13",
+   "name": "any not all",
+   "module": "bridgeforge/genome/literal_sinks.py",
+   "old": "return bool(sinks) and all(named_only(s) for s in sinks)",
+   "new": "return bool(sinks) and any(named_only(s) for s in sinks)",
+   "selector": "tests.test_literal_sinks",
+   "source": "reconstructed",
+   "verdict_2026_11_22": "CAUGHT"
+  },
+  {
+   "claim": "L2045 slice 13",
+   "name": "hasHullMod not mention",
+   "module": "bridgeforge/genome/literal_sinks.py",
+   "old": "\"com/fs/starfarer/api/combat/ShipVariantAPI.hasHullMod#0\":",
+   "new": "\"x.hasHullMod#0\":",
+   "selector": "tests.test_literal_sinks",
+   "source": "transcript",
+   "verdict_2026_11_22": "CAUGHT"
+  },
+  {
+   "claim": "L2045 slice 13",
+   "name": "unloaded kept",
+   "module": "bridgeforge/genome/literal_sinks.py",
+   "old": "        sinks.setdefault(value, {NOT_LOADED})",
+   "new": "        pass",
+   "selector": "tests.test_literal_sinks",
+   "source": "transcript",
+   "verdict_2026_11_22": "CAUGHT"
+  },
+  {
+   "claim": "L2045 slice 13",
+   "name": "jump ignored",
+   "module": "bridgeforge/genome/literal_sinks.py",
+   "old": "        if pc in targets:",
+   "new": "        if False:",
+   "selector": "tests.test_literal_sinks",
+   "source": "transcript",
+   "verdict_2026_11_22": "CAUGHT"
+  },
+  {
+   "claim": "L2045 slice 13",
+   "name": "store followed",
+   "module": "bridgeforge/genome/literal_sinks.py",
+   "old": "        if pops > depth:",
+   "new": "        if False:",
+   "selector": "tests.test_literal_sinks",
+   "source": "transcript",
+   "verdict_2026_11_22": "CAUGHT"
+  },
+  {
+   "claim": "L2045 slice 13",
+   "name": "receiver off by one",
+   "module": "bridgeforge/genome/literal_sinks.py",
+   "old": "position = index if _INVOKES[op] else index - 1",
+   "new": "position = index",
+   "selector": "tests.test_literal_sinks",
+   "source": "transcript",
+   "verdict_2026_11_22": "CAUGHT"
+  },
+  {
+   "claim": "L2045 slice 13",
+   "name": "dup followed",
+   "module": "bridgeforge/genome/literal_sinks.py",
+   "old": "            if depth == 0:\n                return \"unknown: duplicated\"",
+   "new": "            if False:\n                return \"unknown: duplicated\"",
+   "selector": "tests.test_literal_sinks",
+   "source": "transcript",
+   "verdict_2026_11_22": "CAUGHT"
+  },
+  {
+   "claim": "L2045 slice 13",
+   "name": "mentions are needs",
+   "module": "bridgeforge/genome/closure.py",
+   "old": "if not is_mention(where, maps)}",
+   "new": "if True}",
+   "selector": "tests.test_literal_sinks",
+   "source": "reconstructed",
+   "verdict_2026_11_22": "CAUGHT"
+  },
+  {
+   "claim": "L2045 slice 13",
+   "name": "no mention suspects",
+   "module": "bridgeforge/genome/gene.py",
+   "old": "+ (system[\"suspects\"] if system else []) + mentioned)",
+   "new": "+ (system[\"suspects\"] if system else []))",
+   "selector": "tests.test_literal_sinks",
+   "source": "reconstructed",
+   "verdict_2026_11_22": "CAUGHT"
+  },
+  {
+   "claim": "L2045 slice 13",
+   "name": "literal is a use",
+   "module": "bridgeforge/vendor_plan.py",
+   "old": "code = _STRING_LITERALS.sub(lambda m: m.group(0)[0] * 2, text)",
+   "new": "code = text",
+   "selector": "tests.test_literal_sinks",
+   "source": "reconstructed",
+   "verdict_2026_11_22": "CAUGHT"
+  },
+  {
+   "claim": "L2045 slice 13",
+   "name": "struct.error uncaught",
+   "module": "bridgeforge/genome/literal_sinks.py",
+   "old": "KeyError, struct.error):  # truncated code: struct.error (review)",
+   "new": "KeyError):  # truncated code: struct.error (review)",
+   "selector": "tests.test_literal_sinks",
+   "source": "reconstructed",
+   "verdict_2026_11_22": "CAUGHT"
+  },
+  {
+   "claim": "L2045 slice 13",
+   "name": "needed ids listed",
+   "module": "bridgeforge/genome/closure.py",
+   "old": "            if value in needed:",
+   "new": "            if False:",
+   "selector": "tests.test_literal_sinks",
+   "source": "reconstructed",
+   "verdict_2026_11_22": "CAUGHT"
+  },
+  {
+   "claim": "L2045 slice 13",
+   "name": "campaign ids lost",
+   "module": "bridgeforge/genome/closure.py",
+   "old": "for kind, detail in campaign.hits(value, literals)})",
+   "new": "for kind, detail in []})",
+   "selector": "tests.test_literal_sinks",
+   "source": "reconstructed",
+   "verdict_2026_11_22": "CAUGHT"
+  },
+  {
+   "claim": "L2045 slice 13",
+   "name": "char literal opens string",
+   "module": "bridgeforge/vendor_plan.py",
+   "old": "r\"\"\"'(?:[^'\\\\\\n]|\\\\.)+'|\"(?:",
+   "new": "r\"\"\"\"(?:",
+   "selector": "tests.test_literal_sinks",
+   "source": "reconstructed",
+   "verdict_2026_11_22": "CAUGHT"
+  },
+  {
+   "claim": "L2084 slice 14",
+   "name": "all puts tagged lookup-only",
+   "module": "bridgeforge/genome/literal_sinks.py",
+   "old": "if sinks <= _MAP_READS_ALLOWED",
+   "new": "if True",
+   "selector": "tests.test_literal_sinks",
+   "source": "reconstructed",
+   "verdict_2026_11_22": "CAUGHT"
+  },
+  {
+   "claim": "L2084 slice 14",
+   "name": "any read allowed",
+   "module": "bridgeforge/genome/literal_sinks.py",
+   "old": "if sinks <= _MAP_READS_ALLOWED",
+   "new": "if sinks & _MAP_READS_ALLOWED",
+   "selector": "tests.test_literal_sinks",
+   "source": "reconstructed",
+   "verdict_2026_11_22": "CAUGHT"
+  },
+  {
+   "claim": "L2084 slice 14",
+   "name": "unreadable ignored",
+   "module": "bridgeforge/genome/literal_sinks.py",
+   "old": "            return frozenset()\n    owners",
+   "new": "            continue\n    owners",
+   "selector": "tests.test_literal_sinks",
+   "source": "reconstructed",
+   "verdict_2026_11_22": "CAUGHT"
+  },
+  {
+   "claim": "L2084 slice 14",
+   "name": "key tag dropped",
+   "module": "bridgeforge/genome/literal_sinks.py",
+   "old": "    return f\"{sink}@{owner}.{name}\"",
+   "new": "    return sink",
+   "selector": "tests.test_literal_sinks",
+   "source": "transcript",
+   "verdict_2026_11_22": "CAUGHT"
+  },
+  {
+   "claim": "L2084 slice 14",
+   "name": "untagged put mention",
+   "module": "bridgeforge/genome/literal_sinks.py",
+   "old": "or (bool(field) and put in _PUTS and field in lookup_only)",
+   "new": "or put in _PUTS",
+   "selector": "tests.test_literal_sinks",
+   "source": "transcript",
+   "verdict_2026_11_22": "CAUGHT"
+  },
+  {
+   "claim": "L2084 slice 14",
+   "name": "receiver not checked",
+   "module": "bridgeforge/genome/literal_sinks.py",
+   "old": "or steps[start - 1][1] not in _FIELD_LOADS:",
+   "new": ":",
+   "selector": "tests.test_literal_sinks",
+   "source": "transcript",
+   "verdict_2026_11_22": "CAUGHT"
+  },
+  {
+   "claim": "L2084 slice 14",
+   "name": "non-map fields counted",
+   "module": "bridgeforge/genome/literal_sinks.py",
+   "old": "                if descriptor.strip(\"L;\") in MAP_OWNERS:",
+   "new": "                if True:",
+   "selector": "tests.test_literal_sinks",
+   "source": "transcript",
+   "verdict_2026_11_22": "CAUGHT"
+  },
+  {
+   "claim": "L2084 slice 14",
+   "name": "lookup set unused",
+   "module": "bridgeforge/genome/closure.py",
+   "old": "if not is_mention(where, maps)}",
+   "new": "if not is_mention(where)}",
+   "selector": "tests.test_literal_sinks",
+   "source": "transcript",
+   "verdict_2026_11_22": "CAUGHT"
+  },
+  {
+   "claim": "L2084 slice 14",
+   "name": "field operand missing",
+   "module": "bridgeforge/atlas/atlas_classfile.py",
+   "old": "elif op == _LDC_W or op in _INVOKES or 0xb2 <= op <= 0xb5:",
+   "new": "elif op == _LDC_W or op in _INVOKES:",
+   "selector": "tests.test_literal_sinks",
+   "source": "transcript",
+   "verdict_2026_11_22": "CAUGHT"
+  },
+  {
+   "claim": "L2084 slice 14",
+   "name": "two owners allowed",
+   "module": "bridgeforge/genome/literal_sinks.py",
+   "old": "and len(owners[field.rsplit(\".\", 1)[1]]) == 1 and",
+   "new": "and",
+   "selector": "tests.test_literal_sinks",
+   "source": "transcript",
+   "verdict_2026_11_22": "CAUGHT"
+  },
+  {
+   "claim": "L2084 slice 14",
+   "name": "loose scripts ignored",
+   "module": "bridgeforge/genome/literal_sinks.py",
+   "old": "and field.rsplit(\".\", 1)[1] not in named_loose)",
+   "new": ")",
+   "selector": "tests.test_literal_sinks",
+   "source": "transcript",
+   "verdict_2026_11_22": "CAUGHT"
+  },
+  {
+   "claim": "L2084 slice 14",
+   "name": "unread jar ignored",
+   "module": "bridgeforge/genome/closure.py",
+   "old": "    if unreadable or skipped:",
+   "new": "    if False:",
+   "selector": "tests.test_literal_sinks",
+   "source": "transcript",
+   "verdict_2026_11_22": "CAUGHT"
+  },
+  {
+   "claim": "L2084 slice 14",
+   "name": "jar source counted loose",
+   "module": "bridgeforge/genome/closure.py",
+   "old": "if package else Path(path).stem) not in names:",
+   "new": "if package else Path(path).stem) or True:",
+   "selector": "tests.test_literal_sinks",
+   "source": "transcript",
+   "verdict_2026_11_22": "CAUGHT"
+  },
+  {
+   "claim": "L2131 slice 15",
+   "name": "no check sinks",
+   "module": "bridgeforge/genome/literal_sinks.py",
+   "old": "CHECK_SINKS = frozenset({\"java/util/Collection.contains#0\",",
+   "new": "CHECK_SINKS = frozenset() or frozenset({\"x\",",
+   "selector": "tests.test_literal_sinks",
+   "source": "transcript",
+   "verdict_2026_11_22": "CAUGHT"
+  },
+  {
+   "claim": "L2131 slice 15",
+   "name": "keys are conditions",
+   "module": "bridgeforge/genome/closure.py",
+   "old": "for subject in subjects if checks]",
+   "new": "for subject in subjects]",
+   "selector": "tests.test_literal_sinks",
+   "source": "reconstructed",
+   "verdict_2026_11_22": "CAUGHT"
+  },
+  {
+   "claim": "L2131 slice 15",
+   "name": "unresolved passes single",
+   "module": "bridgeforge/genome/proof.py",
+   "old": "        isolation[\"verdict\"] = \"FAIL\"",
+   "new": "        pass",
+   "selector": "tests.test_gene_proof",
+   "source": "transcript",
+   "verdict_2026_11_22": "CAUGHT"
+  },
+  {
+   "claim": "L2131 slice 15",
+   "name": "needed genes asked",
+   "module": "bridgeforge/genome/proof.py",
+   "old": "{anchor: {**gene, \"needs\": {**gene[\"needs\"], \"genes\": []}}}",
+   "new": "{anchor: gene}",
+   "selector": "tests.test_gene_proof",
+   "source": "transcript",
+   "verdict_2026_11_22": "CAUGHT"
+  },
+  {
+   "claim": "L2131 slice 15",
+   "name": "conditions dropped",
+   "module": "bridgeforge/genome/gene.py",
+   "old": "\"conditions\": conditions,",
+   "new": "\"conditions\": [],",
+   "selector": "tests.test_literal_sinks",
+   "source": "transcript",
+   "verdict_2026_11_22": "CAUGHT"
+  },
+  {
+   "claim": "L2131 slice 15",
+   "name": "graphics bare key",
+   "module": "bridgeforge/genome/closure.py",
+   "old": "{f\"graphics:{detail}/{value}\" if kind == \"graphics\" else f\"{kind}:{value}\"",
+   "new": "{f\"{kind}:{value}\"",
+   "selector": "tests.test_literal_sinks",
+   "source": "transcript",
+   "verdict_2026_11_22": "CAUGHT"
+  },
+  {
+   "claim": "L2131 slice 15",
+   "name": "mentioned only for hits",
+   "module": "bridgeforge/genome/closure.py",
+   "old": "campaign.hits(value, literals)",
+   "new": "campaign.hits(value, set(mentioned))",
+   "selector": "tests.test_literal_sinks",
+   "source": "transcript",
+   "verdict_2026_11_22": "CAUGHT"
+  },
+  {
+   "claim": "L2131 slice 15",
+   "name": "no ambiguity note",
+   "module": "bridgeforge/genome/closure.py",
+   "old": "if len(subjects) > 1 else {}",
+   "new": "if False else {}",
+   "selector": "tests.test_literal_sinks",
+   "source": "transcript",
+   "verdict_2026_11_22": "CAUGHT"
+  },
+  {
+   "claim": "L2823 load-failure carrier (93.x)",
+   "name": "probe: failure unattributed dropped",
+   "module": "bridgeforge/probe/probe_record.py",
+   "old": "        (verdicts[failure[\"mod_id\"]][\"failures\"] if failure[\"mod_id\"] in verdicts else unattributed).append(entry)",
+   "new": "        pass",
+   "selector": "tests.test_probe_group.MergeAndReportTests",
+   "source": "transcript",
+   "verdict_2026_11_22": "CAUGHT"
+  },
+  {
+   "claim": "L2823 load-failure carrier (93.x)",
+   "name": "carrier description removed",
+   "module": "bridgeforge/genome/proof.py",
+   "old": "\"author\": \"BridgeForge gene proof\", \"description\": f\"Isolation carrier for {gene['anchors'][0]} (94.G2).\",",
+   "new": "",
+   "selector": "tests.test_gene_star_system.StarSystemGeneTests.test_prove_passes_both_static_halves_with_a_generated_carrier_plugin",
+   "source": "transcript",
+   "verdict_2026_11_22": "CAUGHT"
+  }
+ ]
+}
