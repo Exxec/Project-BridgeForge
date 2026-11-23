@@ -2525,10 +2525,37 @@ history as the closure benchmark, a cross-repository trace check, an early Java 
     - a vanilla style, and an undefined one;
     - the carrier copy, the subtraction keeping the style, and the proof input;
     - a set carrier;
-    - a start's ship needed, left in the donor, and carried by the set.
+    - a start's ship needed, left in the donor, and carried by the set;
+    - a malformed `needs.donor` failing `validate()`.
 
     The slice-18 and slice-19 tests changed with the rule: the start's ship is now a need, and the load-gap tests use an
     undefined style.
+
+    Mutation-checked: 12 mutants. Two survived (a vanilla style also read as missing; `needs.donor` validation skipped)
+    until their tests were added; then all were caught.
+  - **Independent review:** no critical finding. Fixed, with tests:
+    - **A vanilla id a start names became a gene need.** `ids_named_by_code` names core ids too, so a start naming `wolf_CS`
+      had a gene the set refused and could not carry. Only ids the mod defines are needs now; a core id stays a seed and
+      is filed as vanilla, as before.
+    - **A member that is also a need was subtracted.** An example is the gene's sprite that a shared style names as a cover.
+      The subtraction now keeps it and says so.
+    - **The subtraction copy is load-checked too.** Any load gap the donor itself lacks fails the subtraction proof. This
+      catches a gene file named by a style only other hulls use, which is not a need.
+    - **A style file outside the mod was copied outside the carrier.** A path with `..` or an absolute path is now not
+      carried; it goes to `unknowns.missing`, and slice 19's check fails the carrier on it.
+    - **A `#` in a style's file name crashed the proof.** It was read as a JSON entry; donor paths are now classed by
+      `member_file`.
+    - **`validate()` checks `needs.donor` on its own,** so a bad `needs.genes` cannot hide it, and refuses paths outside
+      the mod.
+
+    Not changed, and recorded here:
+    - A mod's override of a core style is not carried, so the carrier shows the vanilla look. This loses fidelity but
+      still loads.
+    - A style defined only by a declared dependency reads as missing in `unknowns.missing`. Nothing acts on that list;
+      `load_gaps` counts dependencies.
+    - Hull files are re-read once per style. This costs speed only.
+    - The rule covers every content id the start's code names that the mod defines, not only its ship. For P4 that is
+      the ship alone.
 - 94.G3 **Gene bank**: content-addressed store, alleles across the corpus, lineage, licence state; RevenantLib distributes genes
   from vanished authors (GD-3). The store's payloads live under `data_root()`, like `Done/`, never in this public
   repository; only manifests of the owner's own or permitted content become committed fixtures (2026-11-19).

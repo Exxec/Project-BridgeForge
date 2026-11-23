@@ -215,6 +215,7 @@ def _style_needs(root: Path, members: list[dict], vanilla_core: Path | None) -> 
     ones. Without the core a vanilla style cannot be told apart, so only styles the mod defines are judged."""
     from bridgeforge.genome.carrier_load import HULL_STYLES, _styles, files_named
     from bridgeforge.genome.closure import pointer
+    from bridgeforge.genome.evidence import path_problem
     from bridgeforge.scan.scanner import _load_lenient_json_file
 
     result: dict[str, list] = {"donor": [], "missing": [], "suspects": []}
@@ -238,8 +239,11 @@ def _style_needs(root: Path, members: list[dict], vanilla_core: Path | None) -> 
             continue
         entry = f"{HULL_STYLES}#{pointer(name)}"
         donor.add(entry)
-        donor.update(f for f in files_named(defined[name])
-                     if (Path(root) / f).is_file() and not (vanilla_core and (Path(vanilla_core) / f).is_file()))
+        for file in files_named(defined[name]):
+            if path_problem(file):  # review of slice 20: `../x.png` was copied outside the carrier
+                result["missing"].append(f"hull style {name} names {file!r}, not a path inside the mod: not carried")
+            elif (Path(root) / file).is_file() and not (vanilla_core and (Path(vanilla_core) / file).is_file()):
+                donor.add(file)
         if not _other_style_users(root, name, own):
             result["suspects"].append({"path": entry, "mentions": [], "reason": "a hull style only this gene's hulls use: kept a "
                                        "need, since the owner's 2026-11-23 ruling covers styles shared with other hulls"})
@@ -405,21 +409,26 @@ def _closed_plan(mod: Path, anchor: str, seeds: list[str], classes: list[str], v
     combat plugin's spawned variants are its gene) and the classes the campaign rows it names point at (P3: an industry's
     plugin). Returns the plan and the campaign ids of its final code (`campaign.campaign_ids`).
 
-    With `named_are_needs`, the content ids the code names are genes this one needs (`campaign["genes"]`), not seeds. Owner
-    2026-11-23 ("Separate, needed"): a custom start's starting ship is its own gene, which the start needs (slice 20)."""
+    With `named_are_needs`, the content ids the code names that the mod defines are genes this one needs (`campaign["genes"]`),
+    not seeds. Owner 2026-11-23 ("Separate, needed"): a custom start's starting ship is its own gene, which the start needs
+    (slice 20). An id only the core defines stays a seed, which vendor-plan files under `provided_by_vanilla` (review of
+    slice 20: a start naming `wolf_CS` made a vanilla variant a gene the set could not carry)."""
     from bridgeforge.genome.campaign import campaign_ids
     from bridgeforge.genome.closure import ids_named_by_code
+    from bridgeforge.vendor_plan import _Index
 
     needed: set[str] = set()
     plan = vendor_plan(mod, seeds, vanilla_core=vanilla_core, policy_path=policy_path, classes=classes)
+    own = _Index(Path(plan["provider"])) if named_are_needs else None
     for _round in range(8):
         root = Path(plan["provider"])
         code = _code_members(root, plan)
         named = [i for i in ids_named_by_code(root, code, vanilla_core) if i not in seeds and i != anchor]
         campaign = campaign_ids(root, code, vanilla_core)
-        if named_are_needs:
-            needed |= set(named)
-            named = []
+        if own is not None:
+            mine = {i for i in named if own.defines(*i.split(":", 1))}
+            needed |= mine
+            named = [i for i in named if i not in mine]
         more = [c for c in campaign["classes"] if c not in classes]
         if not named and not more:
             campaign["genes"] = sorted({*campaign["genes"], *needed})
@@ -612,6 +621,20 @@ def _licence_problem(licence: object, member_paths: set[str] | None) -> str | No
     return None
 
 
+def _donor_problem(needs: object) -> list[str]:
+    """`needs.donor` (slice 20), when present: member paths whose file part is a relative posix path inside the mod (no `..`).
+    Checked apart from `needs.genes`, so a bad `genes` list cannot hide a bad `donor` list (review of slice 20)."""
+    from bridgeforge.genome.evidence import path_problem
+    from bridgeforge.licence_ledger import member_file
+
+    if not isinstance(needs, dict) or "donor" not in needs:
+        return []
+    donor = needs["donor"]
+    if isinstance(donor, list) and all(isinstance(p, str) and p and not path_problem(member_file(p)) for p in donor):
+        return []
+    return ["needs.donor, when present, is a list of member paths (slice 20)"]
+
+
 def validate(gene: object) -> list[str]:
     """What keeps `gene` from being a schema-2 manifest; empty when it is one. Sister repositories read these files, so
     every field's shape is checked, and malformed input gives problems, never an exception."""
@@ -638,9 +661,7 @@ def validate(gene: object) -> list[str]:
         elif key == "needs" and "genes" in value and not (
                 isinstance(value["genes"], list) and all(isinstance(g, str) and ":" in g for g in value["genes"])):
             problems.append("needs.genes, when present, is a list of 'kind:id' anchors")
-        elif key == "needs" and "donor" in value and not (
-                isinstance(value["donor"], list) and all(isinstance(p, str) and p for p in value["donor"])):
-            problems.append("needs.donor, when present, is a list of member paths (slice 20)")
+    problems += _donor_problem(gene["needs"])
     for key in ("build", "provenance"):
         if not isinstance(gene[key], dict):
             problems.append(f"{key} is an object")
