@@ -1428,6 +1428,25 @@ history as the closure benchmark, a cross-repository trace check, an early Java 
   gene. Project Go exports a gene's strings as one unit. Acceptance adds (WP5): every proof file carries the evidence header
   and passes `gene evidence check` against its gene with `--root`. Started 2026-11-19 on the owner's "Sounds good continue",
   with P1 offline; the boot halves of the proofs wait for live testing (paused by the owner the same day).
+  **Done 2026-11-23: acceptance met for all four pilots.**
+
+  | Pilot | Gene | Carrier boot | Subtraction boot |
+  |---|---|---|---|
+  | P1 | Scrapyard Armories, hull mod | P1B-CAR4-20261123: BOOTED | P1B-SUB3-20261123: BLOCKED_BY_DEPENDENT, which passes under the owner's 2026-11-20 ruling |
+  | P2 | Navarchy of Tania, combat plugin | P2B-CAR-20261123: BOOTED | P2B-SUB-20261123: BOOTED |
+  | P3 | Eridani Combine, a star system and its 79-gene set | P3B-CAR4-20261123: BOOTED | P3B-SUB-20261123: BOOTED |
+  | P4 | Bultach Coalition, custom start | P4B-CAR2-20261123: BOOTED | P4B-SUB-20261123: BOOTED |
+
+  Each boot was judged by `gene boot evaluate` against a fresh proof on Test1, whose identity, carrier id and tree hash
+  matched White_Legion's.
+  - **Evidence:** `gene evidence check` passed every proof and boot file of those folders: 18 of 18, inputs re-hashed.
+    The static proofs are checked against the donor's `working/`, the boot files against their proof folder.
+  - **Suspects:** each is listed in the gene's `unknowns`.
+  - **Project Go:** it exports a gene's strings (PG #17).
+  - **Limits recorded for G6:** a carried star system, industry or custom start reads NOT_OBSERVED. The probe does not
+    yet check that these appear in game.
+  - **Follow-up before G3:** expand faction tags (slice 24). The owner deferred the question to the advisor, who
+    recommended expanding hull and wing tags (2026-11-23).
   **Slice 1 Done 2026-11-19: `gene.json` schema 3 and P1's closure.**
   - Describing P1 (Scrapyard Armories `hullmod:sa_lobster_tanks`) showed two gaps:
     - the seven `sa_lobster_tanks_*` settings keys its script reads were only a SUSPECT covering the whole
