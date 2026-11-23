@@ -2932,6 +2932,53 @@ history as the closure benchmark, a cross-repository trace check, an early Java 
   - **Mutation check:** 25 mutants, all caught, eleven of them for the review's findings. The first version's 13 were
     caught too, one only after its test was added.
   - **Full suite:** 3534 tests, OK (skipped=13); hermeticity PASS.
+
+  **Slice 2a built 2026-11-23: `gene bank alleles`, the allele denominator (plan only).** Branch `feat/g3-bank-slice2a`.
+  The design, set with the advisor, is in `docs/GENE_BANK_DESIGN.md` ("Slice 2"). `corpus-index` knows no definitions and
+  holds no database of `Done/`; the census keeps only an archive's working copy. So a scan writes the denominator, and
+  nothing is put: no command removes a `sources.json` line.
+  - **`bridgeforge/genome/alleles.py`:**
+    - *Roots:* the layouts BridgeForge writes. In an archive, `<Mod>/` is `archive`, the roots under `original/` are
+      `original`, and `alt-original-descriptions/` is listed as skipped. In a workspace, `working/` and `original/` count,
+      and every other copy (proof carriers, scratch) is listed as skipped. `_replaced-*` archives are kept.
+    - *Zips:* read for `mod_info.json` only. A zip is a packaged copy only when those bytes equal a scanned copy's.
+    - *Defines:* the describer's own tables, kind by kind.
+    - *Mentions:* a whole-word search of every text file and jar entry. Class files go through
+      `iter_class_files_in_jars`, which now skips and lists a Deflate64 or encrypted entry instead of ending the walk.
+    - *Errors:* recorded per root and per zip; the run goes on and exits 1.
+    - *Checkpoint:* rows are keyed by path and `mod_info.json` hash, behind a header holding digests.
+  - **Calibration, White_Legion's `In operation/` (rig excluded):** 16 roots. The four pilot anchors are defined by exactly
+    the eight banked sources, and no other root defines a banked anchor. 0 errors, 0 unreadable files; 74 BridgeForge
+    copies listed as skipped.
+  - **Test1's `Done/`:** 616 roots (196 `archive`, 420 `original`) in about 20 minutes.
+    - Each pilot anchor is defined by 3 copies of one release: the archived revival, its original, and a release folder.
+      That makes 12 roots.
+    - No root outside the pilot families defines any banked anchor.
+    - 12 roots only mention P3's star-system name, a common word that other mods also use.
+    - 0 errors, 0 unreadable files; 43 skipped copies.
+    - 474 zips: 454 are packaged copies; 19 are archive only, none of them a pilot mod; 1 holds no mod.
+    - 4 `.7z`/`.rar` files are unread, none of them a pilot mod.
+    - The plan stays on Test1; only these counts are recorded here.
+  - **Independent review:** four high and three medium findings, each reproduced by a probe; all fixed.
+    - The archive layout was unknown: the revival read as an author's copy, and the alt-descriptions copy as an allele.
+    - A resume reused rows after the anchors changed.
+    - An author's zip read as covered by a revival with the same id and version.
+    - One Deflate64 zip ended the run; one bad jar entry hid the rest of its jar; skipped copies were dropped silently.
+    - Low, also fixed: class constants are matched without the leading word check, because their length byte may be a
+      letter.
+  - **Tests:** `tests/test_gene_alleles.py`, 10 tests:
+    - the archive and workspace layouts, links, excludes and zip depth;
+    - every kind's definition;
+    - the plan's rows, zips, skipped copies and unreadable entries;
+    - an error per root and per zip;
+    - the refusals;
+    - resume, restart on new anchors, a refreshed copy and an error retried.
+  - **Mutation check:** 41 mutants, all caught.
+  - **Full suite:** 3544 tests, OK (skipped=13); hermeticity PASS.
+  - **Next, slice 2b:**
+    - refusal rows in `entries.json`;
+    - folder kind `archive`;
+    - putting the plan's pilot roots, into a scratch bank first, then into Test1's bank, which becomes the bank's home.
 - 94.G4 **Adaptation**: target-impact, gated fixers and `src-to-jar` at gene scope; Project Go carries translations; SpriteForge
   validates sprites and slots.
   **Project Go's part, slice 1 (2026-11-22, Project-Go #19): `ssmt-cli gene-carry`, a read-only report.**
