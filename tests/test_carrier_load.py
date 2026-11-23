@@ -47,6 +47,30 @@ class LoadGapTests(unittest.TestCase):
         self.assertEqual(gaps, [{"finding": "hull-style-file-missing", "file": HULL_STYLES, "style": "FX_STYLE",
                                  "path": "graphics/covers/large.png"}])
 
+    def test_a_declared_dependency_s_styles_and_files_count_and_unreadable_files_are_their_own_gaps(self) -> None:
+        # Review of slice 19: a library the carrier depends on merges its styles too; a broken file is not an undefined style.
+        with resolved_temp_dir() as root:
+            carrier, library = root / "carrier", root / "library"
+            _write(library / HULL_STYLES, json.dumps({"LIB_STYLE": {"slotCoverSmallTurret": "graphics/lib/c.png"}}))
+            _write(library / "graphics" / "lib" / "c.png", "png")
+            _write(carrier / "data" / "hulls" / "a.ship", json.dumps({"hullId": "a", "style": "LIB_STYLE"}))
+            _write(carrier / "data" / "hulls" / "plain.ship", json.dumps({"hullId": "plain"}))  # no style: nothing to check
+            _write(carrier / "data" / "hulls" / "broken.ship", "{not json")
+            _write(carrier / HULL_STYLES, json.dumps({"OWN": {"slotCoverLargeTurret": "/graphics/lib/c.png",
+                                                              "slotCoverSmallTurret": "graphics\\LIB\\D.PNG",
+                                                              "damageDecalSheet": "../outside.png"}}))
+            core = _core(root)
+            with_library = load_gaps(carrier, core, [library])
+            without = load_gaps(carrier, core)
+            (carrier / HULL_STYLES).write_text("[1, 2]", encoding="utf-8")
+            unreadable = load_gaps(carrier, core, [library])
+        self.assertEqual(sorted((g["finding"], g.get("style"), g.get("path")) for g in with_library),
+                         [("hull-file-unreadable", None, None),
+                          ("hull-style-file-missing", "OWN", "../outside.png"),    # never looked up outside the folders
+                          ("hull-style-file-missing", "OWN", "graphics/LIB/D.PNG")])  # a backslash and an upper-case suffix
+        self.assertIn(("hull-style-undefined", "LIB_STYLE"), [(g["finding"], g.get("style")) for g in without])
+        self.assertIn("hull-styles-unreadable", [g["finding"] for g in unreadable])
+
     def test_a_style_names_only_its_image_and_sound_files(self) -> None:
         nested = {"a": {"b": ["graphics/x/one.png", "sounds/two.ogg"]}, "c": "LOW_TECH", "d": "#ffffff", "e": "notes/readme.txt"}
         self.assertEqual(files_named(nested), ["graphics/x/one.png", "sounds/two.ogg"])
@@ -80,6 +104,20 @@ class ProofTests(unittest.TestCase):
             isolation = json.loads((root / "proofs" / "isolation-proof.json").read_text(encoding="utf-8"))
         self.assertEqual(isolation["verdict"], "FAIL")
         self.assertEqual([(g["finding"], g["style"]) for g in isolation["load_gaps"]], [("hull-style-undefined", "FX_STYLE")])
+
+    def test_without_a_core_the_check_does_not_run_and_a_vanilla_styled_hull_still_passes(self) -> None:
+        # Review of slice 19: without the core every vanilla style would read as undefined.
+        with resolved_temp_dir() as root:
+            mod = root / "mod"
+            _write(mod / "mod_info.json", json.dumps({"id": "demomod", "name": "Demo", "version": "1.0", "gameVersion": "0.98.5a-RC7"}))
+            _write(mod / "data" / "hulls" / "ship_data.csv", "name,id\nShip,fx_ship\n")
+            _write(mod / "data" / "hulls" / "fx_ship.ship", json.dumps({"hullId": "fx_ship", "style": "LOW_TECH"}))
+            prove(mod, "hull:fx_ship", root / "no-core")
+            prove(mod, "hull:fx_ship", root / "with-core", vanilla_core=_core(root))
+            no_core = json.loads((root / "no-core" / "isolation-proof.json").read_text(encoding="utf-8"))
+            with_core = json.loads((root / "with-core" / "isolation-proof.json").read_text(encoding="utf-8"))
+        self.assertTrue(no_core["load_gaps"].startswith("NOT_RUN"))
+        self.assertEqual((with_core["load_gaps"], with_core["verdict"]), ([], "PASS"))
 
 
 if __name__ == "__main__":

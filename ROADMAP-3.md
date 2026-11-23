@@ -2486,6 +2486,16 @@ history as the closure benchmark, a cross-repository trace check, an early Java 
     - a hull gene's proof and a gene set's proof failing.
 
     Mutation-checked: 7 mutants. The set proof's one survived until its test was added; then all were caught.
+  - **Independent review:** no critical finding. Fixed, with tests:
+    - without `--vanilla-core` every hull with a vanilla style read as undefined; the check now records itself NOT_RUN;
+    - a style or file from a declared dependency (a library in `--provider-root` whose id is in `needs.mods`) counts as
+      present, since the game merges that mod's files too;
+    - an unreadable hull, skin or styles file is its own gap (`hull-file-unreadable`, `hull-styles-unreadable`), not
+      taken for undefined styles;
+    - a leading `/` is dropped, a backslash path and an upper-case suffix are read, and a path with `..` is never looked
+      up outside its folders.
+
+    The real carriers measure the same.
 - 94.G3 **Gene bank**: content-addressed store, alleles across the corpus, lineage, licence state; RevenantLib distributes genes
   from vanished authors (GD-3). The store's payloads live under `data_root()`, like `Done/`, never in this public
   repository; only manifests of the owner's own or permitted content become committed fixtures (2026-11-19).
