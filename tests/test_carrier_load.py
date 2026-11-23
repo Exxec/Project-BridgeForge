@@ -31,7 +31,8 @@ class LoadGapTests(unittest.TestCase):
             carrier = root / "carrier"
             _write(carrier / "data" / "hulls" / "a.ship", json.dumps({"hullId": "a", "style": "FX_STYLE"}))
             _write(carrier / "data" / "hulls" / "b.ship", json.dumps({"hullId": "b", "style": "LOW_TECH"}))  # the core's
-            _write(carrier / "data" / "hulls" / "skins" / "c.skin", json.dumps({"skinHullId": "c", "style": "SKIN_STYLE"}))
+            _write(carrier / "data" / "hulls" / "skins" / "c.skin", json.dumps({"skinHullId": "c", "baseHullId": "b",
+                                                                                 "style": "SKIN_STYLE"}))
             gaps = load_gaps(carrier, _core(root))
         self.assertEqual([(g["finding"], g["file"], g["style"]) for g in gaps],
                          [("hull-style-undefined", "data/hulls/a.ship", "FX_STYLE"),

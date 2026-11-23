@@ -61,8 +61,9 @@ def _held(relative: str, roots: list[Path]) -> bool:
 def load_gaps(carrier: Path, vanilla_core: Path, dependencies: list[Path] | None = None) -> list[dict]:
     """[{finding, file, ...}]: each hull or skin whose `style` neither the carrier, a declared dependency's folder nor the core
     defines (`hull-style-undefined`); each file a style the carrier defines names that none of them holds
-    (`hull-style-file-missing`); and each hull, skin or styles file that cannot be read (`hull-file-unreadable`,
-    `hull-styles-unreadable`)."""
+    (`hull-style-file-missing`); each hull, skin or styles file that cannot be read (`hull-file-unreadable`,
+    `hull-styles-unreadable`); and each phase sprite a carrier hull needs that none of them holds (`hull-phase-sprite-missing`,
+    RC8-51; slice 21)."""
     from bridgeforge.scan.scanner import _load_lenient_json_file
 
     carrier = Path(carrier)
@@ -86,6 +87,31 @@ def load_gaps(carrier: Path, vanilla_core: Path, dependencies: list[Path] | None
         for relative in files_named(own[name]):
             if not _held(relative, [carrier, *others]):
                 gaps.append({"finding": "hull-style-file-missing", "file": HULL_STYLES, "style": name, "path": relative})
+    return gaps + _phase_sprite_gaps(carrier, others)
+
+
+def _phase_sprite_gaps(carrier: Path, others: list[Path]) -> list[dict]:
+    """Each image the game derives for a carrier hull from a phase system (`<sprite>_glow1.png`; RC8-51) that neither the
+    carrier, a declared dependency nor the core holds (`hull-phase-sprite-missing`). A hull the check cannot judge fails
+    closed (`hull-phase-unresolved`): a skin whose base hull none of them defines, or a phase hull whose ship system none of
+    them defines (review of slice 21: a dependency the proof was not given hid both)."""
+    from bridgeforge.phase_sprites import hull_facts, is_phase, light_index, phase_sprite_paths, phase_systems
+
+    indexes = [light_index(carrier), *(light_index(root) for root in others)]
+    systems = phase_systems(indexes)
+    defined = {ident for index in indexes for ident in index.system}
+    gaps = []
+    for ident, spec in sorted({**indexes[0].ship, **indexes[0].skin}.items()):
+        file = spec.relative_to(carrier).as_posix()
+        facts = hull_facts(ident, indexes)
+        if facts is None or (is_phase(facts) and facts["system"] and facts["system"] not in defined):
+            why = "its base hull is defined nowhere" if facts is None else f"its ship system {facts['system']} is defined nowhere"
+            gaps.append({"finding": "hull-phase-unresolved", "file": file, "hull": ident,
+                         "reason": f"{why}, so its phase sprites cannot be checked"})
+            continue
+        for relative, reason in phase_sprite_paths(ident, indexes, systems):
+            if not _held(relative, [carrier, *others]):
+                gaps.append({"finding": "hull-phase-sprite-missing", "file": file, "hull": ident, "path": relative, "reason": reason})
     return gaps
 
 

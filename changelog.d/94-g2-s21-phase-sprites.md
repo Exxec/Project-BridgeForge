@@ -1,0 +1,1 @@
+- `gene describe`/`prove`, `vendor-plan` (94.G2 slice 21): a phase hull's derived images (`<sprite>_glow1.png`, `_glow2.png`; RC8_BEHAVIOUR RC8-51) are part of its closure, and a gene carrier missing one has the load gap `hull-phase-sprite-missing`.
