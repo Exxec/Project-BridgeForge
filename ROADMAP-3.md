@@ -3227,9 +3227,35 @@ fixes of 93.28. 93.26-93.35 are that day's findings.
         cannot deploy twice;
       - log `getMaxStrength()` in the end line;
       - plan a section through its parent, and count it deployed when its parent deployed.
+  **Built 2026-11-23, probe 0.3.6; open until a live run passes.**
+  - **`BfProbeCombatPlugin`:** 5 s after both sides are first seen, once the opening deployment is done, it spawns what
+    is still in reserve with `CombatFleetManagerAPI.spawnFleetMember`.
+    - The spawned ships go in a spread line on each side's half of the map (`CombatEngineAPI.getMapWidth/getMapHeight`).
+    - A member still in reserve after its spawn is removed by the probe (`removeFromReserves`), so it cannot deploy twice.
+    - `combat-reserves-spawn` counts spawned and removed members and gives the maximum strength; the end line
+      (`combat-reserves`) gives it too.
+    - javap of RC7's `starfarer.api.jar`, 2026-11-23. The calls are guarded like the other helpers.
+  - The 0.3.5 raise stays: its lines show whether the game ever keeps it.
+  - **Independent review:** no critical finding. Fixed:
+    - all spawns in one frame could stall past the runaway limit and end the round, so they are planned once and made 4
+      per frame, and a spawn frame is not metered as slow;
+    - a spawn that returns null leaves the member in reserve, and the line names its hull;
+    - the plan line gives the first spawn position and facing, so the next run shows the sides' convention.
+  - Rebuilt with `build-probe-mod` against RC7 (55 classes, class version 61); release copy 0.3.6.
 - 93.68 (S) **A ship section takes a standalone slot in the probe plan.** See 93.67's live result: 32 of Bultach's 108
   planned hulls are sections other variants list under `modules`. Plan them through their parent (the parent's variant
   brings them), and judge their coverage by the parent's deployment.
+  **Built 2026-11-23 with probe 0.3.6.**
+  - A hull that the variant the plan deploys for its parent lists under `modules` stays in `hulls`, so the content check
+    still covers its spec. It gets no fleet slot (no entry in `variants`); `hulls_sections` lists it, and group configs
+    keep the list. Review of 0.3.6: a parent deployed through a variant without modules leaves its section a ship of its
+    own (`test_a_section_whose_parent_deploys_without_modules_keeps_its_own_slot`).
+  - The probe logs every ship it sees, modules included, so a section logs its deployment when its parent's ship appears,
+    and the report's undeployed list then leaves it out.
+  - Tests: `tests/test_probe_config.py` `test_a_ship_section_is_checked_but_fights_only_with_its_parent`;
+    `tests/test_probe_group.py` `MergedHullListsTests`; `test_probe_contract` (`hulls_sections` is Python-only).
+  - Mutation-checked: 4 mutants. The group-config one survived until `MergedHullListsTests` was added; then all were
+    caught.
 - 93.64 (S) **A gate whose subject left Done/ had no state to close it.** bf-0b-15 (SEEKER Betelgeuse modules survive save
   and reload) tests SEEKER 0.3.0+bf.5's Betelgeuse and TWIG code. That archive moved to `Done/_replaced-2026-11-17/` when
   SEEKER 0.6.6 replaced it, and 0.6.6 has neither. The owner ruled 2026-11-19: "Close as superseded". `gates.json` allowed
