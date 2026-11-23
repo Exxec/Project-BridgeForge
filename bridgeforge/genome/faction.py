@@ -290,8 +290,9 @@ def describe_faction(mod: Path, ident: str, vanilla_core: Path | None, policy_pa
     vanilla += commodity_needs
     missing += commodity_missing
     registrations, notes = _registrations(root, ident)
-    suspects = ([{"path": path, "mentions": tags, "reason": "the faction's lists name tags: sets of hulls, weapons or wings, "
-                  "recorded and not expanded"}] if tags else [])
+    suspects = ([{"path": path, "mentions": tags, "reason": "the faction's lists name tags: hull and fighter tags are expanded "
+                  "for its fleet (slice 24, faction_fleet.known); weapon and hull mod tags are recorded and not expanded"}]
+                if tags else [])
     suspects += (commodity_suspects + _unread(path, faction) + notes + ([description_suspect] if description_suspect else [])
                  + fleet["suspects"])
     members.sort(key=lambda m: (m["what"], m["path"]))

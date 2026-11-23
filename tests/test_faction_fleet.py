@@ -103,6 +103,51 @@ class ReviewTests(unittest.TestCase):
         self.assertEqual((result["refused"], [g for g in proof["load_gaps"] if g["finding"].startswith("ship-role")]), (0, []))
 
 
+class TagTests(unittest.TestCase):
+    """Slice 24 (2026-11-23; the owner deferred to the advisor, who recommended expanding hull and wing tags). RC7 javap:
+    SpecStore adds every hull whose spec has any of a block's `tags`; hull tags are ship_data.csv's comma-separated `tags`
+    column; a skin clears its base hull's tags and has only its own `.skin` `tags`."""
+
+    def _tag_mod(self, root):
+        faction = {**FACTION, "knownShips": {"tags": ["demo_bp", "nothing_bp"], "hulls": []},
+                   "knownFighters": {"tags": ["demo_bp"], "fighters": []}}
+        mod = _mod(root, faction=faction)
+        _write(mod / "data" / "hulls" / "ship_data.csv",
+               'name,id,tags\nDemo,demo_hull,"demo_bp, other"\nOther,other_hull,elsewhere\nHound,hound,\n')
+        _write(mod / "data" / "hulls" / "demo_skin.skin", json.dumps({"baseHullId": "demo_hull", "skinHullId": "demo_skin", "tags": ["demo_bp"]}))
+        _write(mod / "data" / "hulls" / "plain_skin.skin", json.dumps({"baseHullId": "demo_hull", "skinHullId": "plain_skin"}))
+        _write(mod / "data" / "hulls" / "wing_data.csv", "id,variant,tags\ndemo_wing,demo_hull_Var1,demo_bp\n")
+        _write(mod / "data" / "variants" / "demo_hull_Var1.variant", json.dumps({"variantId": "demo_hull_Var1", "hullId": "demo_hull"}))
+        _write(mod / "data" / "variants" / "other_Var1.variant", json.dumps({"variantId": "other_Var1", "hullId": "other_hull"}))
+        _write(mod / ROLES_FILE, json.dumps({"combatSmall": {"demo_hull_Var1": 5, "other_Var1": 3}}))
+        return mod
+
+    def _tag_core(self, root):
+        core = _core(root)
+        _write(core / "data" / "hulls" / "ship_data.csv", "name,id,tags\nWolf,wolf,base_bp\nHound,hound,demo_bp\n")
+        return core
+
+    def test_tags_reach_tagged_hulls_skins_by_their_own_tags_wings_and_a_mod_row_wins(self) -> None:
+        from bridgeforge.genome.faction_fleet import known
+        from bridgeforge.vendor_plan import _Index
+
+        with resolved_temp_dir() as root:
+            mod, core = self._tag_mod(root), self._tag_core(root)
+            knows = known(json.loads((mod / "data" / "world" / "factions" / "demo.faction").read_text(encoding="utf-8")),
+                          _Index(mod), _Index(core))
+        self.assertEqual(knows["by_tag"]["hull"], {"demo_hull", "demo_skin"})  # not plain_skin; hound's mod row has no tag
+        self.assertEqual(knows["by_tag"]["wing"], {"demo_wing"})
+        self.assertEqual(knows["unmatched"], {"nothing_bp"})  # demo_bp, in both lists, is matched by a hull and a wing
+
+    def test_a_tag_known_faction_needs_its_tagged_hulls_and_their_role_variants(self) -> None:
+        with resolved_temp_dir() as root:
+            gene = describe(self._tag_mod(root), "faction:demo_faction", vanilla_core=self._tag_core(root))
+        self.assertTrue({"hull:demo_hull", "hull:demo_skin", "wing:demo_wing", "variant:demo_hull_Var1"} <= set(gene["needs"]["genes"]))
+        self.assertNotIn("hull:other_hull", gene["needs"]["genes"])
+        self.assertEqual(gene["needs"]["donor"], [f"{ROLES_FILE}#/combatSmall/demo_hull_Var1"])
+        self.assertIn(["nothing_bp"], [s["mentions"] for s in gene["unknowns"]["suspects"] if s["path"] == ROLES_FILE])
+
+
 class RoleGapTests(unittest.TestCase):
     def test_a_carrier_role_entry_nothing_defines_is_a_gap_and_the_subtraction_check_skips_it(self) -> None:
         with resolved_temp_dir() as root:
