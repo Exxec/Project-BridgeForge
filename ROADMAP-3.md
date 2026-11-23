@@ -2495,7 +2495,8 @@ history as the closure benchmark, a cross-repository trace check, an early Java 
     - a leading `/` is dropped, a backslash path and an upper-case suffix are read, and a path with `..` is never looked
       up outside its folders.
 
-    The real carriers measure the same.
+    The real carriers measure the same. The review's 4 mutants were all caught, once the `..` test placed a file that the
+    path would reach.
 - 94.G3 **Gene bank**: content-addressed store, alleles across the corpus, lineage, licence state; RevenantLib distributes genes
   from vanished authors (GD-3). The store's payloads live under `data_root()`, like `Done/`, never in this public
   repository; only manifests of the owner's own or permitted content become committed fixtures (2026-11-19).
