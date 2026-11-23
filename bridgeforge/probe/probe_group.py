@@ -587,9 +587,26 @@ def expand_also_enable(requested: list[str], installed: dict[str, str]) -> list[
     return ids
 
 
+STALE_STAGED_DIR = "_stale-staged"
+
+
+def _stale_holding(target: Path) -> Path:
+    """`<rig>/_stale-staged/<UTC time>/<target folder>` for a rig mod folder `<rig>/mods/<name>`; a new folder per sync."""
+    from datetime import datetime, timezone
+
+    base = target.parent.parent / STALE_STAGED_DIR / datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+    holding, n = base, 2
+    while (holding / target.name).exists():  # two syncs in one second: never mix them
+        holding, n = base.with_name(f"{base.name}-{n}"), n + 1
+    return holding / target.name
+
+
 def sync_working_copy(working: Path, target: Path) -> str | None:
     """Copy a working copy's shipped files into the rig folder `target` (a new folder: all of them; an existing one: the missing and
-    different ones, never deleting extras). "copied", "synced N file(s)", or None when the rig copy already matches."""
+    different ones). A rig file the working copy no longer ships is moved into `<rig>/_stale-staged/<UTC time>/<name>/`, never
+    deleted (96.12: Broken Star's bf.4 moved two .wpn files, the rig kept the old ones, and record refused a passing run as
+    "staged files differ from the candidate working copy"). "copied", "synced N file(s)" (and what was moved aside), or None
+    when the rig copy already matches."""
     if not target.exists():
         for relative, source in _collect(working).items():
             (target / relative).parent.mkdir(parents=True, exist_ok=True)
@@ -601,7 +618,14 @@ def sync_working_copy(working: Path, target: Path) -> str | None:
     for relative in [*drift["missing_in_deployed"], *(d["path"] for d in drift["different"])]:
         (target / relative).parent.mkdir(parents=True, exist_ok=True)
         shutil.copy2(working / relative, target / relative)
-    return f"synced {drift['drift_count']} file(s)"
+    stale = drift["extra_in_deployed"]
+    if not stale:
+        return f"synced {drift['drift_count']} file(s)"
+    deployed_root, holding = Path(drift["deployed_root"]), _stale_holding(target)
+    for relative in stale:
+        (holding / relative).parent.mkdir(parents=True, exist_ok=True)
+        shutil.move(str(deployed_root / relative), str(holding / relative))
+    return f"synced {drift['drift_count']} file(s); moved {len(stale)} the working copy no longer has to {holding}"
 
 
 def _stage_member_scenario(working: Path, rig_copy: Path, workspace: str) -> dict | None:
