@@ -95,6 +95,23 @@ class ProbeConfigBuildTests(unittest.TestCase):
         self.assertNotIn("fx_module1_alt2", config["hulls"])  # a skin of the mod's module skin
         self.assertIn("station_fx", config["hulls"])          # the station itself is a ship
 
+    def test_a_ship_section_is_checked_but_fights_only_with_its_parent(self) -> None:
+        # 93.68: P035-BULTACH-20261122 gave 32 of 108 planned hulls (ship sections without the MODULE hint) a fleet slot.
+        with tempfile.TemporaryDirectory() as directory:
+            mod = _make_fixture_mod(Path(directory))
+            csv = mod / "data" / "hulls" / "ship_data.csv"
+            csv.write_text(csv.read_text(encoding="utf-8") + "fx_big,\nfx_big_arm,\nfx_big_bare_arm,\n", encoding="utf-8")
+            variants = mod / "data" / "variants"
+            (variants / "fx_big_arm_Std.variant").write_text('{"hullId":"fx_big_arm","variantId":"fx_big_arm_Std"}', encoding="utf-8")
+            (variants / "fx_big_Std.variant").write_text(
+                '{"hullId":"fx_big","variantId":"fx_big_Std","modules":{"WS 001":"fx_big_arm_Std"}}', encoding="utf-8")
+            config = build_probe_config(mod)
+        self.assertIn("fx_big_arm", config["hulls"])            # its spec is still checked
+        self.assertEqual(config["hulls_sections"], ["fx_big_arm"])
+        self.assertNotIn("fx_big_arm", config["variants"])      # no fleet slot of its own
+        self.assertEqual(config["variants"]["fx_big"], "fx_big_Std")
+        self.assertEqual(config["variants"]["fx_big_bare_arm"], "fx_big_bare_arm_Hull")  # not a section: no variant uses it
+
     def test_missing_mod_id_raises(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             mod = Path(directory) / "bad_mod"

@@ -600,8 +600,13 @@ def build_probe_config(
     hulls = _hull_inventory(mod_root)
     # Every ship fights, hidden or not (owner 2026-11-22): skins too, and a hull with no variant file as its empty `<id>_Hull`.
     deployable = sorted(set(hulls) | set(_skin_hulls(mod_root, hulls)))
-    variants = _variant_by_hull(mod_root, deployable)
-    empty_variant = sorted(hull for hull in deployable if hull not in variants)
+    # 93.68: a ship section, a hull another variant lists under `modules`, fights with its parent and logs its deployment when
+    # the parent's ship appears. It stays in `hulls` for the content check but gets no fleet slot of its own: P035-BULTACH-20261122
+    # gave 32 of its 108 planned hulls one, and 10 of the 49 hulls that never deployed were sections.
+    sections = sorted(_wing_or_module_hulls(mod_root) & set(deployable))
+    fleet = [hull for hull in deployable if hull not in sections]
+    variants = _variant_by_hull(mod_root, fleet)
+    empty_variant = sorted(hull for hull in fleet if hull not in variants)
     variants.update({hull: hull + EMPTY_VARIANT_SUFFIX for hull in empty_variant})
 
     merged_setups = parse_setups(setups)
@@ -624,6 +629,7 @@ def build_probe_config(
         "hulls": deployable,
         "variants": variants,
         "hulls_empty_variant": empty_variant,  # fight unarmed, as `<id>_Hull`: the mod ships no variant for them
+        "hulls_sections": sections,  # 93.68: fight with their parent ship, no fleet slot of their own
         "track_entities": sorted(set(track_entities or [])),
         "factions": _mod_faction_ids(mod_root),
         "patched_factions": _mod_patched_faction_ids(mod_root),

@@ -72,6 +72,56 @@ public class BfProbeCombatPlugin extends BaseEveryFrameCombatPlugin {
         }
     }
 
+    // 0.3.6 (ROADMAP-3 93.67): P035-BULTACH-20261122 deployed 59 of 108 planned hulls. The raise above did not last (the
+    // both-sides-seen line read the original maximum again), so the probe puts what is still in reserve into the battle itself,
+    // SPAWN_AFTER_SECONDS after both sides are first seen, once the opening deployment is done. CombatFleetManagerAPI
+    // .spawnFleetMember(FleetMemberAPI, Vector2f, float, float), removeFromReserves(FleetMemberAPI) and CombatEngineAPI
+    // .getMapWidth()/getMapHeight(): javap of RC7's starfarer.api.jar 2026-11-23. Each side's ships go in a spread line on its own
+    // half of the map (the player's side below the centre, facing up). A member still in reserve after its spawn is removed by
+    // the probe, so it cannot deploy twice; the line counts how many that took.
+    private static final float SPAWN_AFTER_SECONDS = 5f;
+    private static final float SPAWN_DEPTH = 0.3f;     // of the map height from the centre
+    private static final float SPAWN_SPREAD = 0.8f;    // of the map width the line spans
+    private float bothSeenAt = -1f;
+    private boolean reservesSpawned = false;
+
+    private static void spawnReserves(CombatEngineAPI engine) {
+        for (int owner = 0; owner <= 1; owner++) {
+            try {
+                com.fs.starfarer.api.combat.CombatFleetManagerAPI manager = engine.getFleetManager(owner);
+                List<FleetMemberAPI> reserves = manager == null ? null : manager.getReservesCopy();
+                int before = reserves == null ? 0 : reserves.size();
+                if (before == 0) {
+                    ProbeLog.emit("combat-reserves-spawn", ProbeLog.STATUS_INFO, "owner=" + owner, "none in reserve");
+                    continue;
+                }
+                float width = engine.getMapWidth();
+                float y = (owner == 0 ? -1f : 1f) * engine.getMapHeight() * SPAWN_DEPTH;
+                float facing = owner == 0 ? 90f : 270f;
+                int spawned = 0;
+                int removedByProbe = 0;
+                for (int i = 0; i < before; i++) {
+                    FleetMemberAPI member = reserves.get(i);
+                    float x = width * SPAWN_SPREAD * ((i + 0.5f) / before - 0.5f);
+                    if (manager.spawnFleetMember(member, new org.lwjgl.util.vector.Vector2f(x, y), facing, 0f) != null) {
+                        spawned++;
+                    }
+                    List<FleetMemberAPI> now = manager.getReservesCopy();
+                    if (now != null && now.contains(member)) {
+                        manager.removeFromReserves(member);
+                        removedByProbe++;
+                    }
+                }
+                List<FleetMemberAPI> left = manager.getReservesCopy();
+                ProbeLog.emit("combat-reserves-spawn", ProbeLog.STATUS_INFO, "owner=" + owner,
+                        "spawned " + spawned + " of " + before + "; removed from reserves by the probe " + removedByProbe
+                                + "; in reserve now " + (left == null ? 0 : left.size()) + " max=" + manager.getMaxStrength());
+            } catch (Throwable t) {
+                ProbeLog.emit("combat-reserves-spawn", ProbeLog.STATUS_WARN, "owner=" + owner, t.getClass().getName() + ": " + t.getMessage());
+            }
+        }
+    }
+
     /** Each side's reserves when the battle ends, by hull id: planned hulls that never deployed (93.67). */
     private static void reportReserves(CombatEngineAPI engine) {
         for (int owner = 0; owner <= 1; owner++) {
@@ -84,8 +134,9 @@ public class BfProbeCombatPlugin extends BaseEveryFrameCombatPlugin {
                         hulls.append(hulls.length() == 0 ? "" : ",").append(member == null ? "?" : member.getHullId());
                     }
                 }
+                String max = manager == null ? "" : " max=" + manager.getMaxStrength();  // 0.3.6: the limit at the end, too
                 ProbeLog.emit("combat-reserves", hulls.length() == 0 ? ProbeLog.STATUS_INFO : ProbeLog.STATUS_WARN, "owner=" + owner,
-                        hulls.length() == 0 ? "none left" : "never deployed: " + hulls);
+                        (hulls.length() == 0 ? "none left" : "never deployed: " + hulls) + max);
             } catch (Throwable t) {
                 ProbeLog.emit("combat-reserves", ProbeLog.STATUS_WARN, "owner=" + owner, t.getClass().getName() + ": " + t.getMessage());
             }
@@ -298,7 +349,12 @@ public class BfProbeCombatPlugin extends BaseEveryFrameCombatPlugin {
         }
         if (!limitsRaisedInBattle && seenPlayer && seenEnemy) {
             limitsRaisedInBattle = true;
+            bothSeenAt = engine.getTotalElapsedTime(false);
             raiseDeploymentLimits(engine, "both sides seen");
+        }
+        if (!reservesSpawned && bothSeenAt >= 0f && engine.getTotalElapsedTime(false) - bothSeenAt >= SPAWN_AFTER_SECONDS) {
+            reservesSpawned = true;
+            spawnReserves(engine);
         }
     }
 }
