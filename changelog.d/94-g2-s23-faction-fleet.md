@@ -1,0 +1,1 @@
+- `gene describe`/`prove-set` (94.G2 slice 23): a faction gene needs its fleet: the donor's `default_ship_roles.json` entries for the hulls and wings it knows are `needs.donor`, and their variants and wings are needed genes; the carrier check reports `ship-role-variant-missing` (RC8-46). RC8_BEHAVIOUR RC8-54.
