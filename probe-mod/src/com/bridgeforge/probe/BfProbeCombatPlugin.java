@@ -7,6 +7,7 @@ import com.fs.starfarer.api.combat.ShipAPI;
 import com.fs.starfarer.api.fleet.FleetMemberAPI;
 import com.fs.starfarer.api.input.InputEventAPI;
 
+import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
@@ -72,6 +73,101 @@ public class BfProbeCombatPlugin extends BaseEveryFrameCombatPlugin {
         }
     }
 
+    // 0.3.6 (ROADMAP-3 93.67): P035-BULTACH-20261122 deployed 59 of 108 planned hulls. The raise above did not last (the
+    // both-sides-seen line read the original maximum again), so the probe puts what is still in reserve into the battle itself,
+    // SPAWN_AFTER_SECONDS after both sides are first seen, once the opening deployment is done. CombatFleetManagerAPI
+    // .spawnFleetMember(FleetMemberAPI, Vector2f, float, float), removeFromReserves(FleetMemberAPI) and CombatEngineAPI
+    // .getMapWidth()/getMapHeight(): javap of RC7's starfarer.api.jar 2026-11-23. Each side's ships go in a spread line on its own
+    // half of the map (the player's side below the centre, facing up). A member still in reserve after its spawn is removed by
+    // the probe, so it cannot deploy twice; the line counts how many that took.
+    // Review of 0.3.6: about 50 spawns in one frame could stall past RUNAWAY_FRAME_MS and end the round as a runaway, so the
+    // spawns are planned once and made SPAWN_PER_FRAME at a time, and a spawn frame is not metered as a slow frame. A member
+    // whose spawn returned null stays in reserve and is named.
+    private static final float SPAWN_AFTER_SECONDS = 5f;
+    private static final int SPAWN_PER_FRAME = 4;
+    private static final float SPAWN_DEPTH = 0.3f;     // of the map height from the centre
+    private static final float SPAWN_SPREAD = 0.8f;    // of the map width the line spans
+    private float bothSeenAt = -1f;
+    private boolean spawnPlanned = false;
+    private final List<PendingSpawn> pendingSpawns = new ArrayList<PendingSpawn>();
+    private final int[] spawnedBySide = new int[2];
+    private final int[] removedBySide = new int[2];
+    private final StringBuilder[] failedBySide = {new StringBuilder(), new StringBuilder()};
+
+    private static final class PendingSpawn {
+        final int owner;
+        final FleetMemberAPI member;
+        final float x;
+        final float y;
+        final float facing;
+
+        PendingSpawn(int owner, FleetMemberAPI member, float x, float y, float facing) {
+            this.owner = owner;
+            this.member = member;
+            this.x = x;
+            this.y = y;
+            this.facing = facing;
+        }
+    }
+
+    private void planSpawns(CombatEngineAPI engine) {
+        for (int owner = 0; owner <= 1; owner++) {
+            try {
+                com.fs.starfarer.api.combat.CombatFleetManagerAPI manager = engine.getFleetManager(owner);
+                List<FleetMemberAPI> reserves = manager == null ? null : manager.getReservesCopy();
+                int count = reserves == null ? 0 : reserves.size();
+                if (count == 0) {
+                    ProbeLog.emit("combat-reserves-spawn", ProbeLog.STATUS_INFO, "owner=" + owner, "none in reserve");
+                    continue;
+                }
+                float width = engine.getMapWidth();
+                float y = (owner == 0 ? -1f : 1f) * engine.getMapHeight() * SPAWN_DEPTH;
+                float facing = owner == 0 ? 90f : 270f;
+                float firstX = 0f;
+                for (int i = 0; i < count; i++) {
+                    float x = width * SPAWN_SPREAD * ((i + 0.5f) / count - 0.5f);
+                    firstX = i == 0 ? x : firstX;
+                    pendingSpawns.add(new PendingSpawn(owner, reserves.get(i), x, y, facing));
+                }
+                ProbeLog.emit("combat-reserves-spawn", ProbeLog.STATUS_INFO, "owner=" + owner,
+                        "planned " + count + " from (" + Math.round(firstX) + "," + Math.round(y) + ") facing " + Math.round(facing)
+                                + " max=" + manager.getMaxStrength());
+            } catch (Throwable t) {
+                ProbeLog.emit("combat-reserves-spawn", ProbeLog.STATUS_WARN, "owner=" + owner, t.getClass().getName() + ": " + t.getMessage());
+            }
+        }
+    }
+
+    private void spawnSome(CombatEngineAPI engine) {
+        for (int made = 0; made < SPAWN_PER_FRAME && !pendingSpawns.isEmpty(); made++) {
+            PendingSpawn next = pendingSpawns.remove(0);
+            try {
+                com.fs.starfarer.api.combat.CombatFleetManagerAPI manager = engine.getFleetManager(next.owner);
+                if (manager.spawnFleetMember(next.member, new org.lwjgl.util.vector.Vector2f(next.x, next.y), next.facing, 0f) == null) {
+                    StringBuilder failed = failedBySide[next.owner];
+                    failed.append(failed.length() == 0 ? "" : ",").append(next.member == null ? "?" : next.member.getHullId());
+                    continue;  // left in reserve: the end line names it
+                }
+                spawnedBySide[next.owner]++;
+                List<FleetMemberAPI> now = manager.getReservesCopy();
+                if (now != null && now.contains(next.member)) {
+                    manager.removeFromReserves(next.member);
+                    removedBySide[next.owner]++;
+                }
+            } catch (Throwable t) {
+                ProbeLog.emit("combat-reserves-spawn", ProbeLog.STATUS_WARN, "owner=" + next.owner, t.getClass().getName() + ": " + t.getMessage());
+            }
+        }
+        lastNanos = 0L;  // a spawn frame is not a slow frame
+        if (pendingSpawns.isEmpty()) {
+            for (int owner = 0; owner <= 1; owner++) {
+                String failed = failedBySide[owner].length() == 0 ? "" : "; spawn returned null for " + failedBySide[owner];
+                ProbeLog.emit("combat-reserves-spawn", failed.isEmpty() ? ProbeLog.STATUS_INFO : ProbeLog.STATUS_WARN, "owner=" + owner,
+                        "spawned " + spawnedBySide[owner] + "; removed from reserves by the probe " + removedBySide[owner] + failed);
+            }
+        }
+    }
+
     /** Each side's reserves when the battle ends, by hull id: planned hulls that never deployed (93.67). */
     private static void reportReserves(CombatEngineAPI engine) {
         for (int owner = 0; owner <= 1; owner++) {
@@ -84,8 +180,9 @@ public class BfProbeCombatPlugin extends BaseEveryFrameCombatPlugin {
                         hulls.append(hulls.length() == 0 ? "" : ",").append(member == null ? "?" : member.getHullId());
                     }
                 }
+                String max = manager == null ? "" : " max=" + manager.getMaxStrength();  // 0.3.6: the limit at the end, too
                 ProbeLog.emit("combat-reserves", hulls.length() == 0 ? ProbeLog.STATUS_INFO : ProbeLog.STATUS_WARN, "owner=" + owner,
-                        hulls.length() == 0 ? "none left" : "never deployed: " + hulls);
+                        (hulls.length() == 0 ? "none left" : "never deployed: " + hulls) + max);
             } catch (Throwable t) {
                 ProbeLog.emit("combat-reserves", ProbeLog.STATUS_WARN, "owner=" + owner, t.getClass().getName() + ": " + t.getMessage());
             }
@@ -298,7 +395,15 @@ public class BfProbeCombatPlugin extends BaseEveryFrameCombatPlugin {
         }
         if (!limitsRaisedInBattle && seenPlayer && seenEnemy) {
             limitsRaisedInBattle = true;
+            bothSeenAt = engine.getTotalElapsedTime(false);
             raiseDeploymentLimits(engine, "both sides seen");
+        }
+        if (!spawnPlanned && bothSeenAt >= 0f && engine.getTotalElapsedTime(false) - bothSeenAt >= SPAWN_AFTER_SECONDS) {
+            spawnPlanned = true;
+            planSpawns(engine);
+        }
+        if (!pendingSpawns.isEmpty()) {
+            spawnSome(engine);
         }
     }
 }

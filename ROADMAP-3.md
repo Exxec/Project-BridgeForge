@@ -3275,6 +3275,8 @@ fixes of 93.28. 93.26-93.35 are that day's findings.
   - **Live 2026-11-22, probe 0.3.5 (P035-BULTACH-20261122): `<id>_Hull` proven.** `ork_sgoltadh` logged `combat-deployment`.
     No `.variant` file in the mod names that hull, and no variant lists one as a module, so only `ork_sgoltadh_Hull` could
     field it (RC8_BEHAVIOUR RC8-48). The other two empty-variant hulls stayed in reserve (93.67).
+  **Done 2026-11-23: the pass condition is met with probe 0.3.6 (93.67, 93.68).** P036-BULTACH-20261123 and
+  P036-TANIA-20261123 on Test1's RC7 rig: every planned hull, hidden or not, logged `combat-deployment`.
 - 93.67 (M) **Reserves never deploy before a probe battle's 60 s end, so not every planned hull fights.**
   P034-BULTACH-20261122 (Test1, RC7 rig, probe 0.3.4) had 108 planned hulls in 2 rounds of 60 (30 a side). Every one was
   added to a fleet with no `addToFleet` failure, but only 67 logged `combat-deployment`. Round 1 deployed 34 ships (modules
@@ -3323,9 +3325,46 @@ fixes of 93.28. 93.26-93.35 are that day's findings.
         cannot deploy twice;
       - log `getMaxStrength()` in the end line;
       - plan a section through its parent, and count it deployed when its parent deployed.
+  **Built 2026-11-23, probe 0.3.6; open until a live run passes.**
+  - **`BfProbeCombatPlugin`:** 5 s after both sides are first seen, once the opening deployment is done, it spawns what
+    is still in reserve with `CombatFleetManagerAPI.spawnFleetMember`.
+    - The spawned ships go in a spread line on each side's half of the map (`CombatEngineAPI.getMapWidth/getMapHeight`).
+    - A member still in reserve after its spawn is removed by the probe (`removeFromReserves`), so it cannot deploy twice.
+    - `combat-reserves-spawn` counts spawned and removed members and gives the maximum strength; the end line
+      (`combat-reserves`) gives it too.
+    - javap of RC7's `starfarer.api.jar`, 2026-11-23. The calls are guarded like the other helpers.
+  - The 0.3.5 raise stays: its lines show whether the game ever keeps it.
+  - **Independent review:** no critical finding. Fixed:
+    - all spawns in one frame could stall past the runaway limit and end the round, so they are planned once and made 4
+      per frame, and a spawn frame is not metered as slow;
+    - a spawn that returns null leaves the member in reserve, and the line names its hull;
+    - the plan line gives the first spawn position and facing, so the next run shows the sides' convention.
+  - Rebuilt with `build-probe-mod` against RC7 (55 classes, class version 61); release copy 0.3.6.
+  **Done 2026-11-23: passed live.** P036-BULTACH-20261123 and P036-TANIA-20261123 (Test1, RC7 rig, probe 0.3.6), both
+  LIVE_DONE:
+    - Bultach: 108 of 108 planned hulls logged `combat-deployment`, its 5 sections (through their parents) and its three
+      empty-variant hulls included. No hull deployed twice in a round. The spawns brought 30 ships in round 1 and 18 in
+      round 2. The worst frame was 660 ms, under the 2,000 ms runaway limit.
+    - Tania: 15 of 15; `tania_wader_main` came in by spawn.
+    - Every battle ended `reason=time` at 60 s; report FATAL 0, MOD-ERROR 0, members PASS.
+    - "removed from reserves by the probe 0" every time: `spawnFleetMember` takes the member out of the reserves itself
+      (RC8_BEHAVIOUR RC8-50).
 - 93.68 (S) **A ship section takes a standalone slot in the probe plan.** See 93.67's live result: 32 of Bultach's 108
   planned hulls are sections other variants list under `modules`. Plan them through their parent (the parent's variant
   brings them), and judge their coverage by the parent's deployment.
+  **Built 2026-11-23 with probe 0.3.6.**
+  - A hull that the variant the plan deploys for its parent lists under `modules` stays in `hulls`, so the content check
+    still covers its spec. It gets no fleet slot (no entry in `variants`); `hulls_sections` lists it, and group configs
+    keep the list. Review of 0.3.6: a parent deployed through a variant without modules leaves its section a ship of its
+    own (`test_a_section_whose_parent_deploys_without_modules_keeps_its_own_slot`).
+  - The probe logs every ship it sees, modules included, so a section logs its deployment when its parent's ship appears,
+    and the report's undeployed list then leaves it out.
+  - Tests: `tests/test_probe_config.py` `test_a_ship_section_is_checked_but_fights_only_with_its_parent`;
+    `tests/test_probe_group.py` `MergedHullListsTests`; `test_probe_contract` (`hulls_sections` is Python-only).
+  - Mutation-checked: 4 mutants. The group-config one survived until `MergedHullListsTests` was added; then all were
+    caught.
+  **Done 2026-11-23: passed live with 93.67** (P036-BULTACH-20261123: 5 sections planned through their parents, all
+  logged).
 - 93.64 (S) **A gate whose subject left Done/ had no state to close it.** bf-0b-15 (SEEKER Betelgeuse modules survive save
   and reload) tests SEEKER 0.3.0+bf.5's Betelgeuse and TWIG code. That archive moved to `Done/_replaced-2026-11-17/` when
   SEEKER 0.6.6 replaced it, and 0.6.6 has neither. The owner ruled 2026-11-19: "Close as superseded". `gates.json` allowed

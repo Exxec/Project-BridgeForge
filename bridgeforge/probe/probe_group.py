@@ -357,6 +357,7 @@ def merge_configs(configs: list[dict]) -> dict:
         "schema_version": 1, "target_mod_id": "group:" + ",".join(c["target_mod_id"] for c in configs),
         "hulls": [], "variants": {}, "track_entities": [], "factions": [], "patched_factions": [], "content_variants": {"ship": [], "other": []},
         "content_ship_hulls": {}, "content_special_items": [], "content_wings": [], "hulls_skipped_no_variant": [], "hulls_empty_variant": [],
+        "hulls_sections": [],
         "setups": [], "apply": configs[0].get("apply", "once-per-save") if configs else "once-per-save",
         "campaign_interval_days": min((c["campaign_interval_days"] for c in configs), default=5.0),
         "combat_seconds": max((c["combat_seconds"] for c in configs), default=60.0),
@@ -369,7 +370,7 @@ def merge_configs(configs: list[dict]) -> dict:
     if any("campaign_perf_p95_ms" in c for c in configs):
         merged["campaign_perf_p95_ms"] = max(c.get("campaign_perf_p95_ms", 0.0) for c in configs)
     for c in configs:
-        for key in ("hulls", "track_entities", "factions", "patched_factions", "content_special_items", "content_wings", "hulls_skipped_no_variant", "hulls_empty_variant",
+        for key in ("hulls", "track_entities", "factions", "patched_factions", "content_special_items", "content_wings", "hulls_skipped_no_variant", "hulls_empty_variant", "hulls_sections",
                     "class_sweep", "mod_commodities", "expect_supply"):
             merged[key] = sorted(set(merged[key]) | set(c.get(key) or []))
         for kind in ("ship", "wing"):
