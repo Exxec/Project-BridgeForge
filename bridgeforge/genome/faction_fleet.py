@@ -23,25 +23,67 @@ from pathlib import Path
 from bridgeforge.genome.combat_needs import _json_object
 
 ROLES_FILE = "data/world/factions/default_ship_roles.json"
-_KNOWN = {"knownShips": "hull", "priorityShips": "hull", "knownFighters": "wing", "priorityFighters": "wing"}
+# Only the known lists: RC7's ship and fighter picks in `Faction` check `knowsShip` before `isShipPriority`, and the priority
+# lists' loaders add to the priority sets only (javap, review of slice 24), so a priority-only hull is never fielded.
+_KNOWN = {"knownShips": "hull", "knownFighters": "wing"}
+SKINS_DIR = "data/hulls/skins"  # RC7's skin loader lists only this folder (review of slice 24)
 
 
-def known(faction: dict) -> dict[str, set[str]]:
-    """{"hull": ids, "wing": ids, "tags": tags} the faction's known and priority lists name. Tags are not expanded (a slice-10
-    decision); `fleet_needs` flags them."""
+def _split(value: object) -> set[str]:
+    return {t.strip() for t in str(value or "").split(",") if t.strip()}
+
+
+def tagged(index, kind: str) -> dict[str, set[str]]:
+    """{id: tags} of one folder's hulls (ship_data.csv `tags`, comma-separated; a skin has only its own `.skin` `tags`) or
+    wings (wing_data.csv `tags`). RC7 javap 2026-11-23: ShipHullSpreadsheetLoader splits the CSV column on ","; the skin
+    loader clones its base hull's spec, clears its tags and adds the skin's `tags` array."""
+    found = {ident: _split(row.get("tags")) for ident, row in index.rows.get(kind, {}).items()}
+    if kind == "hull":
+        # A CSV row with no `.ship` is skipped by the game ("not found in store"): it reaches nothing (review of slice 24).
+        found = {ident: tags for ident, tags in found.items() if ident in index.ship}
+        skins = Path(index.root) / SKINS_DIR if index.root is not None else None
+        for ident, path in index.skin.items():
+            if skins is None or skins not in Path(path).parents:
+                continue
+            tags = _json_object(path).get("tags")
+            found[ident] = {t.strip() for t in tags if isinstance(t, str) and t.strip()} if isinstance(tags, list) else set()
+    return found
+
+
+def known(faction: dict, mod_index=None, core_index=None) -> dict:
+    """What the faction's known and priority lists name: {"hull": ids, "wing": ids} (named or reached through a tag),
+    {"by_tag": {"hull": ids, "wing": ids}} (reached only through a tag), {"tags": {"hull": tags, "wing": tags}} and
+    {"unmatched": tags no hull or wing carries}. RC7's faction loader (`SpecStore`, javap 2026-11-23) adds every hull whose
+    spec `hasTag` any of the block's `tags`, then the block's named ids. Slice 24, the advisor's recommendation after the
+    owner deferred (2026-11-23): hull and wing tags are expanded against the mod and the core; a mod's row wins over the
+    core's for the same id."""
     from bridgeforge.genome.faction import LIST_FIELD
 
-    found: dict[str, set[str]] = {"hull": set(), "wing": set(), "tags": set()}
+    found: dict = {"hull": set(), "wing": set(), "by_tag": {"hull": set(), "wing": set()},
+                   "tags": {"hull": set(), "wing": set()}, "unmatched": set()}
     for key, kind in _KNOWN.items():
         block = faction.get(key)
         values = block.get(LIST_FIELD[kind]) if isinstance(block, dict) else None
         found[kind] |= {v for v in values if isinstance(v, str)} if isinstance(values, list) else set()
         tags = block.get("tags") if isinstance(block, dict) else None
-        found["tags"] |= {t for t in tags if isinstance(t, str)} if isinstance(tags, list) else set()
+        found["tags"][kind] |= {t for t in tags if isinstance(t, str)} if isinstance(tags, list) else set()
+    found["unmatched"] = {"hull": set(), "wing": set()}
+    for kind in ("hull", "wing"):
+        wanted = found["tags"][kind]
+        if not wanted:
+            continue
+        # A mod's CSV row replaces the core's whole row for the same id (LoadingUtils keeps the first row per id, the mod's).
+        carriers = {**(tagged(core_index, kind) if core_index is not None else {}),
+                    **(tagged(mod_index, kind) if mod_index is not None else {})}
+        reached = {ident for ident, tags in carriers.items() if tags & wanted}
+        found["by_tag"][kind] = reached - found[kind]
+        found[kind] |= reached
+        # Per kind (review of slice 24): a fighters tag no wing carries is flagged even when a hull carries it.
+        found["unmatched"][kind] = wanted - {t for ident in reached for t in carriers[ident]}
     return found
 
 
-def fleet_needs(root: Path, faction: dict, mod_index, core_index) -> dict[str, list]:
+def fleet_needs(root: Path, faction: dict, mod_index, core_index, path: str = "") -> dict[str, list]:
     """{"donor", "genes", "vanilla", "missing", "suspects"}: the role entries of the donor's `default_ship_roles.json` that
     name a variant of a hull the faction knows, or a wing it knows, and what each entry names. A role block with a chosen
     entry also brings its `includeDefault`/`fallback` keys. Review of slice 23: a faction that knows hulls or wings by tag,
@@ -50,7 +92,7 @@ def fleet_needs(root: Path, faction: dict, mod_index, core_index) -> dict[str, l
     from bridgeforge.genome.faction import ROLE_NOT_VARIANTS, ROLE_SKIPPED
 
     roles = _json_object(Path(root) / ROLES_FILE)
-    knows = known(faction)
+    knows = known(faction, mod_index, core_index)
     result: dict[str, list] = {"donor": [], "genes": [], "vanilla": [], "missing": [], "suspects": []}
     undefined = []
     for role, block in sorted(roles.items()):
@@ -70,10 +112,15 @@ def fleet_needs(root: Path, faction: dict, mod_index, core_index) -> dict[str, l
             result["genes" if mod_index.defines(kind, key) else "vanilla"].append(f"{kind}:{key}")
         if chosen:
             result["donor"] += [f"{ROLES_FILE}#{pointer(role)}{pointer(key)}" for key in [*chosen, *(k for k in block if k in ROLE_NOT_VARIANTS)]]
-    if knows["tags"] and roles:
-        result["suspects"].append({"path": ROLES_FILE, "mentions": sorted(knows["tags"]), "reason": "the faction knows hulls or "
-                                   "wings by tag, which is not expanded: role entries for them are not carried, so its fleet "
-                                   "may be partial or empty (RC8-54)"})
+    # Slice 24: a hull or wing the faction knows only through a tag is a gene it needs when the mod defines it, as a named one
+    # is (faction.py); one the core defines counts for role matching only.
+    for kind in ("hull", "wing"):
+        result["genes"] += [f"{kind}:{ident}" for ident in knows["by_tag"][kind] if mod_index.defines(kind, ident)]
+    for kind, label in (("hull", "knownShips tags that no hull"), ("wing", "knownFighters tags that no wing")):
+        if knows["unmatched"][kind]:
+            result["suspects"].append({"path": path or ROLES_FILE, "mentions": sorted(knows["unmatched"][kind]),
+                                       "reason": f"{label} of the mod or the core carries (perhaps a dependency's): what the "
+                                       "faction knows through them is not carried, so its fleet may be partial (RC8-54, RC8-55)"})
     if undefined:
         result["suspects"].append({"path": ROLES_FILE, "mentions": sorted(set(undefined)), "reason": "role entries whose variant "
                                    "or wing neither the mod nor the core defines (perhaps a dependency's): not judged"})

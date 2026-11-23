@@ -1,0 +1,1 @@
+- `gene describe`/`prove-set` (94.G2 slice 24): a faction's ship and fighter tags are expanded (RC8_BEHAVIOUR RC8-55), so a faction that knows its ships by tag carries its fleet; a tag nothing carries is a suspect.

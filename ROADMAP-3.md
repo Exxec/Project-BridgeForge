@@ -2810,6 +2810,62 @@ history as the closure benchmark, a cross-repository trace check, an early Java 
     is not taken. That matches vanilla data (core factions list skin ids), but the game's check is not javap-verified.
 
     Mutation check after the fixes: 17 mutants, all caught. Full suite: 3518 tests, OK (skipped=13); hermeticity PASS.
+  **Slice 24 built 2026-11-23: faction hull and wing tags are expanded** (RC8_BEHAVIOUR RC8-55). The owner deferred the
+  question to the advisor ("I can't tell if I would see tags or not and how it would affect gameplay vs. testing"). The
+  advisor recommended expanding hull and wing tags: tags are a data-file detail invisible in game, and without them a
+  tag-known faction's carrier fields no fleet. Branch `feat/g2-s24-faction-tags`.
+  - **Evidence (javap of RC7, 2026-11-23):**
+    - `SpecStore`'s faction-list loader adds every hull whose spec `hasTag` any of the block's `tags`, then the named ids.
+    - A hull's tags are `ship_data.csv`'s comma-separated `tags` column (`ShipHullSpreadsheetLoader`).
+    - A skin clones its base hull's spec, clears the tags, and has only its own `.skin` `tags`.
+  - **`faction_fleet.known`** expands the `knownShips`, `priorityShips`, `knownFighters` and `priorityFighters` tags against
+    the mod's and the core's hulls, skins and wings; a mod's row wins over the core's for the same id.
+    - A hull or wing reached only through a tag is a needed gene when the mod defines it. One the core defines counts
+      for role matching only.
+    - A tag nothing carries is a suspect. Ship and fighter lists share the tag set, so a tag counts as matched when
+      either kind carries it.
+    - Weapon and hull mod tags stay recorded and unexpanded.
+  - **Measured locally:**
+    - Bultach's `gestalt`: 0 to 11 role entries. Its set goes from 8 to 27 genes and from 70 to 331 carrier members, and
+      still passes with 0 gaps.
+    - Bultach's `orks`: 15 to 44 role entries.
+    - KoC's four factions: 0 to 8-25 entries each.
+    - Regression guard: P3's and P4's carriers keep their tree hashes (235 / `714ec91411e728be`, 77 / `fce4e6f71d178675`).
+  - **Diagnostic boots on Test1** (never evaluated, recorded or archived):
+    - DIAG-GESTALT-BEFORE-20261123, slice 23's carrier: LIVE_DONE, but the probe read `gestalt knownShips=0`, and
+      `faction-fleet-gen` was skipped because "the faction knows no ships".
+    - DIAG-GESTALT-AFTER-20261123, this slice's carrier: `knownShips=11` and `faction-fleet-gen OK`, 5 members in a
+      generated patrol.
+    - Both runs logged GraphicsLib normal-map cache errors for the `GESTALT` covers, which are routine: the donor's own
+      P036-BULTACH run logs 375 such lines.
+  - **Probe candidate found:** a carried faction that knows no ships only gets an INFO "skipped" from the fleet check.
+    The before carrier would have passed `gene boot evaluate` with an empty faction.
+  - **Tests:** `tests/test_faction_fleet.py` `TagTests`:
+    - tagged hulls, a skin by its own tags only, and wings;
+    - a mod row winning over the core's;
+    - a core hull reached by tag, which is not a gene;
+    - a tag named by both lists;
+    - a tag-known faction's needed hulls and role variants.
+
+    Mutation-checked: 10 mutants, three of them from the javap facts. One survived until the core-hull test was
+    added; then all were caught.
+  - **Independent review:** no critical, high or medium finding. It confirmed the code against javap, including wing
+    tags, the unused `base_bp` default and a mod row replacing the core's, and showed P3's faction needs unchanged.
+    Bultach's `orks` set proved PASS with 89 genes and 0 gaps. Fixed, with tests:
+    - **Priority lists:** the game fields only hulls a faction knows (`Faction`'s picks check `knowsShip` before
+      `isShipPriority`), so `priorityShips` and `priorityFighters` no longer pull role entries. This corrects slice 23's
+      choice.
+    - **Content the game never loads:** a skin outside `data/hulls/skins`, and a `ship_data.csv` row without a `.ship`,
+      are not reached.
+    - **Unmatched tags** are judged per kind: a fighters tag that no wing carries is flagged even when a hull carries it.
+    - **The tag suspect** names the faction file.
+    - **RC8-55** carries the review's javap.
+
+    After the fixes:
+    - the `gestalt` carrier is identical to the one DIAG-GESTALT-AFTER booted (228 / `30163b35745425be`), and P3's and
+      P4's carriers are unchanged;
+    - mutation check: 14 mutants, all caught;
+    - full suite: 3521 tests, OK (skipped=13); hermeticity PASS.
 - 94.G3 **Gene bank**: content-addressed store, alleles across the corpus, lineage, licence state; RevenantLib distributes genes
   from vanished authors (GD-3). The store's payloads live under `data_root()`, like `Done/`, never in this public
   repository; only manifests of the owner's own or permitted content become committed fixtures (2026-11-19).
