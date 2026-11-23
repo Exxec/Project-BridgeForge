@@ -1437,8 +1437,9 @@ history as the closure benchmark, a cross-repository trace check, an early Java 
   | P3 | Eridani Combine, a star system and its 79-gene set | P3B-CAR4-20261123: BOOTED | P3B-SUB-20261123: BOOTED |
   | P4 | Bultach Coalition, custom start | P4B-CAR2-20261123: BOOTED | P4B-SUB-20261123: BOOTED |
 
-  Each boot was judged by `gene boot evaluate` against a fresh proof on Test1, whose identity, carrier id and tree hash
-  matched White_Legion's.
+  Each boot was judged by `gene boot evaluate` against a fresh proof on Test1 whose identity matched White_Legion's.
+  Only P3B-CAR4 and P4B-CAR2 also had their carrier id and tree hash compared; the other six were compared by identity.
+  This was corrected 2026-11-23 on the advisor's review; 94.G3 slice 1's cross-machine rebuild is the full check.
   - **Evidence:** `gene evidence check` passed every proof and boot file of those folders: 18 of 18, inputs re-hashed.
     The static proofs are checked against the donor's `working/`, the boot files against their proof folder.
   - **Suspects:** each is listed in the gene's `unknowns`.
@@ -2869,6 +2870,36 @@ history as the closure benchmark, a cross-repository trace check, an early Java 
 - 94.G3 **Gene bank**: content-addressed store, alleles across the corpus, lineage, licence state; RevenantLib distributes genes
   from vanished authors (GD-3). The store's payloads live under `data_root()`, like `Done/`, never in this public
   repository; only manifests of the owner's own or permitted content become committed fixtures (2026-11-19).
+  **Started 2026-11-23,** after 94.G2 was accepted, under GD-1. The design is `docs/GENE_BANK_DESIGN.md`, with keys set
+  with the advisor:
+  - manifests stored by the hash of their canonical bytes, because needs are not in the identity;
+  - a describer stamp and the core build on every record;
+  - blobs that are exactly the bytes each member's `sha256` covers;
+  - no machine paths or timestamps, so a rebuild gives one ROOT anywhere.
+
+  **Slice 1 built 2026-11-23: store, put, verify, rebuild, list.** Branch `feat/g3-bank-slice1`.
+  - **`bridgeforge/genome/bank.py`** stores under `<data root>/Genes` (gitignored).
+    - `gene bank put` describes a gene and every gene its needs name (`gene_set.walk`), then stores the manifests, their
+      member and donor-need blobs, and one record per manifest, source and build.
+    - `verify` re-hashes every blob and manifest, checks each record's blobs and file name, checks that each needed gene
+      resolves from the same source, and recomputes the ROOT.
+    - `rebuild` wipes the bank and replays `sources.json`. It is resumable, and it refuses a core of another build.
+    - A re-described source whose manifest changed supersedes the old record and keeps it.
+  - **The pilots, banked on White_Legion against RC7:** each from `working/` and from its original release, its first
+    second allele. That gives 166 records: P1 1+1, P2 1+1, P3 79+79, P4 2+2. `verify` reports 0 problems, and a full
+    rebuild gives the same ROOT. After the re-keying the ROOT is `95d791cd1ba174dd...a2e1`; the eight sources rebuild in
+    about 20 minutes, P3's two 79-gene sets taking about 10 each. The cross-machine check, Test1 rebuilding from the same
+    `sources.json`, runs after the merge.
+  - **Found while banking:** records were filed by manifest alone, so an unchanged gene in a second release would have
+    overwritten the first source's record. They are now filed by manifest, source and build.
+  - **Tests:** `tests/test_gene_bank.py`:
+    - a put and a clean ROOT;
+    - a rebuild at another absolute path giving the same ROOT;
+    - tampering, a missing need and a stale ROOT reported;
+    - superseding;
+    - two sources of one manifest;
+    - a source outside the data root, and a core of another build, refused;
+    - each member kind's bytes hashing as its member does.
 - 94.G4 **Adaptation**: target-impact, gated fixers and `src-to-jar` at gene scope; Project Go carries translations; SpriteForge
   validates sprites and slots.
   **Project Go's part, slice 1 (2026-11-22, Project-Go #19): `ssmt-cli gene-carry`, a read-only report.**

@@ -1,0 +1,1 @@
+- `gene bank put|verify|rebuild|list` (94.G3 slice 1): a rebuildable, content-addressed gene bank under `<data root>/Genes` (docs/GENE_BANK_DESIGN.md); manifests by the hash of their bytes, a record per manifest, source and build, blobs that re-hash as their members, one ROOT on any machine.
