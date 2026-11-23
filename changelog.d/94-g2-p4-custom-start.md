@@ -1,0 +1,1 @@
+- `gene describe`/`prove` close `custom-start:<id>` (94.G2 P4): a Nexerelin start's registration file, its class and what its code names, with `nexerelin` as a need and a `mod-enabled` condition; a jar class now brings its nested and anonymous classes, which P3's set carrier lacked.
