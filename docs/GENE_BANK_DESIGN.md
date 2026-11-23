@@ -25,16 +25,21 @@ and `gene bank rebuild` must give the same root hash from those sources on any m
 ## Keys
 
 1. **Manifest hash.** Each stored manifest is keyed by the SHA-256 of its canonical bytes (`gene.dumps`), and an index
-   maps each identity to its manifests.
+   maps each identity to its records.
    - Identity alone is not enough: needs are not part of it. P3's set kept one anchor identity through slices 20 to 23
      while what it carried changed.
    - `describe` is byte-stable: run twice on P1 and P4, it gave identical bytes, with no timestamps or machine paths
      (checked 2026-11-23).
-2. **Describer stamp.** Each record holds the BridgeForge version and the gene-contract pin it was described under. A
-   rebuild under newer rules that yields a different manifest supersedes the old record; it never overwrites it.
+2. **Record id.** A record is filed under the hash of (manifest hash, source, build): the same manifest from two releases
+   keeps two records. Each record holds the BridgeForge version and the gene-contract pin it was described under, and is
+   rewritten on every put, so it carries the describer that last produced it.
 3. **Core build.** The closure depends on what the core defines, so one mod described against two cores gives two
    identities. Each record names the core it was described against, by the build that core reports (`target show`), and
    the bank indexes by it. The first slices use the target core (0.98.5a-RC7).
+4. **Current and history.** `entries.json` holds, for each line of `sources.json`, the records its last put produced. A
+   record no line holds any more is history: it stays in the bank and is verified, but it is outside the ROOT. A re-described
+   gene whose manifest changed therefore never overwrites the old record, and a source changed and changed back makes its
+   first record current again (review 2026-11-23).
 
 ## Store layout (under `data_root()/Genes/`, gitignored like `Done/`)
 
@@ -44,25 +49,40 @@ Genes/
                                   JSON, the way members are hashed.
   manifests/<mh[:2]>/<mh>.json    canonical gene.json bytes
   records/<id>.json               one per (manifest, source, build): the same manifest from two sources keeps two records.
-                                  Holds the manifest hash, identity, kind, anchor, source (mod id, version, folder kind:
-                                  working/original/archive, the source's tree hash), core build, describer stamp,
-                                  licence, links to evidence files by manifest hash, superseded_by
-  index.json                      derived: by identity, anchor, kind, build and licence; rebuilt, never edited
-  ROOT                            SHA-256 over the sorted record and blob hashes
+                                  Holds the manifest hash, identity, kind, anchor, source (mod id, version, folder kind
+                                  working or original, path relative to the data root), core build, describer stamp,
+                                  licence, member and donor-need blob hashes, needed genes and the reasons any were refused
+  sources.json                    the replay list: path, folder, anchor and build of each put
+  entries.json                    derived: each sources.json line with the record ids its last put produced
+  index.json                      derived over the current records: by identity, anchor, kind, build and licence
+  ROOT                            SHA-256 over entries.json, the bytes of each current record, and the manifests and blobs
+                                  the current records name (taken from the records, not from a listing of the disk)
+  put.partial.jsonl, rebuild.partial.jsonl   checkpoints of an interrupted put or rebuild
 ```
+
+A bank folder holds nothing else: `put` and `rebuild` refuse a folder with any other entry, so `--bank` naming the data
+root, a workspace or `Done/` writes nothing (review 2026-11-23). Nothing in the bank code deletes a file or a tree.
 
 What stays out:
 - **Carriers, jars and proofs.** A proof can be rebuilt from its gene and source; carrier jars are not byte-stable.
-- **Timestamps,** which would break the root hash.
+- **Timestamps and machine paths,** which would break the root hash. A refusal reason names the source, the core and the
+  data root as `<source>`, `<core>` and `<data root>`.
+- **For a later slice:** the source's tree hash and links to evidence files by manifest hash.
 
 ## Commands (`gene bank ...`)
 
-- `put MOD ANCHOR --vanilla-core CORE [--set] [--provider-root ...]`: describe the gene, or the gene and every gene its
-  needs name, and store the manifests, records and blobs.
-- `verify`: every blob is present and matches its hash. Every `needs.genes` anchor resolves to a stored manifest from the
-  same source; P3 goes in as 79 genes, P4 as 2. The root hash recomputes.
-- `rebuild --sources FILE`: wipe and re-put from a sources list. The result is the same root hash.
-- `list [--kind K] [--anchor A] [--build B] [--licence L]`: read the index.
+- `put MOD ANCHOR --vanilla-core CORE [--folder working|original] [--quiet]`: describe the gene and every gene its needs
+  name (the walk of `prove-set`, with its checkpoint), and store the manifests, records and blobs. A workspace resolves to
+  its `working/`, which is refused as `original`.
+- `verify`: every blob and manifest matches its hash; every record's manifest and blobs are present. Every `sources.json`
+  line has an `entries.json` row holding a record of its anchor. Every `needs.genes` anchor of a current record resolves
+  to a current record from the same source, or is recorded as refused; P3 goes in as 79 genes, P4 as 2. The root hash
+  recomputes.
+- `rebuild --vanilla-core CORE [--quiet]`: put every `sources.json` line again, into the bank as it is: an empty folder
+  holding only `sources.json` (another machine), or a bank whose history is kept. It refuses before writing anything when
+  the core reports another build or a source is missing. The result is the same root hash either way.
+- `list [--kind K] [--anchor A] [--build B] [--licence L] [--history]`: the current records, read from the records
+  themselves; `--history` adds those no source holds any more.
 
 Walks over a corpus follow the long-running rule (progress lines, a checkpoint, `--quiet`) and read archives only
 through `zipsafe`.
@@ -71,7 +91,8 @@ through `zipsafe`.
 
 1. **Store, put, verify and rebuild for the four pilots,** from `working/`. Each pilot's `original/` goes in as its first
    second allele; check what `derived_from` already holds.
-   - *Accept:* wipe, rebuild, and the same root hash on White_Legion and on Test1.
+   - *Accept:* the same root hash from a rebuild in place on White_Legion, from a rebuild into an empty folder there, and
+     from a rebuild into an empty folder on Test1.
 2. **Alleles across the corpus.** "Every allele" needs a denominator: each corpus mod and version that defines a pilot's
    anchor id. Each is stored, or its refusal is recorded with the reason.
    - Check what `corpus-index` already records before writing a walk.
