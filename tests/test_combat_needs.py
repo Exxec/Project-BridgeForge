@@ -77,6 +77,18 @@ class DonorNeedTests(unittest.TestCase):
             "sounds/fx_fire.ogg", "sounds/fx_raise.ogg"])  # not fx_unused; engine_loop is the core's
         self.assertEqual(needs["missing"], [])
 
+    def test_the_core_s_own_engine_styles_and_sounds_are_not_carried(self) -> None:
+        # Vanilla's engine_styles.json defines ids outside the enum too (`midlineFlare`); a mod that re-defines a core sound
+        # id keeps the core's (recorded as a fidelity limit, as with hull styles).
+        with resolved_temp_dir() as root:
+            mod = _mod(root, slots=[{"style": "CUSTOM", "styleId": "coreFlare"}])
+            _write(mod / SOUNDS, json.dumps({**MOD_SOUNDS, "engine_loop": {"sounds": [{"file": "sounds/fx_raise.ogg"}]}}))
+            core = _core(root)
+            _write(core / ENGINE_STYLES, json.dumps({"LOW_TECH": {}, "coreFlare": {"type": "GLOW"}}))
+            needs = donor_needs(mod, [{"what": "file", "path": "data/hulls/fx_ship.ship"}], core)
+        self.assertEqual(needs["missing"], [])
+        self.assertEqual(needs["donor"], ["data/config/sounds.json#/fx_raise", "sounds/fx_raise.ogg"])  # no coreFlare, no engine_loop
+
     def test_an_engine_style_or_a_style_sound_nothing_defines_is_missing(self) -> None:
         with resolved_temp_dir() as root:
             mod = _mod(root, slots=[{"style": "CUSTOM", "styleId": "NOWHERE"}])
