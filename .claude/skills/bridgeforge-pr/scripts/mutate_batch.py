@@ -17,7 +17,9 @@ crash cannot leave the next one mutated. Snippets are written to files byte for 
 ending in a line break keeps it. After every mutant the repo's `git status --porcelain` must be empty, or the batch stops;
 so RESULTS.json must be outside the repo (refused otherwise). RESULTS.json is rewritten after each mutant, so an
 interrupted batch keeps what finished. On a re-run a mutant already CAUGHT or MISSED (same claim and name, unique in the
-spec) is skipped; one that was NOT RUN, INVALID or TIMEOUT runs again.
+spec) at the same commit is skipped; one that was NOT RUN, INVALID or TIMEOUT, or a verdict of another commit, runs again.
+Each result records the commit it ran at (`head`): on 2026-11-22 a MISSED verdict was reused after the test that catches
+the mutant had been committed, so the batch reported a gap that was already closed.
 Verdicts: CAUGHT (the only one to claim), MISSED, NOT RUN, INVALID, TIMEOUT. Exit 0 only when every verdict is CAUGHT.
 Used for the re-run of 2026-11-22's claims (ROADMAP-3 94.G2, "Mutation re-run").
 """
@@ -36,6 +38,11 @@ VERDICTS = {0: "CAUGHT", 1: "MISSED", 2: "NOT RUN", 3: "INVALID", 4: "TIMEOUT"}
 
 def _key(mutant: dict) -> str:
     return f"{mutant['claim']}|{mutant['name']}"
+
+
+def _head(repo: Path) -> str:
+    done = subprocess.run(["git", "-C", str(repo), "rev-parse", "HEAD"], capture_output=True, text=True, check=True)
+    return done.stdout.strip()
 
 
 def _dirty(repo: Path) -> str:
@@ -75,14 +82,15 @@ def main(spec_path: str, results_path: str) -> int:
         print(f"claim and name must be unique in the spec; repeated: {repeated}")
         return 2
     results = json.loads(out.read_text(encoding="utf-8")) if out.exists() else []
-    results = [r for r in results if r.get("verdict") in FINAL]
-    done_keys = {_key(r) for r in results}
     if _dirty(repo):
         print(f"{repo} has changes before the batch: stopped\n{_dirty(repo)}")
         return 2
+    head = _head(repo)
+    results = [r for r in results if r.get("verdict") in FINAL and r.get("head") == head]  # another commit's may be stale
+    done_keys = {_key(r) for r in results}
     todo = [m for m in spec["mutants"] if _key(m) not in done_keys]
     for index, mutant in enumerate(todo, 1):
-        result = run_one(repo, mutant)
+        result = {**run_one(repo, mutant), "head": head}
         results.append(result)
         out.write_text(json.dumps(results, indent=1, ensure_ascii=False), encoding="utf-8")
         print(f"[{index}/{len(todo)}] {result['verdict']:8} {mutant['claim']} :: {mutant['name']}", flush=True)
