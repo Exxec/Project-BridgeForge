@@ -2,13 +2,14 @@
 from __future__ import annotations
 
 import json
+import subprocess
 import unittest
 import zipfile
 
 from bridgeforge.genome.gene import (CUSTOM_STARTS_FILE, GeneError, _nested_classes, custom_start_entry, describe, validate)
 from bridgeforge.genome.gene_set import unresolved_in_carrier
 from bridgeforge.genome.proof import prove
-from tests.support import resolved_temp_dir, write_text as _write
+from tests.support import javac_path, resolved_temp_dir, write_text as _write
 
 START = """package data.scripts;
 public class demo_Start {
@@ -108,6 +109,28 @@ class CarrierResolutionTests(unittest.TestCase):
 
 
 class NestedClassTests(unittest.TestCase):
+    @unittest.skipUnless(javac_path(), "needs javac")
+    def test_a_start_in_a_jar_carries_its_anonymous_class(self) -> None:
+        # Bultach Coalition's bt_murtach_start adds an anonymous Script ($1) in execute(); it was not a member (P4, 2026-11-22).
+        source = START.replace('String ship = "demo_flagship_Var1";',
+                               'String ship = "demo_flagship_Var1"; Runnable later = new Runnable() { public void run() {} };')
+        with resolved_temp_dir() as root:
+            mod = _mod(root)
+            (mod / "data" / "scripts" / "demo_Start.java").unlink()
+            src, out = root / "src", root / "classes"
+            _write(src / "data" / "scripts" / "demo_Start.java", source)
+            subprocess.run([javac_path(), "-encoding", "UTF-8", "-proc:none", "-d", str(out), str(src / "data" / "scripts" / "demo_Start.java")],
+                           check=True, capture_output=True)
+            info = json.loads((mod / "mod_info.json").read_text(encoding="utf-8"))
+            _write(mod / "mod_info.json", json.dumps({**info, "jars": ["jars/demo.jar"]}))
+            (mod / "jars").mkdir()
+            with zipfile.ZipFile(mod / "jars" / "demo.jar", "w") as jar:
+                for path in sorted((out / "data" / "scripts").glob("*.class")):
+                    jar.write(path, f"data/scripts/{path.name}")
+            gene = describe(mod, "custom-start:demoStart", vanilla_core=_core(root))
+        paths = {m["path"] for m in gene["members"] if m["what"] == "jar-class"}
+        self.assertEqual(paths, {"jars/demo.jar!data/scripts/demo_Start.class", "jars/demo.jar!data/scripts/demo_Start$1.class"})
+
     def test_a_jar_class_brings_its_nested_and_anonymous_classes_and_nothing_else(self) -> None:
         with resolved_temp_dir() as root:
             (root / "jars").mkdir()
