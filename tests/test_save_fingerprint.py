@@ -14,6 +14,7 @@ from tests.support import resolved_temp_dir
 from tests.test_run_manifest import _two
 
 P = "BF-PROBE|0.2.27|fingerprint|"
+COMPARE = save_reload_run.COMPARE_MARKER
 
 
 def phase(name: str, digests: dict[str, str], source: str = "") -> list[str]:
@@ -114,23 +115,81 @@ class DriveTests(unittest.TestCase):
             else:
                 self.assertEqual(result.stage, "fingerprint-save")
 
-    def test_reload_drive_continues_then_waits_for_the_compare_line(self) -> None:
-        for compare_line, expect in ((True, "LIVE_DONE"), (False, "LIVE_STUCK")):
-            with resolved_temp_dir() as base:
-                log = base / "run.stdout.log"
-                log.write_text("1 [main] INFO  Reading save data from [x]\n", encoding="utf-8")
-                clicks: list[tuple] = []
+    def _reload(self, after_click: list[str], alive=lambda: True, dialog: str | None = None, after_compare: list[str] = ()):
+        """drive_reload on a log that gets `after_click` once Continue is clicked; `after_compare` lines and a windows.txt
+        `dialog` appear during the settle period."""
+        with resolved_temp_dir() as base:
+            log = base / "run.stdout.log"
+            log.write_text("1 [main] INFO  Reading save data from [x]\n", encoding="utf-8")
+            clicks: list[tuple] = []
+            sleeps = [0]
 
-                def click(fx, fy, log=log, clicks=clicks, compare_line=compare_line):
-                    clicks.append((fx, fy))
-                    if compare_line:
+            def click(fx, fy):
+                clicks.append((fx, fy))
+                with log.open("a", encoding="utf-8") as handle:
+                    handle.write("\n".join(after_click) + "\n")
+
+            def sleep(_seconds):
+                if COMPARE in log.read_text(encoding="utf-8"):
+                    sleeps[0] += 1
+                    if sleeps[0] == 2:  # one second into the settle period
                         with log.open("a", encoding="utf-8") as handle:
-                            handle.write("\n".join(reload_log(SAME, True)) + "\n")
+                            handle.write("".join(line + "\n" for line in after_compare))
+                        if dialog:
+                            (base / "run.windows.txt").write_text(f"20:10:38 dialog: 'Error' text: '{dialog}'\n", encoding="utf-8")
 
-                hands = live_run.Hands(click=click, key=lambda v: None, scroll=lambda *a: None, sleep=lambda s: None)
-                result = save_reload_run.drive_reload(log, hands, menu_timeout=0.2, compare_timeout=0.2)
-            self.assertEqual(result.verdict, expect, result)
-            self.assertEqual(clicks[0], save_reload_run.MAIN_MENU_CONTINUE)
+            hands = live_run.Hands(click=click, key=lambda v: None, scroll=lambda *a: None, sleep=sleep, alive=alive)
+            result = save_reload_run.drive_reload(log, hands, menu_timeout=0.2, compare_timeout=0.2, load_timeout=0.2,
+                                                  settle_seconds=3)
+        return result, clicks
+
+    def test_reload_drive_continues_then_waits_for_the_load_and_compare_lines(self) -> None:
+        result, clicks = self._reload([LOAD, *reload_log(SAME, True)])
+        self.assertEqual(result.verdict, "LIVE_DONE", result)
+        self.assertEqual(result.stages, ["main-menu", "continue", "fingerprint-compare", "settled"])
+        self.assertEqual(clicks[0], save_reload_run.MAIN_MENU_CONTINUE)
+        result, _ = self._reload([LOAD])
+        self.assertEqual((result.verdict, result.stage), ("LIVE_STUCK", "fingerprint-compare"))
+
+    def test_continue_that_loads_no_save_is_stuck_at_continue(self) -> None:
+        # 88.22: ICBF2C-J28's Continue started a New Game; the log showed a new sector, not a load.
+        result, _ = self._reload(["200 [main] INFO  com.fs.starfarer.campaign.CampaignEngine  - Generating sector"])
+        self.assertEqual((result.verdict, result.stage), ("LIVE_STUCK", "continue"))
+        self.assertIn("Continue loaded no save", result.detail)
+
+    def test_a_dialog_after_the_compare_line_fails_the_reload(self) -> None:
+        # 88.19: ICBF2-J28FR's Fatal came 243 ms after the compare line and the run was called LIVE_DONE.
+        result, _ = self._reload([LOAD, *reload_log(SAME, True)], dialog="Fatal: java.lang.NullPointerException")
+        self.assertEqual((result.verdict, result.stage), ("LIVE_STUCK", "after-compare"))
+        self.assertIn("Fatal: java.lang.NullPointerException", result.detail)
+
+    def test_a_fatal_log_line_after_the_compare_line_fails_the_reload(self) -> None:
+        result, _ = self._reload([LOAD, *reload_log(SAME, True)], after_compare=["300 [main] FATAL x  - it broke"])
+        self.assertEqual((result.verdict, result.stage), ("LIVE_STUCK", "after-compare"))
+
+    def test_a_game_that_dies_after_the_compare_line_fails_the_reload(self) -> None:
+        calls = [0]
+
+        def dies():  # the load and compare lines are already there, so only the settle period asks
+            calls[0] += 1
+            return calls[0] < 3  # gone two seconds into the settle period
+
+        result, _ = self._reload([LOAD, *reload_log(SAME, True)], alive=dies)
+        self.assertEqual((result.verdict, result.stage), ("LIVE_STUCK", "after-compare"))
+        self.assertIn("exited", result.detail)
+
+    def test_a_vanished_window_at_continue_is_stuck_there(self) -> None:
+        with resolved_temp_dir() as base:
+            log = base / "run.stdout.log"
+            log.write_text("1 [main] INFO  Reading save data from [x]\n", encoding="utf-8")
+
+            def click(fx, fy):
+                raise live_run.GameWindowGone("the game window is gone")
+
+            hands = live_run.Hands(click=click, key=lambda v: None, scroll=lambda *a: None, sleep=lambda s: None)
+            result = save_reload_run.drive_reload(log, hands, menu_timeout=0.2)
+        self.assertEqual((result.verdict, result.stage), ("LIVE_STUCK", "continue"))
+        self.assertIn("Reading save data from [x]", result.detail)
 
     def test_config_gate_and_stale_file_cleanup(self) -> None:
         with resolved_temp_dir() as rig:

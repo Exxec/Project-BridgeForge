@@ -1,7 +1,8 @@
 """A game window that vanishes mid-run (ROADMAP-3 93.50): the error real hands raise, and the verdict text quoting the log.
 
 SR7-LIVE-0985a-20261117 raised "the game window is gone" from New Game's click and gave no verdict. live_run.drive turns
-this error into LIVE_STUCK at the stage in progress, with `detail(log_text)`; the reload's driver follows with 88.19/88.22.
+this error into LIVE_STUCK at the stage in progress, with `detail(log_text)`, and so does save_reload_run.drive_reload
+(88.19/88.22).
 """
 from __future__ import annotations
 

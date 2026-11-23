@@ -9,12 +9,22 @@ start the rig game, choose Continue (or Load Game and pick the newest save), and
 from __future__ import annotations
 
 import json
+import re
 from pathlib import Path
 
-from bridgeforge.live.live_run import (GameRefused, Hands, LaunchNoProcess, LiveResult, MENU_LOADED, _log_text, click_menu, running_game, wait_for)
+from bridgeforge.live.live_run import (GameRefused, Hands, LaunchNoProcess, LiveResult, MENU_LOADED, _log_text, click_menu, running_game,
+                                       wait_for)
+from bridgeforge.live.window_gone import GameWindowGone, detail as window_gone_detail
 
 RELOAD_EXPECTED = ("main_menu", "campaign_load", "reload_after_save")
 COMPARE_MARKER = "|compare|equal="
+# 88.22: the game's own load line (log_triage.CAMPAIGN_LOAD_RE; "Reading save data from" is not one, the menu logs it for every
+# save). ICBF2C-J28's Continue started a New Game instead, and the run only ended at "no compare line".
+LOAD_LINE = re.compile(r"CampaignGameManager\s+-\s+Loading .*saves[\\/]")
+LOAD_START_TIMEOUT = 120  # seconds from Continue to the load line
+# 88.19: ICBF2-J28FR's Fatal came 243 ms after the compare line and the run was called LIVE_DONE. Stay up this long after it.
+RELOAD_SETTLE_SECONDS = 20
+FATAL_LINE = re.compile(r"\bFatal:|\sFATAL\s")
 MAIN_MENU_CONTINUE = (0.7195, 0.3)  # blind fallback only; the real position is read from the screen
 FINGERPRINT_FILE = Path("saves") / "common" / "bf_probe_fingerprint.data"
 CONFIG_FILE = Path("saves") / "common" / "bf_probe_config.data"
@@ -37,24 +47,61 @@ def clear_stale_fingerprint(rig: Path) -> bool:
     return existed
 
 
-def drive_reload(log: Path, hands: Hands, menu_timeout: float = 240, compare_timeout: float = 300) -> LiveResult:
-    """Main menu, Continue, then wait for the compare line."""
+def _dialogs(log: Path) -> list[str]:
+    """The dialog lines the window watcher wrote for this run (<TESTID>.windows.txt beside <TESTID>.stdout.log)."""
+    name = log.name[: -len(".stdout.log")] if log.name.endswith(".stdout.log") else log.stem
+    try:
+        lines = (log.with_name(name + ".windows.txt")).read_text(encoding="utf-8", errors="replace").splitlines()
+    except OSError:
+        return []
+    return [line for line in lines if " dialog: " in line]
+
+
+def drive_reload(log: Path, hands: Hands, menu_timeout: float = 240, compare_timeout: float = 300,
+                 load_timeout: float = LOAD_START_TIMEOUT, settle_seconds: int = RELOAD_SETTLE_SECONDS) -> LiveResult:
+    """Main menu, Continue, the game's own load line (88.22), the compare line, then `settle_seconds` with the game up, no new
+    dialog and no Fatal (88.19). A vanished window ends it LIVE_STUCK at the stage in progress (93.50)."""
     result = LiveResult("LIVE_STUCK", log=str(log))
-    if not wait_for(log, MENU_LOADED, menu_timeout, hands):
-        result.stage, result.detail = "main-menu", "the game never logged that the main menu was up"
+    at = ["main-menu"]
+
+    def stuck(detail: str) -> LiveResult:
+        result.stage, result.detail = at[0], detail
         return result
-    result.stages.append("main-menu")
-    hands.sleep(20)
-    if not click_menu(hands, "Continue", MAIN_MENU_CONTINUE):
-        result.stage, result.detail = "continue", "the main menu is still up after clicking Continue (no save to continue, or the click missed)"
+
+    try:
+        if not wait_for(log, MENU_LOADED, menu_timeout, hands):
+            return stuck("the game never logged that the main menu was up")
+        result.stages.append("main-menu")
+        at[0] = "continue"
+        hands.sleep(20)
+        offset = len(_log_text(log))
+        if not click_menu(hands, "Continue", MAIN_MENU_CONTINUE):
+            return stuck("the main menu is still up after clicking Continue (no save to continue, or the click missed)")
+        if not wait_for(log, LOAD_LINE, load_timeout, hands, since=offset):
+            return stuck("Continue loaded no save: no 'CampaignGameManager - Loading ..saves/..' line after the click. The click may have "
+                         "started a New Game instead (88.22: ICBF2C-J28), or missed")
+        result.stages.append("continue")
+        at[0] = "fingerprint-compare"
+        if not wait_for(log, COMPARE_MARKER, compare_timeout, hands, since=offset):
+            return stuck("no 'fingerprint|compare' probe line after loading: the stored fingerprint did not match this save, or the probe is off")
+        result.stages.append("fingerprint-compare")
+        at[0] = "after-compare"
+        compared, dialogs = len(_log_text(log)), len(_dialogs(log))
+        for _ in range(max(settle_seconds, 1)):
+            new = _dialogs(log)[dialogs:]
+            if new:
+                return stuck(f"a dialog appeared after the compare line (88.19): {new[0].strip()[:300]}")
+            fatal = next((line for line in _log_text(log)[compared:].splitlines() if FATAL_LINE.search(line)), None)
+            if fatal:
+                return stuck(f"a Fatal came after the compare line (88.19): {fatal.strip()[:300]}")
+            if not hands.alive():
+                return stuck("the game exited within the settle period after the compare line (88.19)")
+            hands.sleep(1)
+        result.stages.append("settled")
+        result.verdict = "LIVE_DONE"
         return result
-    result.stages.append("continue")
-    if COMPARE_MARKER not in _log_text(log) and not wait_for(log, COMPARE_MARKER, compare_timeout, hands):
-        result.stage, result.detail = "fingerprint-compare", "no 'fingerprint|compare' probe line after loading: the stored fingerprint did not match this save, or the probe is off"
-        return result
-    result.stages.append("fingerprint-compare")
-    result.verdict = "LIVE_DONE"
-    return result
+    except GameWindowGone:
+        return stuck(window_gone_detail(_log_text(log)))
 
 
 def reload_run(rig: Path, test_id: str, bat_name: str = "run-j25-direct.bat", menu_timeout: float = 240, direct=None) -> LiveResult:

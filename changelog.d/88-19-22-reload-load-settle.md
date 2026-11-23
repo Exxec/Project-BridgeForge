@@ -1,0 +1,1 @@
+- A save-reload's second launch is LIVE_DONE only after the game's own load line follows Continue and the game stays up 20 s past the compare line with no new dialog, Fatal line or exit; a Continue that loads no save stops at `continue` (88.19, 88.22).
