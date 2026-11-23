@@ -2632,7 +2632,7 @@ history as the closure benchmark, a cross-repository trace check, an early Java 
     - `gene prove-set` takes no `--provider-root`, so a dependency's phase systems reach its check only through the
       unresolved gap.
 
-    Mutation check after the fixes: 18 mutants, all caught.
+    Mutation check after the fixes: 18 mutants, all caught. Full suite: 3499 tests, OK (skipped=13); hermeticity PASS.
   - **Diagnostic boots, 2026-11-23** (never evaluated, recorded or archived). These were the slice-21 set carriers, built
     on White_Legion and copied to `_genes-diag-queue`, with matching tree hashes.
     - **DIAG-P3-S21 and DIAG-P4-S21** reached the main menu and the campaign: the load gaps are closed. Both were Fatal
