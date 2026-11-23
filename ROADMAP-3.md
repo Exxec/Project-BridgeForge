@@ -807,6 +807,8 @@ unproven).
   Sector, and the fixer had to run as `bridgeforge fix ... --finding jar-call-signature-changed --apply` (as for Kadur
   Remnant). When revive has a target core, it should run the jar linkage check against it so these fixers run in the normal
   flow (`relink` likewise). Priority: after the G series (it pays off at the next game build).
+  **Owner 2026-11-22:** kept queued after the G series ("I want to be able to port mods to future updates specifically
+  abandoned mods.").
 - 96.12 (S) **Syncing a mod into the rig leaves stale files.** `probe-group install`'s sync and `prepare-test --sync` add
   and update files and never remove one (`sync_working_copy`: "never deleting extras"). Broken Star's bf.4 fix moved two
   `data/weapons/decorative/*.wpn` into `data/weapons/`, and the rig copy kept the old ones. P962BS5 passed live, but record
@@ -858,6 +860,9 @@ unproven).
     - Rebuilt: 54 classes.
     - **The live pass condition:** an ordinary group ends with `reason=time` near 60 s, and every planned hull has a
       `combat-deployment` line.
+  - **Live 2026-11-22:** P034-TANIA-20261122 and P034-BULTACH-20261122 on Test1's RC7 rig, probe 0.3.4: LIVE_DONE both. Every
+    battle (1 and 2) logged `combat-end` with reason `time` at t=60s. The report shows FATAL 0, MOD-ERROR 0 and both members
+    PASS; `run-manifest check` is ACCEPTABLE. Not recorded: these are re-tests of archived mods, run to prove the probe.
 - 96.14 (M) **A tool for game classes the obfuscator renamed.** Neutrino Corporation and Station Augments both called game
   classes that RC7's obfuscator renamed with unchanged members (`systems.F` -> `systems.return`, `specs.do` -> `specs.M`,
   `ai.ooOO` -> `ai.C`, ...). Each port needed hand tools, kept in the workspaces' `scratch/rc7-remap/`:
@@ -869,6 +874,8 @@ unproven).
   `target-impact` should propose the old-to-new class and method map when it reports a missing obfuscated class, with each
   match's score and the evidence (shape share, agreeing field types). A gated fixer should apply an accepted map to a jar's
   classes, using the bundled ASM, and re-check linkage and interfaces. Priority: after the G series (the next game build).
+  **Owner 2026-11-22:** kept queued after the G series ("I want to be able to port mods to future updates specifically
+  abandoned mods.").
 - 96.15 (S) **A snapshot error that never clears.** Test1's `state-snapshot` reported one error on every run, "Permission
   denied" on `Done/_previous/Fuel-Siphoning-1.2.2/Readme.txt`. That file no longer exists. The error came from a
   `snapshot.partial.jsonl` line written before H4 (2026-10-12), which checkpointed the Done source together with its error.
@@ -931,6 +938,8 @@ unproven).
   live-validated without them; the sheet should say so with both dates. Owner 2026-11-19, asked about the order of this
   session's suggestions: "if these are useful now prioritize their implementation now if not save them for after G series
   implementation or at your recommended order". Priority: after the G series (it pays off at the next game build).
+  **Owner 2026-11-22:** kept queued after the G series ("I want to be able to port mods to future updates specifically
+  abandoned mods.").
 - 95.3 (M) **One command per stage chain.** `revive-queue` (93.14): intake, revive, decision sheet, accept, input-tier fixes
   (`bridgeforge fix`, which revive does not apply), report draft; `live-queue`: install, smoke, live, report and record per group,
   unattended, resuming after the last finished step. Each of these is a separate command today, and the Test1 live runs needed
@@ -1011,11 +1020,19 @@ unproven).
 - 95.6 (M, optional) **Two-machine sync.** `sync --to HOST` for the memory folder, workspaces and Done/, hash-verified in both
   directions, never overwriting a newer change without asking; off by default (owner: "if it can be optional that would be
   great"). On 2026-11-17 development ran on White_Legion and live tests on Test1, with workspaces copied by hand (scp).
+  **Owner 2026-11-22:** closed as covered ("For everything else I will follow your recommendations."): the Test1 procedure
+  and the memory mirror cover it.
 - 95.7 (L) **Scan cache.** Split the scanner's checks into mod-only (cached by file hash and checker version) and build-dependent
   (linkage, API, compile, vanilla data), so a re-scan for a new build re-runs only the build-dependent ones.
+  **Owner 2026-11-22:** kept queued after the G series ("I want to be able to port mods to future updates specifically
+  abandoned mods.").
 - 95.8 (M) **Member-use index.** Index once which game classes and members each mod's jars and scripts use (corpus-index), so
   "which mods use what the new build changed" is a lookup over the api-diff.
+  **Owner 2026-11-22:** kept queued after the G series ("I want to be able to port mods to future updates specifically
+  abandoned mods.").
 - 95.9 (M) **Parallel scanning** across mods, with the existing checkpoint and resume.
+  **Owner 2026-11-22:** kept queued after the G series ("I want to be able to port mods to future updates specifically
+  abandoned mods.").
 - 95.10 (S) **Acceptances carried across builds.** Baseline keys are normalized already (92.x); carry each acceptance to the new
   target unless the finding's evidence changed.
   **Done 2026-11-17.** `retarget --apply` changes only mod_info.json, but its `+bf.N` version bump made every baseline
@@ -1028,6 +1045,8 @@ unproven).
   `test_a_retarget_whose_version_bump_fails_is_undone_and_planned_again`.
 - 95.11 (M) **Targeted re-validation.** On a new build, smoke every archived group and run full live tests only where
   `target-impact` is not CLEAN.
+  **Owner 2026-11-22:** kept queued after the G series ("I want to be able to port mods to future updates specifically
+  abandoned mods.").
 - 95.12 **Further suggestions** (owner asked "Anything else for bridgeforge, this process, or any sub modules like the probe etc?"):
   (a, S) a combat-round watchdog: no `combat|START` within a bound after the click means a screenshot and one retry (UAF's round 2
   waited out the timeout, 93.37; **Done 2026-11-17**, see 93.37); (b, S) the probe's log header carries its config hash, so `report` and `record` find the run's own
@@ -1035,7 +1054,10 @@ unproven).
   `initStar(id, "nebula_center_young", 0, 0)` is vanilla's own pattern, RC7's `star_gen_data.csv` gives radius 0; a library used
   behind an `isModEnabled` guard is optional, not undeclared); (d, S) a one-page owner summary per mod at archive time: fixes,
   rebuilt classes, acceptances, shipped changes; (e, M) rig bring-up on a new machine in one command (93.3, 93.5), with the
-  licence-key presence check, preference pins and the mods' declared libraries (AshLib was copied by hand for UAF); (f, S) the
+  licence-key presence check, preference pins and the mods' declared libraries (AshLib was copied by hand for UAF);
+  **Owner 2026-11-22:** (e) parked ("For everything else I will follow your recommendations."): one working rig; parked until
+  a new machine or game build;
+  (f, S) the
   live run minimises its own console window and records the desktop size (93.24); (g, M) probe combat rounds sized by hull count,
   one progress line per round (UAF's 86 hulls took two rounds, "hulls 61-86 of 86"); (h, S) a revive with `--providers` passes
   them to the report draft's compile check (93.36); (i, S) `TARGET_IMPACT.md` shortens obfuscated member names (one Station
@@ -2369,6 +2391,8 @@ fixes of 93.28. 93.26-93.35 are that day's findings.
 - 93.3 **One command to make a test rig.** `_rig-0985a` on Test1 was built by hand (junction to the core, launcher copied, four
   folders, six libraries copied). `rig-create-test --core <starsector-core> --libs-from <mods folder> --name _rig-<build>`: create
   the folders and junction, write launchers, record the core's build in `rig_up_state.json`, never touch an existing rig.
+  **Owner 2026-11-22:** parked ("For everything else I will follow your recommendations."): one working rig; parked until a
+  new machine or game build.
 - 93.4 **Every rig states its build and refuses the wrong one.** Test1's `_rig` pointed at RC8 while the target was 0.98.5a, and
   `C:\Games\Starsector-0.98.5a-RC3` turned out to be RC3 (92.40). `rig-doctor`, `probe-group install|smoke|live` print the build
   the rig's core reports and refuse when it is not the target build (override with a flag and a reason).
@@ -2378,15 +2402,20 @@ fixes of 93.28. 93.26-93.35 are that day's findings.
   `gameVersion` predates the target.
 - 93.6 **Name-faithful copies.** `tar | ssh tar` turned Eridani's CJK file names into code-page mojibake (92.40); file counts and
   content hashes still matched. Rig sync and any cross-machine copy compare names byte for byte.
+  **Owner 2026-11-22:** closed as covered ("For everything else I will follow your recommendations."): the Test1 procedure
+  and the memory mirror cover it.
 - 93.7 **Run where there is a desktop, or refuse.** A game started from an SSH command lands in a non-interactive session.
   `smoke`/`live` detect it and either refuse with the remedy or launch through an interactive scheduled task in the logged-on
   user's session (`schtasks /IT`), streaming the log back. Delete the task after its run: a one-off task created with
   `/SC ONCE /ST 23:59` and started at once with `/Run` also fires by itself at 23:59 that day (three such tasks were found and
   deleted on Test1, 2026-11-17).
+  **Owner 2026-11-22:** parked ("For everything else I will follow your recommendations."): the skills work around it.
 - 93.8 **Pre-flight before clicks.** User logged on and unlocked, expected resolution, no other Starsector/java process
   (`who-locks`), rig not held by another run manifest; today all by hand.
 - 93.9 **Launchers that travel with the rig.** `run-j25-direct.bat` hard-codes `_rig\jdk-25...`; a new rig works only by borrowing
   it. Resolve the JDK relative to the rig or from one shared JDK location.
+  **Owner 2026-11-22:** parked ("For everything else I will follow your recommendations."): one working rig; parked until a
+  new machine or game build.
 - 93.10 **Probe targets from the applied fixes.** Generate probe checks from the revive ledger: Tania's junk-fleet spawn in combat
   with an AI-replacement mod (the captain fix), Lobster tanks on two ships, Bultach's per-ship hull mods, KoC's `dual_apmg` load
   line, Eridani's translated rules lines, crafted descriptions present in the codex.
@@ -2394,6 +2423,8 @@ fixes of 93.28. 93.26-93.35 are that day's findings.
   (RC8 report pending confirmation); a standard compat set with it turns that risk into a tested one.
 - 93.12 **Paired before/after runs.** The same probe scenario on the RC8 rig with the original mod and on the 0.98.5a rig with the
   revived one, diffed (`behavior-diff` exists; nothing pairs the runs).
+  **Owner 2026-11-22:** parked ("For everything else I will follow your recommendations."): it doubles every run for little
+  gain.
 - 93.13 **Known-noise baseline per build.** Log lines a clean rig with only the libraries produces on each build, so `log-triage`
   reports what the mods add.
 - 93.14 **One command for a batch.** The six-mod batch ran intake -> revive -> standard approvals -> agent packets -> src-to-jar ->
@@ -2410,6 +2441,8 @@ fixes of 93.28. 93.26-93.35 are that day's findings.
 - 93.18 **A machine-independent workspace bundle.** Move workspaces as a zip with UTF-8 names (zip's language-encoding flag; tar
   through the Windows console mangled them, 92.40), and keep paths in workspace reports relative: Test1's packets and REVIVE.json
   still name White_Legion paths.
+  **Owner 2026-11-22:** closed as covered ("For everything else I will follow your recommendations."): the Test1 procedure
+  and the memory mirror cover it.
 - 93.19 **Warn about a stale installed copy.** The project `.venv` holds an old non-editable `bridgeforge` in `site-packages`; a
   script run outside the checkout imported it and got old code (2026-11-17). `doctor` warns when the installed copy and the
   checkout differ.
@@ -2441,6 +2474,7 @@ fixes of 93.28. 93.26-93.35 are that day's findings.
   (`rig_prefs.RIG_RESOLUTION`); Test1's desktop is 1920x1080 at 96 DPI (2026-11-17), so that window runs off the screen.
   Pre-flight (93.8) compares the desktop with the pinned size and refuses with the remedy (a larger desktop mode, or click
   fractions measured at another size).
+  **Owner 2026-11-22:** parked ("For everything else I will follow your recommendations."): the skills work around it.
 - 93.23 **A launcher click that misses is retried and recorded.** `launcher_click.click_launcher_once` posts one click at
   50%/68% of the window (measured on RC8's launcher) and never again; on Test1 the run then waited out its timeout. Retry until
   the log moves past the launcher and capture the launcher window at each try. Lower priority once 93.21 lands.
@@ -2450,6 +2484,7 @@ fixes of 93.28. 93.26-93.35 are that day's findings.
   taskbar clock in both captures was 12 hours old (G1-SMOKE-0985a-20261117-no-main-menu.png and the G1-PEEK-0985a-20261117
   experiment, 2026-11-17). Capture the game's own window (`PrintWindow` with `PW_RENDERFULLCONTENT`), start the task's console
   minimised, and record the desktop size with each capture.
+  **Owner 2026-11-22:** parked ("For everything else I will follow your recommendations."): the skills work around it.
 - 93.25 **Two stale notes.** `probe_group.smoke_group` says `run-j25-direct.bat` starts java "so there is no launcher to
   click"; the bat starts `StarfarerLauncher`, which shows the launcher ("direct" means without `starsector.exe`). The
   `signature_rewrites`/`jar_call_rewrites` notes that 0.98.5a has only `ShipAIConfig(ShipAPI)` hold for RC3: `api-diff` RC3 ->
@@ -2505,6 +2540,7 @@ fixes of 93.28. 93.26-93.35 are that day's findings.
   **Kept in the queue (owner 2026-11-22: "I want to be able to test all ships hidden or not. If you deem it not necessary then
   we can park it").** Recommended against parking: hidden factions' code-built fleets are the ships 93.66's hull coverage
   cannot reach. 93.66 covers every hull and skin the mod ships.
+  **Owner 2026-11-22:** kept queued ("I want to be able to test all ships hidden or not."); 93.66 covers every ship fighting.
 - 93.31 **Sound files the game cannot load.** Bultach 1.1.7's `melta_fire.ogg` is FLAC in an Ogg container and the game decodes only
   Vorbis ("This Ogg bitstream does not contain Vorbis audio data"); re-encoded with ffmpeg libvorbis on the owner's word ("Fix it"),
   explained in SHIPPED_CHANGES.json (no file of the mod plays it). Add a scanner check for non-Vorbis and empty `.ogg` files and a
@@ -2642,6 +2678,8 @@ fixes of 93.28. 93.26-93.35 are that day's findings.
   - To do in BridgeForge: `java-matrix setup --launcher fr` reads `fr.vmparams` and `fr.jar` from the install's core. It
     should accept a rig-local FR folder, and `probe-group smoke|live` should use the FR + Prepatcher launcher when the rig
     has one (with 95.4's direct start).
+  - **Owner 2026-11-22:** parked ("For everything else I will follow your recommendations."): one working rig; parked until a
+    new machine or game build.
 - 93.43 (S) **JDK 27 on the rig** (owner asked 2026-11-17 "Should we add java 27?"; recommended; waits while live testing
   is paused).
   - Prepatcher 0.18.8 supports "Java 17 or Java 27+", so the rig's JDK 25 is outside its range.
@@ -2671,6 +2709,8 @@ fixes of 93.28. 93.26-93.35 are that day's findings.
     - `bridgeforge-state/live-wrappers/setup_j27.py [JDK folder]` re-creates both files.
   - BridgeForge's own tools still use JDK 25: `java_toolchain.find_jdk` takes the first `In operation\_rig\jdk-*` by name, and
     `jdk-25.0.4.1+1` sorts first.
+  - **Owner 2026-11-22:** the comparison run is skipped until a Prepatcher release supports RC7 ("For everything else I will
+    follow your recommendations.").
 - 93.44 (S) **Bultach's archive: an unexplained `star_gen_data.csv`.** `audit-shipped` lists
   `data/campaign/procgen/star_gen_data.csv` as added and UNEXPLAINED (not in the original). Find the step that added it (the
   RC7 revive's records, an escalation, or a hand edit) and explain it from that record. Then re-record SR5 (after 93.41) and
@@ -2814,6 +2854,8 @@ fixes of 93.28. 93.26-93.35 are that day's findings.
     2026-11-19) fixed exactly that: `combat_wait()` is 255 s, covering two 90 s unpause retries and a round.
   - **What this item proposed:** a quiet-spell end would only have added a second clock. The early-end lines it asked for
     (why the battle ended, who was left) come with 96.13's probe 0.3.4.
+  - **Live 2026-11-22:** see 96.13: P034-TANIA-20261122 and P034-BULTACH-20261122 ended every battle with `combat-end` reason
+    `time`.
 - 93.50 (S) **A vanished game window ends a live run with an exception.** SR7-LIVE-0985a-20261117 (Bultach again, after SR6)
   passed its smoke. Then, during New Game:
   - the game read the newest save (log line 30197 at 120.4 s: `Reading save data from [..\saves\save_HekaWillis_...]`,
@@ -2985,6 +3027,21 @@ fixes of 93.28. 93.26-93.35 are that day's findings.
     - fighting every variant, not only the first, would mean more rounds; the owner's call;
     - modules fight only attached to their parent;
     - code-built fleets of hidden factions stay 93.30's scenario testbed, which the owner un-parked on 2026-11-22.
+  - **Live 2026-11-22:** same runs (probe 0.3.4). Tania deployed 14 of 15 planned hulls (`tania_wader_main` did not). Bultach
+    deployed 67 of 108, none of its three empty-variant hulls (`ork_aithris`, `ork_sgoltadh`, `ork_sledgehammer`). No
+    `addToFleet` failure for any hull. The pass condition (every planned hull deploys) is not met; the cause is 93.67, not
+    the config.
+- 93.67 (M) **Reserves never deploy before a probe battle's 60 s end, so not every planned hull fights.**
+  P034-BULTACH-20261122 (Test1, RC7 rig, probe 0.3.4) had 108 planned hulls in 2 rounds of 60 (30 a side). Every one was
+  added to a fleet with no `addToFleet` failure, but only 67 logged `combat-deployment`. Round 1 deployed 34 ships (modules
+  included), all in its first 1.6 s, and no more. Round 2 deployed 41, the last at 53 s, as losses freed deployment points.
+  Both battles ended `reason=time` at 60 s with ships still in reserve. P034-TANIA-20261122: 14 of 15 (`tania_wader_main`
+  stayed in reserve). None of Bultach's three `<id>_Hull` hulls deployed, so the RC8_BEHAVIOUR row for `_Hull` waits for this
+  item. The limit predates 93.66, which made it visible. **Proposed fix:** once both sides are seen, raise each side's
+  deployment limit with `CombatFleetManagerAPI.modifyFlatMax(String, int)` so the game's own deployment brings every reserve
+  in; failing that, spawn the reserves (`getReservesCopy()`, `spawnFleetMember(FleetMemberAPI, Vector2f, float, float)`).
+  javap of RC7's starfarer.api.jar (2026-11-22) shows all three, and `SettingsAPI.getBattleSize()`. Pass condition: a
+  `combat-deployment` line for every planned hull.
 - 93.64 (S) **A gate whose subject left Done/ had no state to close it.** bf-0b-15 (SEEKER Betelgeuse modules survive save
   and reload) tests SEEKER 0.3.0+bf.5's Betelgeuse and TWIG code. That archive moved to `Done/_replaced-2026-11-17/` when
   SEEKER 0.6.6 replaced it, and 0.6.6 has neither. The owner ruled 2026-11-19: "Close as superseded". `gates.json` allowed
@@ -3347,6 +3404,8 @@ Manufactorum and Navarchy of Tania are revived (UNATTENDED_DONE), before their l
   code points; content hashes matched). Open: any cross-machine copy BridgeForge offers must compare names byte for byte, not
   only file counts and content hashes; `target show` should be run on each machine before a live session (92.9 makes it say the
   build).
+  **Owner 2026-11-22:** its remainder (cross-machine copy tooling) is closed as covered ("For everything else I will follow
+  your recommendations."): the Test1 procedure and the memory mirror cover it.
 
 **91. Side by side: the old and the new build together (owner 2026-11-15: "for the side to side ideas, go ahead and implement. apply same process for other repos").**
 - 91.1 **Done 2026-11-15.** `vanilla-migration OLD_CORE NEW_CORE [--write DIR]`: for every member `api-diff` lists as removed and every
@@ -3393,7 +3452,11 @@ their results.
 - 90.4 Open: a `dormant` verdict for dual-build mods (a call the old core lacks, made only in a method the old core's interfaces do
   not declare, as RevenantLib's forwards). Needs a per-method call-site listing from the ASM helper; linkage reads only the
   constant pool.
+  **Owner 2026-11-22:** kept queued after the G series ("I want to be able to port mods to future updates specifically
+  abandoned mods.").
 - 90.5 Open (design step 1 rest): per-build behaviour-fact states (CARRIED/RECHECK/PROVEN) classified by `target-bump`.
+  **Owner 2026-11-22:** kept queued after the G series ("I want to be able to port mods to future updates specifically
+  abandoned mods.").
 - Tests: `tests/test_target_bump.py` (10: registry, fingerprint refusal, status kept, token resolution in paths/strings/lists,
   bump end to end with checkpoint removal, catalogue join, retarget plan and apply).
 
@@ -3435,6 +3498,8 @@ A dual target through `mod_info.json` alone is not possible for mods that break:
   `PersonBountyEventData.reportSuccess(int)` and `pickPortraitPreferNonDuplicate(..., Random)`; obfuscated internals in Station
   Augments and Neutrino 1.8.9; a 0.98.5a rig and live runs; whether a `rules.csv` row overriding a vanilla id behaves as on RC8
   under the new `rules` list (live). Proposed: a target profile so finding text says "the target" instead of "RC8".
+  **Owner 2026-11-22:** closed ("For everything else I will follow your recommendations."): its RC3 leftovers were superseded
+  by the RC7 target.
 - 89.8 **Done 2026-11-15.** Same signature, other meaning: `api_sources.parameter_renames` compares parameter names of every
   public/protected method in the two `starfarer.api.zip` bundles; `api-diff` adds `parameters_renamed` to its catalogue (and
   prints them) whenever both zips sit beside the jars, as the game ships them; `target-impact` reports a mod calling such a
