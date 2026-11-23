@@ -12,6 +12,7 @@ from bridgeforge.build_tag import _find_mod_info
 from bridgeforge.campaign_layout import mod_body_types, mod_systems_by_reach
 from bridgeforge.probe.probe_expectations import bounty_ids, entity_checks
 from bridgeforge.probe.probe_mod_build import RELEASE_RELATIVE
+from bridgeforge.probe.probe_sections import ship_sections, variant_index
 from bridgeforge.scan.scanner import _load_lenient_json_file, _read_csv_rows, _wing_ids_set
 
 DEFAULT_CAMPAIGN_INTERVAL_DAYS = 5.0
@@ -363,37 +364,11 @@ def _wing_or_module_hulls(mod_root: Path) -> set[str]:
     """Hull ids the mod uses as a fighter (a wing_data.csv variant's hull) or as a station module (a variant named in another
     variant's `modules`): never deployable as a ship (PRB-FIGHTER-01). Read from the mod's own data, as a vanilla base's hints
     are not at hand here."""
-    hull_of, modules_of = _variant_index(mod_root)
+    hull_of, modules_of = variant_index(mod_root)
     module_variants = {module for modules in modules_of.values() for module in modules}
     wing_variants = {(row.get("variant") or "").strip()
                      for row in _read_csv_rows(mod_root / "data" / "hulls" / "wing_data.csv") or []}
     return {hull_of[v] for v in (wing_variants | module_variants) if v in hull_of}
-
-
-def _variant_index(mod_root: Path) -> tuple[dict[str, str], dict[str, list[str]]]:
-    """({variant id: hull id}, {variant id: the module variants its `modules` lists}) of the mod's data/variants. `modules` is a
-    {slot: variant} object or a list of them."""
-    variants_root = mod_root / "data" / "variants"
-    hull_of: dict[str, str] = {}
-    modules_of: dict[str, list[str]] = {}
-    for path in sorted(variants_root.rglob("*.variant")) if variants_root.is_dir() else []:
-        data = _load_lenient_json_file(path)
-        if not isinstance(data, dict) or not isinstance(data.get("hullId"), str):
-            continue
-        variant_id = str(data.get("variantId") or data.get("id") or path.stem)
-        hull_of[variant_id] = data["hullId"]
-        modules = data.get("modules")
-        entries = modules if isinstance(modules, list) else [modules] if isinstance(modules, dict) else []
-        modules_of[variant_id] = [v for entry in entries if isinstance(entry, dict) for v in entry.values() if isinstance(v, str)]
-    return hull_of, modules_of
-
-
-def _ship_sections(mod_root: Path, deploy_variants: dict[str, str]) -> list[str]:
-    """93.68: the hulls the probe's chosen variants carry as modules. Review of 0.3.6: a hull is a section only when the variant
-    the plan deploys for its parent lists it; a parent deployed through a variant without modules leaves it a ship of its own."""
-    hull_of, modules_of = _variant_index(mod_root)
-    carried = {hull_of[module] for variant in deploy_variants.values() for module in modules_of.get(variant, []) if module in hull_of}
-    return sorted(carried & set(deploy_variants))
 
 
 def _variant_by_hull(mod_root: Path, hulls: list[str]) -> dict[str, str]:
@@ -619,7 +594,7 @@ def build_probe_config(
     # the parent's ship appears. It stays in `hulls` for the content check but gets no fleet slot of its own: P035-BULTACH-20261122
     # gave 32 of its 108 planned hulls one, and 10 of the 49 hulls that never deployed were sections.
     variants = _variant_by_hull(mod_root, deployable)
-    sections = _ship_sections(mod_root, variants)
+    sections = ship_sections(mod_root, variants)
     fleet = [hull for hull in deployable if hull not in sections]
     variants = {hull: variant for hull, variant in variants.items() if hull not in sections}
     empty_variant = sorted(hull for hull in fleet if hull not in variants)
