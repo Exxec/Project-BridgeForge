@@ -3467,6 +3467,12 @@ approved for now set in roadmap").** Each entry names the hand work it replaces.
     - a dialog, a Fatal line and a dead game after the compare line;
     - a vanished window at Continue.
   - **Mutation-checked:** 5 mutants, all caught after a passing baseline.
+  - **Review of #215:**
+    - **The Fatal scan:** it starts at the end of the compare line itself. The wait polls once a second, so a Fatal
+      243 ms after the line could land before the poll saw it.
+    - **Dialogs:** they count from the Continue click, which also catches a dialog during the load.
+    - **Tests:** a Fatal right behind the compare line, a dialog during the load, and old load and compare lines
+      before the click. 4 more mutants, all caught.
   - **Left:**
     - 88.22's reverse case, a New Game that loaded an old save: 93.50 now moves the rig's old saves aside at install.
     - REMOVALS.json's `files` category (77.19) is not part of this.

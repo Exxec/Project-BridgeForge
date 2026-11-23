@@ -74,7 +74,7 @@ def drive_reload(log: Path, hands: Hands, menu_timeout: float = 240, compare_tim
         result.stages.append("main-menu")
         at[0] = "continue"
         hands.sleep(20)
-        offset = len(_log_text(log))
+        offset, dialogs = len(_log_text(log)), len(_dialogs(log))  # baselines at the click (review of #215)
         if not click_menu(hands, "Continue", MAIN_MENU_CONTINUE):
             return stuck("the main menu is still up after clicking Continue (no save to continue, or the click missed)")
         if not wait_for(log, LOAD_LINE, load_timeout, hands, since=offset):
@@ -86,11 +86,15 @@ def drive_reload(log: Path, hands: Hands, menu_timeout: float = 240, compare_tim
             return stuck("no 'fingerprint|compare' probe line after loading: the stored fingerprint did not match this save, or the probe is off")
         result.stages.append("fingerprint-compare")
         at[0] = "after-compare"
-        compared, dialogs = len(_log_text(log)), len(_dialogs(log))
+        # Scan from the end of the compare line itself, not from when the poll noticed it: the wait polls once a second, and
+        # ICBF2-J28FR's Fatal came 243 ms after the line (review of #215).
+        text = _log_text(log)
+        line_end = text.find("\n", text.index(COMPARE_MARKER, offset))
+        compared = len(text) if line_end < 0 else line_end + 1
         for _ in range(max(settle_seconds, 1)):
             new = _dialogs(log)[dialogs:]
             if new:
-                return stuck(f"a dialog appeared after the compare line (88.19): {new[0].strip()[:300]}")
+                return stuck(f"a dialog appeared after the Continue click (88.19): {new[0].strip()[:300]}")
             fatal = next((line for line in _log_text(log)[compared:].splitlines() if FATAL_LINE.search(line)), None)
             if fatal:
                 return stuck(f"a Fatal came after the compare line (88.19): {fatal.strip()[:300]}")
