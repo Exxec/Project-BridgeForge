@@ -1,0 +1,1 @@
+- `gene prove` and `gene prove-set` (94.G2 slice 19): a carrier fails isolation when a hull's style is defined nowhere it can load from, or a carried style names a file the carrier and the core lack (`load_gaps`).

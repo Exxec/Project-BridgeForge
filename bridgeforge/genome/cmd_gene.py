@@ -168,7 +168,7 @@ def _run_prove_set(args: argparse.Namespace) -> int:
         return 2
     print(f"set-isolation-proof: {result['verdict']} (static half; boot half NOT_RUN): {result['carried']} gene(s) carried, "
           f"{result['refused']} refused, {result['failures']} unresolved reference(s), "
-          f"{result['unresolved']} anchor(s) the carrier does not define")
+          f"{result['unresolved']} anchor(s) the carrier does not define, {result.get('load_gaps', 0)} load gap(s)")
     print(f"gene {result['gene'][:16]}; evidence in {result['out']}")
     return 0 if result["verdict"] == "PASS" else 1
 

@@ -2463,6 +2463,40 @@ history as the closure benchmark, a cross-repository trace check, an early Java 
       starting ship (slice 18): the start's gene is its registration and classes, and the ship is a need.
     - **Owner 2026-11-23 ("Counts only, scrub"):** the public repository describes Eridani Combine by counts, never by
       its identifiers. A follow-up PR replaces the names already on main.
+  **Slice 19 Done 2026-11-23: the carrier check sees what the game needs to load it.** Static isolation passed P2's and
+  P3's carriers, which were then Fatal at load (RC8_BEHAVIOUR RC8-49). So the check comes first, as slice 12's did, and
+  the closure change (styles as needs, owner 2026-11-23) follows in the next slice.
+  - **`genome/carrier_load.load_gaps(carrier, core)`** lists, all at once:
+    - each hull or skin whose `style` neither the carrier's nor the core's `hull_styles.json` defines
+      (`hull-style-undefined`);
+    - each image or sound file a carried style names that neither holds (`hull-style-file-missing`).
+
+    Vanilla RC7's six styles name files under 13 keys, all `.png`, and two vanilla skins set a style (read 2026-11-23).
+  - `gene prove` and `gene prove-set` fail isolation on any gap and record them (`load_gaps`).
+  - **On the real carriers (local, read only):**
+    - P2's: 2 gaps, and none once the donor's styles are added (DIAG-P2-STYLES-20261123 booted).
+    - P3's set: 23 gaps; once the styles are added, 8 missing files of one style. The diagnostic boot showed only the
+      first.
+  - **Re-proved:** P1 still passes. P2, P3's set and P4 now fail isolation on style gaps until the next slice. The anchor
+    identities are unchanged.
+  - **Tests:** `tests/test_carrier_load.py`:
+    - undefined styles in a `.ship` and a `.skin`, with the core's style accepted;
+    - a carried style's files, found in the carrier, in the core, or missing;
+    - which strings name files;
+    - a hull gene's proof and a gene set's proof failing.
+
+    Mutation-checked: 7 mutants. The set proof's one survived until its test was added; then all were caught.
+  - **Independent review:** no critical finding. Fixed, with tests:
+    - without `--vanilla-core` every hull with a vanilla style read as undefined; the check now records itself NOT_RUN;
+    - a style or file from a declared dependency (a library in `--provider-root` whose id is in `needs.mods`) counts as
+      present, since the game merges that mod's files too;
+    - an unreadable hull, skin or styles file is its own gap (`hull-file-unreadable`, `hull-styles-unreadable`), not
+      taken for undefined styles;
+    - a leading `/` is dropped, a backslash path and an upper-case suffix are read, and a path with `..` is never looked
+      up outside its folders.
+
+    The real carriers measure the same. The review's 4 mutants were all caught, once the `..` test placed a file that the
+    path would reach.
 - 94.G3 **Gene bank**: content-addressed store, alleles across the corpus, lineage, licence state; RevenantLib distributes genes
   from vanished authors (GD-3). The store's payloads live under `data_root()`, like `Done/`, never in this public
   repository; only manifests of the owner's own or permitted content become committed fixtures (2026-11-19).

@@ -271,7 +271,10 @@ def prove_set(mod: Path, anchor: str, out: Path, *, vanilla_core: Path | None, q
     isolation = classify_isolation(scan_mod(root, TargetProfile(), vanilla_core),
                                    scan_mod(work / "carrier", TargetProfile(), vanilla_core), allowed)
     unresolved = unresolved_in_carrier(work / "carrier", genes)
-    verdict = "FAIL" if isolation["failures"] or refused or unresolved else "PASS"
+    from bridgeforge.genome.carrier_load import load_gaps
+
+    gaps = load_gaps(work / "carrier", vanilla_core)  # slice 19: what the game needs to load the carrier (RC8-49)
+    verdict = "FAIL" if isolation["failures"] or refused or unresolved or gaps else "PASS"
     buckets, not_carried = suspect_buckets(genes)
     anchor_gene = genes[anchor]
     atomic_write_text(out / "gene.json", dumps(anchor_gene), newline="")
@@ -284,7 +287,7 @@ def prove_set(mod: Path, anchor: str, out: Path, *, vanilla_core: Path | None, q
                          **({"plugin": plugin} if plugin else {})},
              "carried": [{"anchor": a, "identity": genes[a]["identity"]} for a in order],
              "refused": [{"anchor": a, "reason": refused[a]} for a in sorted(refused)],
-             "unresolved_in_carrier": unresolved,
+             "unresolved_in_carrier": unresolved, "load_gaps": gaps,
              "registrations_not_made": registrations_not_made(genes, made_by),
              **{k: v for k, v in isolation.items() if k != "verdict"}, "verdict": verdict,
              "suspects": buckets, "not_carried": not_carried,
@@ -293,7 +296,7 @@ def prove_set(mod: Path, anchor: str, out: Path, *, vanilla_core: Path | None, q
     if checkpoint_path.is_file():
         checkpoint_path.unlink()  # the checkpoint goes only once the full result is on disk
     return {"gene": anchor_gene["identity"], "carried": len(genes), "refused": len(refused), "failures": len(isolation["failures"]),
-            "unresolved": len(unresolved), "verdict": verdict, "out": str(out)}
+            "unresolved": len(unresolved), "load_gaps": len(gaps), "verdict": verdict, "out": str(out)}
 
 
 __all__ = ["SET_PROOF", "merge_members", "prove_set", "registrations_not_made", "set_identity", "suspect_buckets",

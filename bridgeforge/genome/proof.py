@@ -418,6 +418,17 @@ def prove(mod: Path, anchor: str, out: Path, *, vanilla_core: Path | None = None
     isolation["unresolved_in_carrier"] = unresolved_in_carrier(work / "carrier", {anchor: {**gene, "needs": {**gene["needs"], "genes": []}}})
     if isolation["unresolved_in_carrier"]:
         isolation["verdict"] = "FAIL"
+    from bridgeforge.genome.carrier_load import dependency_folders, load_gaps
+
+    # Slice 19: what the game needs to load the carrier (RC8-49). Without the core a vanilla style cannot be told from an
+    # undefined one, so the check does not run (review of slice 19); a declared dependency's styles and files count.
+    if vanilla_core is None:
+        isolation["load_gaps"] = "NOT_RUN: no --vanilla-core, so a hull's vanilla style cannot be told from an undefined one"
+    else:
+        deps = dependency_folders([Path(p) for p in provider_roots or []], gene["needs"]["mods"])
+        isolation["load_gaps"] = load_gaps(work / "carrier", vanilla_core, deps)
+        if isolation["load_gaps"]:
+            isolation["verdict"] = "FAIL"
     inputs = [("member", path) for path in sorted({member_file(m["path"]) for m in gene["members"]})]
     atomic_write_text(out / "gene.json", dumps(gene), newline="")
     written = {}
