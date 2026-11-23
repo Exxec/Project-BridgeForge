@@ -2548,6 +2548,9 @@ history as the closure benchmark, a cross-repository trace check, an early Java 
     - **`validate()` checks `needs.donor` on its own,** so a bad `needs.genes` cannot hide it, and refuses paths outside
       the mod.
 
+    After the fixes, the mutation check ran again: 20 mutants (the earlier 12 re-pointed, plus 8 for the review's fixes),
+    all caught.
+
     Not changed, and recorded here:
     - A mod's override of a core style is not carried, so the carrier shows the vanilla look. This loses fidelity but
       still loads.
