@@ -142,6 +142,35 @@ class PutPlanTests(unittest.TestCase):
         self.assertEqual(len(calls), 2 + 3)  # the first copy came from the checkpoint; the interrupted one ran again
         self.assertIn(f"{ANCHOR}: 2 of 4 stored, 1 refused, 1 error(s)", out.getvalue())
 
+    def test_an_error_is_retried_by_the_next_run_and_alleles_count_distinct_manifests(self) -> None:
+        from bridgeforge.genome import gene_set
+
+        real = gene_set.walk
+
+        def refuse_broken(mod, anchor, core, **kwargs):
+            if Path(mod).name == "Broken":
+                return {}, {anchor: f"{anchor}: defined twice"}
+            return real(mod, anchor, core, **kwargs)
+
+        with resolved_temp_dir() as root:
+            base, _, core, plan_file = self._setup(root)
+            with _failing_walk():
+                first = put_plan(plan_file, core, bank=root / "Genes", quiet=True, base=base)
+            with mock.patch("bridgeforge.genome.gene_set.walk", refuse_broken):  # the disk is back
+                second = put_plan(plan_file, core, bank=root / "Genes", quiet=True, base=base)
+        row = second["anchors"][ANCHOR]
+        self.assertEqual((first["errors"], second["errors"]), (1, 0))
+        # Three stored copies, two manifests: the Errored copy is the revival's allele again.
+        self.assertEqual((row["stored"], row["alleles_from_plan"], row["alleles_in_bank"]), (3, 2, 2))
+
+    def test_only_pilot_anchors_are_put(self) -> None:
+        from bridgeforge.genome.alleles import plan_items
+
+        data = {"schema": "bridgeforge-gene-alleles", "schema_version": 1, "pilot_anchors": [ANCHOR],
+                "roots": [{"path": "Done/A/A", "folder": "archive", "defines": [ANCHOR, "variant:needed_v"]},
+                          {"path": "Done/B/B", "folder": "archive", "defines": ["variant:needed_v"]}]}
+        self.assertEqual(plan_items(data), [("Done/A/A", "archive", ANCHOR)])  # a needed gene elsewhere is slice 3's input
+
     def test_a_file_that_is_not_a_plan_is_refused(self) -> None:
         with resolved_temp_dir() as root:
             base, _, core, _ = _base(root)
