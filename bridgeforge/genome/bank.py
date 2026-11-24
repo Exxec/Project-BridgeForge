@@ -407,7 +407,7 @@ def rebuild(vanilla_core: Path, *, bank: Path | None = None, quiet: bool = False
 
 
 def add_bank_parser(gene_sub) -> None:
-    """`gene bank put|verify|rebuild|list` (94.G3)."""
+    """`gene bank put|verify|rebuild|list|alleles` (94.G3)."""
     bank_cmd = gene_sub.add_parser("bank", help="the gene bank (94.G3): a rebuildable, content-addressed index of gene manifests and "
                                                 "their members' bytes, under the data root's Genes/")
     bank_sub = bank_cmd.add_subparsers(dest="bank_command", required=True)
@@ -427,7 +427,15 @@ def add_bank_parser(gene_sub) -> None:
     for key in ("kind", "anchor", "build", "licence"):
         list_cmd.add_argument(f"--{key}", help=f"only records whose {key} is this")
     list_cmd.add_argument("--history", action="store_true", help="also list records no source holds any more")
-    for command in (put_cmd, verify_cmd, rebuild_cmd, list_cmd):
+    alleles_cmd = bank_sub.add_parser("alleles", help="plan only: every copy of a mod under CORPUS that defines a banked anchor, "
+                                                      "what only mentions one, and what could not be read; one progress line per "
+                                                      "mod root, resumable; nothing is put (94.G3 slice 2)")
+    alleles_cmd.add_argument("corpus", type=Path, help="a folder under the data root, such as Done/")
+    alleles_cmd.add_argument("--out", type=Path, required=True, help="the plan JSON to write; it names mod folders, so keep it local")
+    alleles_cmd.add_argument("--exclude", action="append", metavar="GLOB",
+                             help="skip top-level corpus folders matching this (repeatable), such as a rig's _rig-*")
+    alleles_cmd.add_argument("--quiet", action="store_true", help="no progress lines on stderr")
+    for command in (put_cmd, verify_cmd, rebuild_cmd, list_cmd, alleles_cmd):
         command.add_argument("--bank", type=Path, help="the bank folder (default: <data root>/Genes)")
 
 
@@ -448,6 +456,10 @@ def run_bank_cli(args) -> int:
     from bridgeforge.genome.gene import GeneError
     from bridgeforge.vendor_plan import VendorPlanError
 
+    if args.bank_command == "alleles":
+        from bridgeforge.genome.alleles import run_alleles_cli
+
+        return run_alleles_cli(args)
     try:
         if args.bank_command == "put":
             result = put(args.mod, args.anchor, args.vanilla_core, folder=args.folder, bank=args.bank, quiet=args.quiet)
