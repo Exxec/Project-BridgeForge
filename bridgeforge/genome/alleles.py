@@ -71,9 +71,10 @@ def _is_dir(path: Path) -> bool:
 class _Walk:
     """The corpus walk of `corpus_roots`: roots, zips, unread archives and folders, and skipped copies with the reason."""
 
-    def __init__(self, corpus: Path, excludes: tuple[str, ...]):
+    def __init__(self, corpus: Path, excludes: tuple[str, ...], archive: bool | None = None):
         self.corpus, self.excludes = corpus, excludes
-        self.working_kind = "archive" if corpus.name.lower() == "done" else "working"
+        archive = corpus.name.lower() == "done" if archive is None else archive
+        self.working_kind = "archive" if archive else "working"
         self.roots: list[tuple[Path, str]] = []
         self.zips: list[Path] = []
         self.unread: list[Path] = []
@@ -145,11 +146,13 @@ class _Walk:
                 self.skip_copies(entry, f"inside a workspace's {entry.name}/: BridgeForge's own copy (a proof carrier, a scratch copy)")
 
 
-def corpus_roots(corpus: Path, excludes: tuple[str, ...] = ()) -> tuple[list[tuple[Path, str]], list[Path], list[Path],
-                                                                        list[tuple[Path, str]]]:
+def corpus_roots(corpus: Path, excludes: tuple[str, ...] = (), archive: bool | None = None) -> tuple[
+        list[tuple[Path, str]], list[Path], list[Path], list[tuple[Path, str]]]:
     """([(mod root, "working" | "archive" | "original")], zips, unread archives and folders, [(skipped copy, why)]) under
-    `corpus`. Top-level folders matching an `excludes` glob (by name) are skipped: a rig's `mods/` holds installed copies."""
-    walk = _Walk(Path(corpus), excludes)
+    `corpus`. Top-level folders matching an `excludes` glob (by name) are skipped: a rig's `mods/` holds installed copies.
+    `archive` says whether the corpus is inside `Done/` (a workspace's working copy there is `archive`); `plan` decides it
+    from the data root, so a plan over `Done/X` labels a copy as a plan over `Done/` does (review of slice 2b)."""
+    walk = _Walk(Path(corpus), excludes, archive)
     walk.visit(Path(corpus))
     return walk.roots, walk.zips, walk.unread, walk.skipped
 
@@ -378,7 +381,8 @@ def plan(corpus: Path, *, bank: Path | None = None, excludes: tuple[str, ...] = 
     if not Path(corpus).resolve().is_relative_to(base.resolve()):
         raise AllelesError(f"{corpus} is not under the data root, so its copies could not be banked by relative path")
     pilots, anchors = bank_anchors(bank)
-    roots, zips, unread, skipped = corpus_roots(Path(corpus), excludes)
+    in_done = Path(corpus).resolve().is_relative_to((base / "Done").resolve())
+    roots, zips, unread, skipped = corpus_roots(Path(corpus), excludes, archive=in_done)
     # The anchors and excludes go in as digests, not lists: a longer list must restart the run, not count as grown.
     head = {"command": "gene bank alleles", "corpus": _rel(Path(corpus), base), "anchors": _sha(json.dumps(anchors).encode()),
             "excludes": _sha(json.dumps(list(excludes)).encode()), "roots": [_rel(root, base) for root, _ in roots]}
@@ -436,5 +440,6 @@ def run_alleles_cli(args) -> int:
     return 1 if summary["errors"] else 0
 
 
-__all__ = ["AllelesError", "DEFINED_KINDS", "RootIndex", "bank_anchors", "corpus_roots", "id_patterns", "mentioned_ids", "plan",
-           "run_alleles_cli", "scan_root", "summarize", "zip_mod_infos"]
+__all__ = ["AllelesError", "DEFINED_KINDS", "MOD_INFO", "PLAN_SCHEMA", "PLAN_VERSION", "RootIndex", "bank_anchors",
+           "corpus_roots", "id_patterns", "mentioned_ids", "plan", "run_alleles_cli", "scan_root", "summarize", "write_plan",
+           "zip_mod_infos"]

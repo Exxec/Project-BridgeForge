@@ -248,7 +248,7 @@ class BankCliTests(unittest.TestCase):
         self.assertEqual((current[0], len(current[1].splitlines()), current[1].count("history")), (0, 1, 0))
         self.assertEqual((len(history[1].splitlines()), history[1].count(" history")), (2, 1))
         self.assertEqual(verified[0], 0)
-        self.assertIn("1 current record(s) of 2, 0 problem(s)", verified[1])
+        self.assertIn("1 current record(s) of 2, 0 refused source line(s), 0 problem(s)", verified[1])
         self.assertEqual((broken[0], no_sources[0]), (2, 2))
         self.assertIn("sources.json is missing", no_sources[2])
 

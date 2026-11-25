@@ -1,0 +1,1 @@
+- `gene bank put-plan PLAN --vanilla-core CORE --report OUT` (94.G3 slice 2b): puts every pilot copy an alleles plan names. Describe's refusal of an anchor is recorded as a sources line and an entries row with the scrubbed reason, which verify accepts and rebuild reproduces; one bank holds one build; the report counts the alleles (manifests) and identities per pilot.

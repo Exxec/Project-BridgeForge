@@ -3011,6 +3011,65 @@ history as the closure benchmark, a cross-repository trace check, an early Java 
     - refusal rows in `entries.json`;
     - folder kind `archive`;
     - putting the plan's pilot roots, into a scratch bank first, then into Test1's bank, which becomes the bank's home.
+
+  **Slice 2 Done 2026-11-25 (2b: refusal rows, folder kind `archive`, `gene bank put-plan`).** Branch `feat/g3-bank-slice2b`.
+  The pilots' copies in Test1's `Done/` are banked, and Test1's bank rebuilds to one ROOT. The design is in
+  `docs/GENE_BANK_DESIGN.md` ("Slice 2"), set with the advisor.
+  - **`bridgeforge/genome/bank.py`:**
+    - `put(..., record_refusal=True)` turns describe's refusal of the anchor into the source's line and an entries row with
+      no records and the scrubbed reason (`<source>`, `<core>`, `<data root>`, forward slashes). A plain put still refuses
+      and writes nothing, so a mistyped anchor never becomes a line.
+    - `verify` accepts such a row, flags one holding records, and flags a machine path left in any reason.
+    - `rebuild` replays with `record_refusal` and lists every refused line. A source that held records and is refused now is
+      "newly refused", and the CLI exits 1.
+    - `checked_build` refuses a core reporting no build, or a build other than the bank's: one bank holds one build.
+    - `FOLDER_KINDS` gains `archive`.
+  - **`bridgeforge/genome/bank_plan.py`, `gene bank put-plan PLAN --vanilla-core CORE --report OUT`:** puts every pilot copy
+    an alleles plan names.
+    - *Refused before any put:* a plan for other pilots, a malformed plan, a wrong core.
+    - *Per copy:* a copy changed since the plan is an error; a failure other than a refusal is reported, never banked, and
+      says "partly written" when its line was written.
+    - *Report:* per pilot anchor, the copies stored, refused and failed, and the distinct manifests (alleles) and identities
+      among them and in the bank. A manifest carries the mod's version, so two releases of one feature are two manifests
+      but one identity.
+    - *Long-running rule:* progress lines, a checkpoint kept while errors remain (so the next run retries only those),
+      `--quiet`.
+  - **On Test1, against RC7 (the owner: "Finish on RC7, re-bank later"):**
+    - *Scratch bank first:* all 12 pilot copies in `Done/` stored, 0 refused, 0 errors.
+    - *Real bank:* the same 12 copies stored, ROOT `0f1c4f9c57794f84...`, identical to the scratch run's, with 415 records
+      and 0 problems. A closed console window interrupted it once; `put-plan` resumed from its checkpoint.
+    - *Rebuilds:* in place and into an empty folder seeded with `sources.json`, both on all 20 sources. Both gave the same
+      ROOT, 0 refused, 0 problems, and `entries.json` hashing the same (`cdc5ce57...`).
+    - *Alleles per pilot (manifests / identities):*
+
+      | Pilot | Among the 3 `Done/` copies | In the bank |
+      |---|---|---|
+      | Tania's plugin | 2 / 2 | 3 / 2 |
+      | Bultach's custom start | 2 / 1 | 3 / 1 |
+      | Scrapyard's hull mod | 2 / 2 | 2 / 2 |
+      | P3's star system | 2 / 2 | 3 / 2 |
+
+      Bultach's copies differ only in version and provenance. The other three revivals changed the feature itself.
+  - **Independent review:** one critical and one high finding, both reproduced; all fixed.
+    - *Critical:* a wrong core (Test1's RC3 folder, or a mistyped path) would have stored every copy under that build, and
+      rebuild would then refuse every core, permanently. Fixed by `checked_build`.
+    - *High:* rebuild hid a stored source that is now refused. Fixed by the newly-refused list and exit code.
+    - *Medium, also fixed:*
+      - identities counted beside manifests;
+      - a plan for other pilots refused;
+      - a stale copy reported as an error;
+      - tests pin that a stored row has no `refused` key, and pin the not-described counts.
+    - *Low, also fixed:*
+      - the folder kind follows the data root's `Done/`, not the corpus name;
+      - the doubled-backslash path form is scrubbed;
+      - "partly written" errors are reported as such;
+      - a plan's keys are checked before any put;
+      - the checkpoint is kept while errors remain.
+  - **Tests:** `tests/test_gene_bank_put_plan.py`, 10 tests, and one more in `tests/test_gene_alleles.py`.
+  - **Mutation check:** 34 mutants, all caught. One timed out once, when the machine slept, and was caught on its re-run.
+  - **Full suite:** 3555 tests, OK (skipped=13); hermeticity PASS.
+  - **Next:** slice 3, lineage, the licence report and `atlas` over the bank. A re-bank on RC9 is item 98.6. `Done/` held no
+    copy of a needed gene outside the pilot families, so lineage starts from the corpus beyond `Done/`.
 - 94.G4 **Adaptation**: target-impact, gated fixers and `src-to-jar` at gene scope; Project Go carries translations; SpriteForge
   validates sprites and slots.
   **Project Go's part, slice 1 (2026-11-22, Project-Go #19): `ssmt-cli gene-carry`, a read-only report.**
