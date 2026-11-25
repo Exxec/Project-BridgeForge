@@ -123,6 +123,14 @@ through `zipsafe`.
      - A `Done/` working copy is folder kind `archive`. The existing source dicts are left alone, so the pilots' record
        ids and ROOT do not change.
      - The plan is put first into a scratch `--bank`, then into the real one.
+     - Built as `gene bank put-plan PLAN --vanilla-core CORE --report OUT` (`bridgeforge/genome/bank_plan.py`). Nothing
+       is put when the plan was made for other pilots, is not a plan, or runs with a core of another build. A copy changed
+       since the plan is an error. The report counts distinct manifests and distinct identities: a manifest carries the
+       mod's version, so two releases of one feature are two manifests but one identity.
+     - **One bank holds one build** (`checked_build`). A line stored under a wrong build could never be rebuilt, and no
+       command removes a line (review of slice 2b). Re-banking on a new build (0.98.5a-RC9, ROADMAP-3 98.6) is a second
+       bank, or rebuild learning one core per build.
+     - A rebuild that turns a stored source into a refusal lists it as newly refused, and the CLI exits 1.
    - **Test1 becomes the bank's home.** `Done/` lives there, so once it holds a `Done/` source, a rebuild on White_Legion
      refuses the missing source, as it should. Slice 2's rebuild check is in place against an empty folder, both on
      Test1.
