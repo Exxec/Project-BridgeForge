@@ -1,7 +1,7 @@
 # BridgeForge: notes for Claude sessions
 
 BridgeForge is an offline, evidence-first toolkit for reviving legacy Starsector mods on
-0.98.5a-RC7 (Java 17; see "Target" below). Charter: `docs/PROJECT_CHARTER.md`. Command guide:
+0.98.5a-RC9 (Java 17; see "Target" below). Charter: `docs/PROJECT_CHARTER.md`. Command guide:
 `docs/BRIDGEFORGE_REVIVAL_GUIDE.md`. Active plan: [ROADMAP-3.md](ROADMAP-3.md); earlier decisions/history:
 [page 1](docs/archive/ROADMAP.md) and [page 2](docs/archive/ROADMAP-2.md). Release history: `CHANGELOG.md`. Direction for fixers, checks and automation: item 73,
 `docs/AUTOMATION_PLAN.md`, including the owner's 2026-10-14 decisions on what may run without a person. Local sessions also
@@ -19,16 +19,20 @@ The S1-S4 documents are proposed strategy; this policy does not itself approve i
 DOC-001 (source-audited 2026-10-18, fixed the same day): `archive --refresh` and group `--archive --refresh` move the prior
 archive to `Done/_replaced-<date>/` and restore it if the new write fails; never delete an archive. Implementation status of
 items 73/75 is in `docs/ROADMAP_STATUS.md`; the runs still needed on this machine are in `docs/LOCAL_HANDOFF.md` section 0b.
-## Target (owner 2026-11-15)
+## Target (owner 2026-11-25)
 
-Revivals now target **0.98.5a-RC7**. Trust the build the core reports (`bridgeforge target show` prints `target_core_reports`),
-not a folder name or memory: Test1's `C:\Games\Starsector-0.98.5a-RC3` reports RC3 (its starfarer_obf.jar differs from RC7's;
-it was believed to be RC7 until checked, 2026-11-17), and `C:\Games\Starsector-0.98.5a-RC7` is the RC7 copy used by Test1's
-0.98.5a test rig `In operation\_rig-0985a`. On White_Legion RC7 is `C:\Program Files (x86)\Fractal Softworks\Starsector985a`
-(Java 17; its `jre\bin` has `javac`). ROADMAP-3 items 92.38 and 92.40.
+Revivals now target **0.98.5a-RC9**, the hotfix of 0.98.5a (owner 2026-11-25: "Yes, bump to RC9"; ROADMAP-3 item 98). Trust
+the build the core reports (`bridgeforge target show` prints `target_core_reports`), not a folder name or memory.
+- **White_Legion:** the owner installed RC9 over RC7 in `C:\Program Files (x86)\Fractal Softworks\Starsector985a` (Java 17;
+  its `jre\bin` has `javac`); White_Legion has no RC7 core any more.
+- **Test1:** RC9 is `C:\Games\Starsector-0.98.5a-RC9`, installed beside RC7 (`C:\Games\Starsector-0.98.5a-RC7`), which
+  stays: it is the previous target, the old core of the RC7 -> RC9 comparison, and the build the gene bank (94.G3) was
+  described against. The 0.98.5a rigs `In operation\_rig-0985a` and `_rig-genes` link to RC7 until they are repointed.
+  `C:\Games\Starsector-0.98.5a-RC3` reports RC3 (believed to be RC7 until checked, 2026-11-17; items 92.38, 92.40).
 Pass `--vanilla-core @target` (any core argument resolves the token from `bridgeforge-state/target.json`; `bridgeforge
-target show`). RC8 (`C:\Program Files (x86)\Fractal Softworks\Starsector`) is the previous target (registry status
-QUALIFIED) and the reference for archives validated before 2026-11-15. When a new game version appears: `bridgeforge
+target show`). RC7 is the previous target and the reference for archives validated from 2026-11-15 to 2026-11-25; RC8
+(`C:\Program Files (x86)\Fractal Softworks\Starsector`, registry status QUALIFIED) is the reference for archives validated
+before 2026-11-15. When a new game version appears: `bridgeforge
 target-bump NEW_CORE` (api-diff, target-impact, catalogue and registry entry in `bridgeforge-state/targets/<build>/`, then
 the new build becomes the target), the gated fixers the catalogue lists (`rc8-signature-changed`,
 `jar-call-signature-changed`, `forwarding-class-method-missing`), then `bridgeforge retarget` (plan) and `--apply` for the

@@ -1,0 +1,1 @@
+- 0.98.5a-RC9, the 0.98.5a hotfix, is the revival target (ROADMAP-3 item 98): RC7 -> RC9 leaves 346 of 350 archives CLEAN; four that call renamed obfuscated game internals are queued for a hand port.

@@ -1,6 +1,6 @@
 ---
 name: bridgeforge-revive
-description: Take one Starsector mod through BridgeForge from intake to an archived, live-validated revival on the current target build (0.98.5a-RC7). Covers intake, revive with approvals, input-tier fixes, jar rebuilds from source, the owner's decision sheet, acceptances with evidence, the report draft, live tests on the Test1 rig, record and archive, and re-archiving a changed mod with a +bf.N bump. Use it whenever the user names a mod to revive, port, retarget or re-test ("revive X next", "port the abandoned ones", "UAF works on RC8, why so many findings?"), even if they don't say "revive".
+description: Take one Starsector mod through BridgeForge from intake to an archived, live-validated revival on the current target build (0.98.5a-RC9). Covers intake, revive with approvals, input-tier fixes, jar rebuilds from source, the owner's decision sheet, acceptances with evidence, the report draft, live tests on the Test1 rig, record and archive, and re-archiving a changed mod with a +bf.N bump. Use it whenever the user names a mod to revive, port, retarget or re-test ("revive X next", "port the abandoned ones", "UAF works on RC8, why so many findings?"), even if they don't say "revive".
 ---
 
 # Reviving one mod
