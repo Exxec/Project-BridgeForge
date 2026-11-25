@@ -1,3 +1,35 @@
+**98. The 0.98.5a-RC9 hotfix (owner 2026-11-25).** The owner installed RC9 over RC7 on White_Legion and asked for it on
+Test1, then for a check of what the roadmap and the workflow need. Owner rulings the same day: "Yes, bump to RC9", "Port all
+four", "Finish on RC7, re-bank later" (the gene bank), and "Live testing is ok for now if need be while working".
+- 98.1 **Done 2026-11-25.** **RC9 on Test1, beside RC7.** Installed silently (NSIS, `/S /D=C:\Games\Starsector-0.98.5a-RC9`)
+  from the owner's installer; the core reports 0.98.5a-RC9. RC7 stays at `C:\Games\Starsector-0.98.5a-RC7`: White_Legion no
+  longer has it, and it is the old core of the comparison and the build the gene bank (94.G3) was described against.
+  White_Legion's registry now names RC9 as the target (`target set`).
+- 98.2 **Done 2026-11-25.** **Catalogue, RC7 -> RC9** (`target-impact` over Test1's `Done/`, the `bridgeforge-catalogue`
+  skill, about 5 minutes): 350 archives, CLEAN 346, BREAKS 4, RELINK 0, REVIEW 0. Every break is a call into obfuscated game
+  internals the hotfix renamed; no public API member changed for any archive.
+  - Neutrino Corporation 1.8.9+bf.1: `combat.systems.return.advanceEvenIfPaused` and `.fire` (its drone system AI).
+  - Station Augments 2.4.3+bf.2: `combat.ai.system.oO0O.o00000(...)`, `loading.specs.M.createSystem` and `createSystemAI`.
+  - Wide Horizons 1.5.0 and 1.5.1a: `loading.specs.b.o00000` (two archives of one mod).
+- 98.3 **Done 2026-11-25.** **The target moves to RC9.** `target-bump C:\Games\Starsector-0.98.5a-RC9\starsector-core --from
+  ...RC7...` on Test1 recorded RC9 (previous RC7) and made it the target; White_Legion's registry names it too.
+  - *api-diff, RC7 -> RC9:* no class, method or field removed; 5 public classes changed, by additions only:
+    `FleetEncounterContext`, `BaseGetCommodityBarEvent`, `BaseSubmarketPlugin`, `WeaponSpecAPI`, `Misc`.
+  - *Its catalogue* (`bridgeforge-state/targets/0.98.5a-RC9/` on Test1) covers `Done/` and `In operation/`: 578 mods,
+    CLEAN 572, BREAKS 6. The six are the four archives of 98.2 plus the working copies of Neutrino Corporation and Station
+    Augments. 358 CLEAN mods use one of the 5 changed classes; the catalogue lists them first for live tests.
+  - CLAUDE.md "Target", the README, the revival guide, `docs/LOCAL_HANDOFF.md`, `docs/ROADMAP_STATUS.md` and the revive
+    and catalogue skills name RC9. `retarget` was not run: the CLEAN archives need no change (the owner's question said so).
+- 98.4 (M) **Port the four.** Approved ("Port all four"). Neutrino Corporation and Station Augments were ported to RC7 with
+  the hand tools of 96.14 (`scratch/rc7-remap/` in their workspaces): the same tools map RC9's names. Wide Horizons is ported
+  once; the 1.5.0 archive moves to `Done/_replaced-<date>/` if 1.5.1a supersedes it. Then `+bf.N`, a live run on an RC9 rig,
+  and the archive on the owner's word. The renames recurring at the next build are the evidence 96.14 asked for.
+- 98.5 (S) **Repoint the 0.98.5a rigs** (`_rig-0985a`, `_rig-genes`) to RC9 when a live run needs them; until then they
+  link to RC7.
+- 98.6 (M) **Re-bank the gene bank on RC9**, after 94.G3 slice 2 completes on RC7 (owner: "Finish on RC7, re-bank later").
+  The bank holds one build (`checked_build`), so this is a second bank or rebuild learning one core per build: decide when
+  it starts.
+
 **97. The S series' remaining work, re-queued without gates (owner 2026-11-17: "Park S4. Stop treating S2 and S3 as gates.
 Check S series implementation plan and if applicable add remaining items to roadmap queue").**
 **Approved; queued after items 95 and 96.** From docs/S_SERIES_IMPLEMENTATION_PLAN.md's "what remains" table (status check

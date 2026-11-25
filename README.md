@@ -2,7 +2,7 @@
 
 Offline, evidence-first tooling for reviving legacy Starsector mods: inspect preserved inputs, apply authorized
 repairs on copies, escalate judgment, and qualify candidates with separate static, package and live evidence.
-Revivals target Starsector 0.98.5a-RC7 / Java 17; 0.98a-RC8, the previous target, is the reference build
+Revivals target Starsector 0.98.5a-RC9 / Java 17 (the 0.98.5a hotfix, since 2026-11-25); 0.98.5a-RC7 and 0.98a-RC8, the previous targets, are the reference builds
 (`bridgeforge target show`). A clean scan or successful compile is not proof that a mod loads, preserves its features
 or is safe for existing saves.
 
