@@ -6,7 +6,7 @@ description: Catalogue what every archived mod in Done/ needs on a new Starsecto
 # Cataloguing Done/ against a new build
 
 This is read-only: nothing is fixed until the owner says so. On 2026-11-17, RC8 -> 0.98.5a-RC7 over 175 archives took
-about 5 minutes on Test1, which holds the main archive.
+about 5 minutes on Test1, which holds the main archive; on 2026-11-25, RC7 -> RC9 over 350 took about the same.
 
 ## 1. Run it where the archive is
 

@@ -1,6 +1,6 @@
 # BridgeForge revival toolkit: how to use it
 
-This guide covers the commands built for reviving old Starsector mods: what each one does, when to use it, and the workflows that chain them together. Revivals target **0.98.5a-RC7** (Java 17). 0.98a-RC8 is the previous target and the reference build: archives validated before the move rest on it. For the design behind the commands, see `docs/REVIVAL_ASSURANCE_PLAN.md`. For progress, see `ROADMAP-3.md`. Claude sessions also have the project skills in `.claude/skills/`: `bridgeforge-revive` (one mod from intake to archive), `bridgeforge-catalogue` (`Done/` against a new game build) and `bridgeforge-pr` (commits and pull requests).
+This guide covers the commands built for reviving old Starsector mods: what each one does, when to use it, and the workflows that chain them together. Revivals target **0.98.5a-RC9** (Java 17), the 0.98.5a hotfix (owner 2026-11-25). 0.98.5a-RC7 is the previous target, and 0.98a-RC8 the reference build before it: archives validated before each move rest on the build they were validated on. For the design behind the commands, see `docs/REVIVAL_ASSURANCE_PLAN.md`. For progress, see `ROADMAP-3.md`. Claude sessions also have the project skills in `.claude/skills/`: `bridgeforge-revive` (one mod from intake to archive), `bridgeforge-catalogue` (`Done/` against a new game build) and `bridgeforge-pr` (commits and pull requests).
 
 All commands run from the repo root, the checkout that also holds `In operation/`, `Done/` and `bridgeforge-state/` (on Test1, the project folder):
 
@@ -13,12 +13,12 @@ Use `python -m` from the checkout, not the `bridgeforge.exe` script: the `.venv`
 Three shorthands used below, adjust to your machine:
 
 ```powershell
-$core = "C:\Program Files (x86)\Fractal Softworks\Starsector985a\starsector-core"  # the target, 0.98.5a-RC7; read-only
+$core = "C:\Program Files (x86)\Fractal Softworks\Starsector985a\starsector-core"  # the target, 0.98.5a-RC9; read-only
 $ref  = "C:\Program Files (x86)\Fractal Softworks\Starsector\starsector-core"      # 0.98a-RC8, the reference; read-only
 $rig  = "In operation\_rig-0985a"                                                 # the isolated 0.98.5a test rig, from the repo root
 ```
 
-On Test1 the target core is `C:\Games\Starsector-0.98.5a-RC7\starsector-core`; `In operation\_rig-0985a` is its 0.98.5a rig and `In operation\_rig` the RC8 rig.
+On Test1 the target core is `C:\Games\Starsector-0.98.5a-RC9\starsector-core`; RC7 stays beside it at `C:\Games\Starsector-0.98.5a-RC7` (the previous target). `In operation\_rig-0985a` is the 0.98.5a rig (its core links to RC7 until it is repointed to RC9, ROADMAP-3 98.5) and `In operation\_rig` the RC8 rig.
 
 **`@target`.** A core argument written exactly `@target` (`--vanilla-core @target`, or a core given to `target-impact`) resolves to the target core recorded in `<repo>/bridgeforge-state/target.json`. `target set <core>` records it on a machine; `target show` prints the target, every recorded build and `target_core_reports`, the build the core itself reports. Trust that, not a folder name: Test1's `C:\Games\Starsector-0.98.5a-RC3` holds RC3. Without a recorded target the token is refused; name the core path instead.
 
@@ -246,7 +246,7 @@ Only supported finding ids are accepted; any other id is refused with the full l
 
 | Finding | Extra options |
 |---|---|
-| `mod-info-game-version-inexact` | `--target-game-version 0.98.5a-RC7` (`revive` sets it from the core) |
+| `mod-info-game-version-inexact` | `--target-game-version 0.98.5a-RC9` (`revive` sets it from the core) |
 | `csv-row-extra-columns` | none (refuses if any extra field has content) |
 | `csv-missing-design-type-column` | `--design-type NAME --id-prefix P [--id-prefix P2] --design-color R,G,B` |
 | `procgen-planet-row-missing` / `procgen-star-row-missing` | `--vanilla-core $core --type-id <custom_type> --from-vanilla-id <closest_vanilla_type>` (clones vanilla's row with spawn frequency 0) |
