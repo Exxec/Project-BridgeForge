@@ -239,6 +239,15 @@ class PlanTests(unittest.TestCase):
         self.assertEqual(zips["Done/Other.zip"], "unreadable (NotImplementedError)")
         self.assertEqual((result["summary"]["errors"], result["summary"]["roots"], code), (1, 7, 1))  # an error fails the run
 
+    def test_a_plan_over_one_archive_labels_its_copies_as_a_plan_over_done_does(self) -> None:
+        # Review of slice 2b: the kind came from the corpus folder's name, so Done/X gave `working` where Done/ gave `archive`.
+        with resolved_temp_dir() as root:
+            done = _corpus(root)
+            bank = _bank(root)
+            with NO_SYSTEMS:
+                one = plan(done / "Mod-A-old", bank=bank, quiet=True, base=root)
+        self.assertEqual({r["path"]: r["folder"] for r in one["roots"]}["Done/Mod-A-old/workspace/working"], "archive")
+
     def test_a_corpus_outside_the_data_root_an_empty_bank_a_bad_record_and_an_unknown_kind_are_refused(self) -> None:
         with resolved_temp_dir() as root:
             done = _corpus(root / "data")

@@ -21,6 +21,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import re
 import zipfile
 from pathlib import Path
 
@@ -98,13 +99,22 @@ def _entry_key(entry: dict) -> tuple:
     return tuple(entry[key] for key in _ENTRY_KEYS)
 
 
+_MACHINE_PATH = re.compile(r"(?:\b[A-Za-z]:[\\/])|(?:(?:^|[\s'\"(])/(?:home|tmp|Users|mnt|var|opt|private)/)")
+
+
+def has_machine_path(text: str) -> bool:
+    """True when `text` still holds an absolute path of some machine (a drive letter, or a POSIX home or temp folder)."""
+    return bool(_MACHINE_PATH.search(text))
+
+
 def scrub_paths(text: str, places: list[tuple[str, Path]]) -> str:
     """`text` with each named folder's absolute path replaced by its label. A refusal reason names the mod root, and a
-    record must read the same on every machine (review 2026-11-23)."""
+    record must read the same on every machine (review 2026-11-23). An OSError quotes its path with doubled backslashes, so
+    that form is replaced too (review of slice 2b)."""
     forms = set()
     for label, path in places:
         for form in (Path(path), Path(path).resolve()):
-            forms.update({(str(form), label), (form.as_posix(), label)})
+            forms.update({(str(form), label), (form.as_posix(), label), (str(form).replace("\\", "\\\\"), label)})
     for form, label in sorted(forms, key=lambda pair: (-len(pair[0]), pair[0])):
         text = text.replace(form, label)
     return text
@@ -275,6 +285,8 @@ class Bank:
                 for path, digest in {**record["members"], **record["donor"]}.items():
                     if not (self.root / "blobs" / digest[:2] / digest).is_file():
                         problems.append(f"record {rid[:12]}: blob of {path} is missing")
+                if any(has_machine_path(reason) for reason in record["needs_refused"].values()):
+                    problems.append(f"record {rid[:12]}: a refused need's reason holds a machine path")
                 for need in record["needs_genes"] if rid in current else []:
                     if need not in record["needs_refused"] and not any(
                             records.get(other, {}).get("anchor") == need and records[other].get("source") == record["source"]
@@ -303,6 +315,8 @@ class Bank:
             if row.get("refused"):
                 if row["records"]:
                     problems.append(f"source {label} is recorded as refused but holds records")
+                if has_machine_path(row["refused"]):
+                    problems.append(f"source {label}: its refusal reason holds a machine path")
                 continue
             missing = [rid for rid in row["records"] if rid not in records]
             if missing:
@@ -340,6 +354,22 @@ def _source_root(source: Path, folder: str) -> Path:
     return root
 
 
+def checked_build(target: Bank, vanilla_core: Path) -> str:
+    """The build `vanilla_core` reports, refused when it reports none or differs from the build the bank's sources were
+    described against. A line put under a wrong build could never be rebuilt (rebuild refuses a core of another build), and
+    nothing removes a `sources.json` line (review of slice 2b, CRITICAL)."""
+    from bridgeforge.game_version import core_game_version
+
+    build = core_game_version(Path(vanilla_core))
+    if not build:
+        raise BankError(f"{vanilla_core} reports no game build: name a starsector-core folder")
+    held = sorted({str(s.get("build")) for s in target.sources()} - {build})
+    if held:
+        raise BankError(f"the core reports {build}, but this bank's sources were described against {', '.join(held)}: "
+                        "one bank holds one build")
+    return build
+
+
 def put(source: Path, anchor: str, vanilla_core: Path, *, folder: str = "working", bank: Path | None = None,
         quiet: bool = True, base: Path | None = None, record_refusal: bool = False) -> dict:
     """Describe `anchor` and every gene its needs name from `source` (a mod root) and store them. The source joins the
@@ -348,7 +378,6 @@ def put(source: Path, anchor: str, vanilla_core: Path, *, folder: str = "working
     When describe refuses `anchor` itself, a plain put raises and writes nothing (a mistyped anchor must not become a
     `sources.json` line, which nothing removes). With `record_refusal` (the allele run and rebuild), the refusal becomes
     the source's line and an entries row with no records and the scrubbed reason (94.G3 slice 2b)."""
-    from bridgeforge.game_version import core_game_version
     from bridgeforge.genome.gene_set import walk
     from bridgeforge.paths import data_root
 
@@ -358,7 +387,7 @@ def put(source: Path, anchor: str, vanilla_core: Path, *, folder: str = "working
     if source_root.resolve() in (target.root.resolve(), *target.root.resolve().parents):
         raise BankError(f"the bank {target.root} sits inside the source {source_root}")
     entry = source_entry(source_root, folder, base)
-    build = core_game_version(Path(vanilla_core))
+    build = checked_build(target, vanilla_core)
     checkpoint = target.root / PUT_CHECKPOINT
     genes, refused = walk(source_root, anchor, Path(vanilla_core), checkpoint_path=checkpoint, quiet=quiet)
     places = [("<source>", source_root), ("<core>", Path(vanilla_core)), ("<data root>", Path(base or data_root()))]
@@ -395,7 +424,9 @@ def rebuild(vanilla_core: Path, *, bank: Path | None = None, quiet: bool = False
     if not (target.root / SOURCES).is_file():
         raise BankError(f"{target.root / SOURCES} is missing: nothing to rebuild from")
     sources, build = target.sources(), core_game_version(Path(vanilla_core))
-    wrong = sorted({s["build"] for s in sources} - {build})
+    if not build:
+        raise BankError(f"{vanilla_core} reports no game build: name a starsector-core folder")
+    wrong = sorted({str(s["build"]) for s in sources} - {build})
     if wrong:
         raise BankError(f"the core reports {build}; the bank's sources were described against {', '.join(wrong)}")
     missing = []
@@ -407,6 +438,7 @@ def rebuild(vanilla_core: Path, *, bank: Path | None = None, quiet: bool = False
     if missing:
         raise BankError(f"{len(missing)} source(s) are not on this machine: {', '.join(sorted(set(missing)))}")
     head = {"command": "gene bank rebuild", "sources": _sha(_canonical_bytes(sources)), "build": build}
+    held = {_entry_key(row) for row in target.entries() if row.get("records")}  # rows that held records before this run
     with Checkpoint(target.root / REBUILD_CHECKPOINT, head) as checkpoint:
         for number, entry in enumerate(sources, 1):
             key = "|".join(str(entry[k]) for k in _ENTRY_KEYS)
@@ -417,10 +449,15 @@ def rebuild(vanilla_core: Path, *, bank: Path | None = None, quiet: bool = False
                          bank=target.root, quiet=quiet, base=base, record_refusal=True)
             checkpoint.add(key, {"stored": result["stored"]})
             if not quiet:
-                report(number, len(sources), entry["anchor"], f"{result['stored']} gene(s) from {entry['path']}", time.monotonic() - started)
+                detail = (f"refused: {result['anchor_refused']}" if result["anchor_refused"]
+                          else f"{result['stored']} gene(s)") + f" from {entry['path']}"
+                report(number, len(sources), entry["anchor"], detail, time.monotonic() - started)
         root = target.finish()
         checkpoint.finish()
-    return {"sources": len(sources), "root": root, "problems": target.verify()}
+    refused = target.refusals()
+    # A source that held records and is refused now is a change no one asked for: listed apart (review of slice 2b, HIGH).
+    return {"sources": len(sources), "root": root, "problems": target.verify(), "refused": refused,
+            "newly_refused": [row for row in refused if _entry_key(row) in held]}
 
 
 def add_bank_parser(gene_sub) -> None:
@@ -484,7 +521,7 @@ def run_bank_cli(args) -> int:
 
         return run_alleles_cli(args)
     if args.bank_command == "put-plan":
-        from bridgeforge.genome.alleles import run_put_plan_cli
+        from bridgeforge.genome.bank_plan import run_put_plan_cli
 
         return run_put_plan_cli(args)
     try:
@@ -495,10 +532,13 @@ def run_bank_cli(args) -> int:
             return 0
         if args.bank_command == "rebuild":
             result = rebuild(args.vanilla_core, bank=args.bank, quiet=args.quiet)
-            print(f"rebuilt {result['sources']} source(s); ROOT {result['root']}; {len(result['problems'])} problem(s)")
+            print(f"rebuilt {result['sources']} source(s); ROOT {result['root']}; {len(result['refused'])} refused, "
+                  f"{len(result['newly_refused'])} of them newly; {len(result['problems'])} problem(s)")
+            for row in result["newly_refused"]:
+                print(f"  newly refused: {row['path']} ({row['folder']}) {row['anchor']}: {row['refused']}")
             for problem in result["problems"]:
                 print(f"  {problem}")
-            return 1 if result["problems"] else 0
+            return 1 if result["problems"] or result["newly_refused"] else 0
         target = Bank(args.bank)
         if args.bank_command == "verify":
             problems = target.verify()

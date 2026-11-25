@@ -71,9 +71,10 @@ def _is_dir(path: Path) -> bool:
 class _Walk:
     """The corpus walk of `corpus_roots`: roots, zips, unread archives and folders, and skipped copies with the reason."""
 
-    def __init__(self, corpus: Path, excludes: tuple[str, ...]):
+    def __init__(self, corpus: Path, excludes: tuple[str, ...], archive: bool | None = None):
         self.corpus, self.excludes = corpus, excludes
-        self.working_kind = "archive" if corpus.name.lower() == "done" else "working"
+        archive = corpus.name.lower() == "done" if archive is None else archive
+        self.working_kind = "archive" if archive else "working"
         self.roots: list[tuple[Path, str]] = []
         self.zips: list[Path] = []
         self.unread: list[Path] = []
@@ -145,11 +146,13 @@ class _Walk:
                 self.skip_copies(entry, f"inside a workspace's {entry.name}/: BridgeForge's own copy (a proof carrier, a scratch copy)")
 
 
-def corpus_roots(corpus: Path, excludes: tuple[str, ...] = ()) -> tuple[list[tuple[Path, str]], list[Path], list[Path],
-                                                                        list[tuple[Path, str]]]:
+def corpus_roots(corpus: Path, excludes: tuple[str, ...] = (), archive: bool | None = None) -> tuple[
+        list[tuple[Path, str]], list[Path], list[Path], list[tuple[Path, str]]]:
     """([(mod root, "working" | "archive" | "original")], zips, unread archives and folders, [(skipped copy, why)]) under
-    `corpus`. Top-level folders matching an `excludes` glob (by name) are skipped: a rig's `mods/` holds installed copies."""
-    walk = _Walk(Path(corpus), excludes)
+    `corpus`. Top-level folders matching an `excludes` glob (by name) are skipped: a rig's `mods/` holds installed copies.
+    `archive` says whether the corpus is inside `Done/` (a workspace's working copy there is `archive`); `plan` decides it
+    from the data root, so a plan over `Done/X` labels a copy as a plan over `Done/` does (review of slice 2b)."""
+    walk = _Walk(Path(corpus), excludes, archive)
     walk.visit(Path(corpus))
     return walk.roots, walk.zips, walk.unread, walk.skipped
 
@@ -378,7 +381,8 @@ def plan(corpus: Path, *, bank: Path | None = None, excludes: tuple[str, ...] = 
     if not Path(corpus).resolve().is_relative_to(base.resolve()):
         raise AllelesError(f"{corpus} is not under the data root, so its copies could not be banked by relative path")
     pilots, anchors = bank_anchors(bank)
-    roots, zips, unread, skipped = corpus_roots(Path(corpus), excludes)
+    in_done = Path(corpus).resolve().is_relative_to((base / "Done").resolve())
+    roots, zips, unread, skipped = corpus_roots(Path(corpus), excludes, archive=in_done)
     # The anchors and excludes go in as digests, not lists: a longer list must restart the run, not count as grown.
     head = {"command": "gene bank alleles", "corpus": _rel(Path(corpus), base), "anchors": _sha(json.dumps(anchors).encode()),
             "excludes": _sha(json.dumps(list(excludes)).encode()), "roots": [_rel(root, base) for root, _ in roots]}
@@ -436,96 +440,6 @@ def run_alleles_cli(args) -> int:
     return 1 if summary["errors"] else 0
 
 
-# ---------------------------------------------------------------- slice 2b: putting the plan
-
-def plan_items(plan_data: dict) -> list[tuple[str, str, str]]:
-    """(path, folder kind, pilot anchor) for every root of a plan that defines a pilot anchor. Needed-gene hits elsewhere
-    are slice 3's lineage input, not puts (advisor 2026-11-23)."""
-    if plan_data.get("schema") != PLAN_SCHEMA or plan_data.get("schema_version") != PLAN_VERSION:
-        raise AllelesError(f"not a {PLAN_SCHEMA} plan of version {PLAN_VERSION}")
-    pilots = plan_data["pilot_anchors"]
-    return [(row["path"], row["folder"], anchor) for row in plan_data["roots"] for anchor in pilots if anchor in row["defines"]]
-
-
-def put_plan(plan_file: Path, vanilla_core: Path, *, bank: Path | None = None, quiet: bool = False,
-             base: Path | None = None) -> dict:
-    """Put every pilot copy a plan names, recording describe's refusals in the bank (`put(..., record_refusal=True)`). A
-    failure other than a refusal is an error in the report and is never banked; a resume retries it. Resumable: finished
-    items are kept in the bank's `put-plan.partial.jsonl`, which the CLI deletes once the report is written."""
-    from bridgeforge.genome.bank import PUT_PLAN_CHECKPOINT, Bank, put
-    from bridgeforge.paths import data_root
-    from bridgeforge.progress import Checkpoint, report
-
-    raw = Path(plan_file).read_bytes()
-    plan_data = json.loads(raw)
-    items = plan_items(plan_data)
-    target = Bank(bank)
-    target.check_folder()
-    base = Path(base or data_root())
-    results = []
-    with Checkpoint(target.root / PUT_PLAN_CHECKPOINT, {"command": "gene bank put-plan", "plan": _sha(raw)}) as checkpoint:
-        for number, (path, folder, anchor) in enumerate(items, 1):
-            key = f"{path}|{folder}|{anchor}"
-            saved, started = checkpoint.get(key), time.monotonic()
-            resumed = saved is not None
-            if saved is None:
-                try:
-                    result = put(base / path, anchor, Path(vanilla_core), folder=folder, bank=target.root, base=base,
-                                 record_refusal=True)
-                    saved = {"stored": result["stored"], "refused": result["anchor_refused"], "error": None}
-                    checkpoint.add(key, saved)
-                except Exception as exc:  # reported, never banked; a resume tries it again
-                    saved = {"stored": 0, "refused": None, "error": f"{type(exc).__name__}: {exc}"}
-            results.append({"path": path, "folder": folder, "anchor": anchor, **saved})
-            if not quiet:
-                state = saved["error"] or (f"refused: {saved['refused']}" if saved["refused"] else f"{saved['stored']} gene(s)")
-                report(number, len(items), f"{anchor} from {path}", state, None if resumed else time.monotonic() - started)
-    return plan_report(target, plan_data, results)
-
-
-def plan_report(target, plan_data: dict, results: list[dict]) -> dict:
-    """Per pilot anchor: the copies the plan named, stored, refused and failed, and the distinct manifests (the alleles)
-    among the stored copies and across the whole bank; plus what the plan could not describe."""
-    records = target.records()
-    current = [records[rid] for rid in target.current_ids() if rid in records]
-    anchors = {}
-    for anchor in plan_data["pilot_anchors"]:
-        rows = [r for r in results if r["anchor"] == anchor]
-        paths = {r["path"] for r in rows if r["stored"]}
-        mine = [r for r in current if r["anchor"] == anchor]
-        anchors[anchor] = {"copies": len(rows), "stored": len(paths), "refused": sum(1 for r in rows if r["refused"]),
-                           "errors": sum(1 for r in rows if r["error"]),
-                           "alleles_from_plan": len({r["manifest"] for r in mine if r["source"]["path"] in paths}),
-                           "alleles_in_bank": len({r["manifest"] for r in mine})}
-    return {"plan_corpus": plan_data["corpus"], "items": results, "anchors": anchors,
-            "errors": sum(1 for r in results if r["error"]), "refused": sum(1 for r in results if r["refused"]),
-            "not_described": {"zips_archive_only": sum(1 for z in plan_data["zips"] if not z["state"].startswith("packaged")),
-                              "unread_archives": len(plan_data["unread_archives"]), "skipped_copies": len(plan_data["skipped"]),
-                              "plan_errors": plan_data["summary"]["errors"]},
-            "root": target.root_hash()}
-
-
-def run_put_plan_cli(args) -> int:
-    import sys
-
-    from bridgeforge.genome.bank import PUT_PLAN_CHECKPOINT, Bank, BankError
-
-    try:
-        result = put_plan(args.plan, args.vanilla_core, bank=args.bank, quiet=args.quiet)
-        write_plan(result, args.report)
-    except (AllelesError, BankError, OSError, ValueError, KeyError) as exc:
-        print(f"bridgeforge: {exc}", file=sys.stderr)
-        return 2
-    checkpoint = Bank(args.bank).root / PUT_PLAN_CHECKPOINT
-    if checkpoint.is_file():
-        checkpoint.unlink()  # the checkpoint goes only once the report is on disk
-    print(f"{len(result['items'])} copies; {result['refused']} refused, {result['errors']} error(s); ROOT {result['root']}")
-    for anchor, row in result["anchors"].items():
-        print(f"  {anchor}: {row['stored']} of {row['copies']} stored, {row['refused']} refused, {row['errors']} error(s); "
-              f"{row['alleles_from_plan']} allele(s) among them, {row['alleles_in_bank']} in the bank")
-    return 1 if result["errors"] else 0
-
-
-__all__ = ["AllelesError", "DEFINED_KINDS", "RootIndex", "bank_anchors", "corpus_roots", "id_patterns", "mentioned_ids", "plan",
-           "plan_items", "plan_report", "put_plan", "run_alleles_cli", "run_put_plan_cli", "scan_root", "summarize",
+__all__ = ["AllelesError", "DEFINED_KINDS", "MOD_INFO", "PLAN_SCHEMA", "PLAN_VERSION", "RootIndex", "bank_anchors",
+           "corpus_roots", "id_patterns", "mentioned_ids", "plan", "run_alleles_cli", "scan_root", "summarize", "write_plan",
            "zip_mod_infos"]
