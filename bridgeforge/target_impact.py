@@ -336,7 +336,9 @@ def worklist(folder: Path, record: dict, new_core: Path) -> tuple[list[str], boo
 
 
 def _member(problem: dict) -> str:
-    return f"{problem['owner'].replace('/', '.')}.{problem['name']}{problem['descriptor'] if problem['kind'] != 'class' else ''}"
+    from .linkage import reference_text
+
+    return reference_text(problem)
 
 
 # One Station Augments descriptor named an obfuscated class hundreds of characters long (2026-11-17 catalogue, ROADMAP-3 item
@@ -462,7 +464,8 @@ def render(result: dict) -> str:
         if r["verdict"] == "CLEAN":
             continue
         lines.append(f"### {r['mod']} ({r['id']} {r['version']}): {r['verdict']}")
-        lines += [f"- jar `{p['class']}` calls `{_short(_member(p))}`"
+        lines += [(f"- jar `{p['class']}` extends or implements `{_short(_member(p))}`, which the new core lacks" if p["kind"] == "supertype"
+                   else f"- jar `{p['class']}` calls `{_short(_member(p))}`")
                   + (f" (new core: {', '.join(_short(c) for c in p['candidates'])})" if p.get("candidates") else "")
                   + (" [return type only]" if p.get("return_type_only") else "") for p in r["linkage"]]
         lines += [f"- jar `{i['class']}` lacks {', '.join('`' + _short(m.replace('/', '.')) + '`' for m in i['methods'])}" for i in r["interfaces"]]

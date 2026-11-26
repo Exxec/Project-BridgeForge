@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import json
+import os
 import subprocess
 import unittest
 import zipfile
@@ -124,6 +125,93 @@ class JarInterfaceMethodTests(unittest.TestCase):
             found = [f for f in scan_mod(mod, vanilla_core=root / "starsector-core").findings if f.id == "jar-interface-method-missing"]
         self.assertEqual([f.file for f in found], ["jars/m.jar!data/Effect.class"])  # Fine inherits the new method
         self.assertIn("Hook.hit(ILjava.lang.Object;F)V", found[0].evidence[0])
+
+
+# ROADMAP-3 98.7 (2026-11-25): 0.98.5a-RC9 renamed the obfuscated interface combat/ai/F to G. Station Augments' shield-AI
+# wrapper implements F and names none of its members, so no reference reached the check, and the class failed to load.
+OLD_OBF = {"com/fs/starfarer/combat/ai/F.java": "package com.fs.starfarer.combat.ai; public interface F { boolean o00000(); }",
+           "com/fs/starfarer/combat/Base.java": "package com.fs.starfarer.combat; public abstract class Base { public abstract void go(); }"}
+NEW_OBF = {"com/fs/starfarer/combat/ai/G.java": "package com.fs.starfarer.combat.ai; public interface G { boolean o00000(); }",
+           "com/fs/starfarer/combat/Other.java": "package com.fs.starfarer.combat; public class Other {}"}
+LIB_FACE = {"com/fs/starfarer/api/impl/LibFace.java": "package com.fs.starfarer.api.impl; public interface LibFace {}"}
+SUPERTYPE_MOD = {
+    "data/Shunt.java": "package data; public class Shunt implements com.fs.starfarer.combat.ai.F { public boolean o00000() { return false; } }",
+    "data/Sub.java": "package data; public class Sub extends com.fs.starfarer.combat.Base { public void go() {} }",
+    "data/Both.java": "package data; public class Both implements com.fs.starfarer.combat.ai.F {\n"
+                      "  public boolean o00000() { return false; }\n  void x(com.fs.starfarer.combat.Base b) { b.go(); } }",
+    "data/Plain.java": "package data; public class Plain implements Runnable { public void run() {} }",
+    "com/fs/starfarer/combat/ai/admiral/Own.java": "package com.fs.starfarer.combat.ai.admiral; public class Own {}",
+    "data/UsesOwn.java": "package data; public class UsesOwn extends com.fs.starfarer.combat.ai.admiral.Own {}",
+    "data/FromLib.java": "package data; public class FromLib implements com.fs.starfarer.api.impl.LibFace {}",
+}
+_F = "com/fs/starfarer/combat/ai/F"
+
+
+class RemovedSupertypeTests(unittest.TestCase):
+    def setUp(self) -> None:
+        self.javac = javac_path()
+        if self.javac is None:
+            self.skipTest("no JDK found")
+
+    def _build(self, root: Path) -> tuple[Path, Path, Path, Path]:
+        old_classes = _compile(self.javac, root / "oldbuild", OLD_OBF)
+        _jar(old_classes, root / "old" / "starfarer_obf.jar")
+        _jar(_compile(self.javac, root / "newbuild", NEW_OBF), root / "new" / "starfarer_obf.jar")
+        lib_classes = _compile(self.javac, root / "libbuild", LIB_FACE)
+        _jar(lib_classes, root / "lib" / "lib.jar")
+        classpath = Path(os.pathsep.join([str(old_classes), str(lib_classes)]))
+        _jar(_compile(self.javac, root / "modbuild", SUPERTYPE_MOD, classpath=classpath), root / "mod" / "jars" / "m.jar")
+        return root / "old", root / "new", root / "lib" / "lib.jar", root / "mod" / "jars" / "m.jar"
+
+    def test_a_game_supertype_the_new_core_lacks_is_reported_and_only_that(self) -> None:
+        from bridgeforge.linkage import unresolved_references
+        with resolved_temp_dir() as root:
+            old, new, lib, jar = self._build(root)
+            on_old = unresolved_references([jar], old, [lib])
+            on_new = unresolved_references([jar], new, [lib])
+        self.assertEqual(on_old, {})
+        # Not Plain (a JDK interface), UsesOwn (the mod's own game-package class) or FromLib (a library's).
+        self.assertEqual(sorted(on_new), ["m.jar!data/Both.class", "m.jar!data/Shunt.class", "m.jar!data/Sub.class"])
+        self.assertEqual(on_new["m.jar!data/Shunt.class"], [{"kind": "supertype", "owner": _F, "name": "", "descriptor": "",
+                                                             "candidates": []}])
+        # A missing superclass is already the `class` problem of super(): named once, not twice.
+        self.assertEqual([(p["kind"], p["owner"], p["name"]) for p in on_new["m.jar!data/Sub.class"]],
+                         [("class", "com/fs/starfarer/combat/Base", "<init>")])
+        # The supertype comes after the references, so an existing finding's first evidence line does not change.
+        self.assertEqual([(p["kind"], p["owner"]) for p in on_new["m.jar!data/Both.class"]],
+                         [("class", "com/fs/starfarer/combat/Base"), ("supertype", _F)])
+
+    def test_a_game_package_supertype_no_jar_provides_is_reported(self) -> None:
+        from bridgeforge.linkage import reference_text, unresolved_references
+        with resolved_temp_dir() as root:
+            old, _new, _lib, jar = self._build(root)
+            found = unresolved_references([jar], old)  # LibFace's library is not given
+        self.assertEqual(list(found), ["m.jar!data/FromLib.class"])
+        self.assertEqual(found["m.jar!data/FromLib.class"][0]["kind"], "supertype")
+        self.assertEqual(reference_text(found["m.jar!data/FromLib.class"][0]), "com.fs.starfarer.api.impl.LibFace")
+
+    def test_the_scan_names_the_missing_supertype(self) -> None:
+        with resolved_temp_dir() as root:
+            _old, new, _lib, jar = self._build(root)
+            mod = jar.parent.parent
+            (mod / "mod_info.json").write_text(json.dumps({"id": "m", "name": "m", "version": "1", "gameVersion": "0.98.5a-RC7",
+                                                           "jars": ["jars/m.jar"]}), encoding="utf-8")
+            found = {f.file: f.evidence for f in scan_mod(mod, vanilla_core=new).findings if f.id == "jar-linkage-unresolved"}
+        self.assertEqual(found["jars/m.jar!data/Shunt.class"], ["com.fs.starfarer.combat.ai.F [supertype missing]"])
+        self.assertEqual(found["jars/m.jar!data/Both.class"][1], "com.fs.starfarer.combat.ai.F [supertype missing]")
+
+    def test_relink_lists_a_missing_supertype_as_a_port(self) -> None:
+        from bridgeforge.bytecode.jar_batch import relink_workspace
+        with resolved_temp_dir() as root:
+            _old, new, _lib, jar = self._build(root)
+            working = root / "ws" / "working"
+            (working / "jars").mkdir(parents=True)
+            (working / "jars" / "m.jar").write_bytes(jar.read_bytes())
+            (working / "mod_info.json").write_text(json.dumps({"id": "m", "name": "m", "version": "1", "jars": ["jars/m.jar"]}),
+                                                   encoding="utf-8")
+            result = relink_workspace(root / "ws", new)
+        self.assertEqual(result["state"], "NEEDS_PORT")
+        self.assertIn("com.fs.starfarer.combat.ai.F", result["port"])
 
 
 class SourcePortTests(unittest.TestCase):

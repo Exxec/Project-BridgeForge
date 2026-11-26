@@ -222,6 +222,37 @@ class DiscoveryTests(unittest.TestCase):
         self.assertIn("implement com.fs.starfarer.combat.ai.F.super(", text)
         self.assertEqual(result["by_member"][0]["member"], long_member)  # only the markdown is shortened
 
+    def test_a_game_supertype_the_new_core_lacks_breaks_the_mod(self) -> None:
+        """ROADMAP-3 98.7 (2026-11-25): Station Augments' shield-AI wrapper implements combat/ai/F, renamed G on RC9."""
+        from tests.test_jar_linkage import NEW_OBF, OLD_OBF
+        self.javac = javac_path()
+        if self.javac is None:
+            self.skipTest("no JDK found")
+        wrapper = {"data/Shunt.java": "package data; public class Shunt implements com.fs.starfarer.combat.ai.F { public boolean o00000() { return false; } }"}
+        ported = {"data/Shunt.java": "package data; public class Shunt implements com.fs.starfarer.combat.ai.G { public boolean o00000() { return false; } }"}
+        with resolved_temp_dir() as root:
+            old_classes = _compile(self.javac, root / "oldbuild", OLD_OBF)
+            new_classes = _compile(self.javac, root / "newbuild", NEW_OBF)
+            _jar(old_classes, root / "old" / "starfarer_obf.jar")
+            _jar(new_classes, root / "new" / "starfarer_obf.jar")
+            api = _compile(self.javac, root / "apibuild", {"com/fs/starfarer/api/Stub.java": "package com.fs.starfarer.api; public class Stub {}"})
+            for core in ("old", "new"):
+                _jar(api, root / core / "starfarer.api.jar")
+            queue = root / "queue"
+            _mod(queue, "sa", {"id": "sa"}, _compile(self.javac, root / "sabuild", wrapper, classpath=old_classes))
+            _mod(queue, "saported", {"id": "saported"}, _compile(self.javac, root / "portbuild", ported, classpath=new_classes))
+            result = target_impact([queue], root / "old", root / "new")
+        by_mod = {r["mod"]: r for r in result["records"]}
+        record = by_mod["queue/sa"]
+        self.assertEqual(record["verdict"], "BREAKS")
+        self.assertEqual([(p["kind"], p["owner"]) for p in record["linkage"]], [("supertype", "com/fs/starfarer/combat/ai/F")])
+        self.assertIn("- jar `sa.jar!data/Shunt.class` extends or implements `com.fs.starfarer.combat.ai.F`, which the new core lacks",
+                      render(result))
+        self.assertTrue(any("hand port: com.fs.starfarer.combat.ai.F" in step for step in record["next"]))
+        # The ported copy implements G, which only the new core has: CLEAN, and G is listed as newly resolved (no "missing").
+        self.assertEqual(by_mod["queue/saported"]["verdict"], "CLEAN")
+        self.assertEqual(by_mod["queue/saported"]["resolved_on_new"], ["com.fs.starfarer.combat.ai.G"])
+
 
 if __name__ == "__main__":
     unittest.main()

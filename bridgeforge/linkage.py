@@ -11,6 +11,10 @@ This is the method in the 2026-09-08 linkage measurement, as a check:
   the core (java.lang.Object and other JDK types) is not judged: unknown, never reported.
 - Report what does not resolve, with a same-name member of another descriptor as the likely successor. A change of
   return type alone is fixed by recompiling the class against RC8 (`patch-jar-class`).
+- Check each mod class's own superclass and interfaces too: a game-package supertype the core lacks is a
+  NoClassDefFoundError when the class loads, and the class may name none of its members. Station Augments' shield-AI
+  wrapper implements the obfuscated `combat/ai/F`, which 0.98.5a-RC9 renamed to `G`. No reference reached the checks,
+  so target-impact called the jar fine apart from three calls (ROADMAP-3 98.7, 2026-11-25).
 """
 from __future__ import annotations
 
@@ -208,8 +212,19 @@ def _same_name(core: dict[str, ClassInfo], owner: str, kind: str, name: str) -> 
     return found
 
 
+def reference_text(problem: dict, descriptor: bool = True) -> str:
+    """One unresolved reference as text: `owner.name(desc)`, a missing class's member without the descriptor, or the
+    supertype's class name (callers say whether it is missing or, in a version comparison, newly found)."""
+    owner = problem["owner"].replace("/", ".")
+    if problem["kind"] == "supertype":
+        return owner
+    with_descriptor = descriptor and problem["kind"] != "class"
+    return f"{owner}.{problem['name']}{problem['descriptor'] if with_descriptor else ''}"
+
+
 def unresolved_references(mod_jars: list[Path], vanilla_core: Path, extra_jars: list[Path] | None = None) -> dict[str, list[dict]]:
-    """{jar-relative class entry: [unresolved reference, ...]} for the mod's jars against the core."""
+    """{jar-relative class entry: [unresolved reference, ...]} for the mod's jars against the core. Kinds: `field`,
+    `method`, `class` (the owner is missing) and `supertype` (a game-package superclass or interface is missing)."""
     core = core_index(str(Path(vanilla_core).resolve()))
     if not core:
         return {}
@@ -234,6 +249,13 @@ def unresolved_references(mod_jars: list[Path], vanilla_core: Path, extra_jars: 
                 returns_only = kind == "method" and any(c.split(")")[0] == descriptor.split(")")[0] for c in candidates)
                 problems.append({"kind": kind, "owner": owner, "name": name, "descriptor": descriptor, "candidates": candidates[:4],
                                  "return_type_only": returns_only})
+        # After the references, so a finding's first evidence line (part of an accepted finding's key) stays what it was.
+        # A missing superclass is already a `class` problem through the constructor's super() call; name each owner once.
+        missing_classes = {p["owner"] for p in problems if p["kind"] == "class"}
+        problems += [{"kind": "supertype", "owner": supertype, "name": "", "descriptor": "", "candidates": []}
+                     for supertype in (info.super_name, *info.interfaces)
+                     if supertype and supertype.startswith("com/fs/") and supertype not in provided and supertype not in core
+                     and supertype not in missing_classes]
         if problems:
             result[f"{jar.name}!{class_name}.class"] = problems
     return result
@@ -244,7 +266,8 @@ def missing_interface_methods(mod_jars: list[Path], vanilla_core: Path, extra_ja
     that nothing in its hierarchy implements, an AbstractMethodError when the game calls it. Found 2026-10-01 only by
     compiling: Polaris Prime and Unofficial New Game Plus implement CustomDialogDelegate.createCustomDialog(panel) (RC8
     added a callback parameter), Wotani the old OnHitEffectPlugin.onHit. A hierarchy that reaches a class outside the
-    core and the mod's own jars (a library) is not judged."""
+    core and the mod's own jars (a library) is not judged. A game-package supertype the core lacks is not judged here
+    either: `unresolved_references` reports it as a `supertype` problem, because the class cannot even load (98.7)."""
     core = core_index(str(Path(vanilla_core).resolve()))
     if not core:
         return {}

@@ -20,7 +20,7 @@ from pathlib import Path
 from bridgeforge.safeio import verify_written
 from bridgeforge.bytecode.jar_patch import _decompiled_tree, _only_return_type_relinks, find_decompiler, patch_jar_classes
 from bridgeforge.bytecode.java_toolchain import find_jdk
-from bridgeforge.linkage import unresolved_references
+from bridgeforge.linkage import reference_text, unresolved_references
 from bridgeforge.report_status import is_closed
 from bridgeforge.scan.scanner import _load_lenient_json_file
 
@@ -130,7 +130,7 @@ def relink_workspace(workspace: Path, vanilla_core: Path, *, apply: bool = False
     overload = all(p["kind"] == "method" and p.get("candidates") for p in hard)
     if hard and not overload:
         result["state"] = "NEEDS_PORT"
-        result["port"] = sorted({f"{p['owner']}.{p['name']}" for p in hard})[:12]
+        result["port"] = sorted({reference_text(p, descriptor=False) for p in hard})[:12]
         return result
     result["overload_relink"] = sorted({f"{p['owner']}.{p['name']}{p['descriptor']}" for p in hard}) if hard else []
     jdk = find_jdk(None)

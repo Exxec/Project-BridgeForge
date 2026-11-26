@@ -47,10 +47,16 @@ four", "Finish on RC7, re-bank later" (the gene bank), and "Live testing is ok f
       - a JVM load with the verifier on: links on RC9 (the RC7 jar fails, `NoClassDefFoundError: combat/ai/F`);
       - the names it looks up by reflection: unchanged;
       - `compile-check` PASS, target-impact CLEAN; `retarget` made +bf.3.
-    - *Record.* `retarget`'s report and changelog line say no change was needed: see 98.10. Upstream has nothing newer
-      (2.4.3 is the last release; one later commit is unreleased).
+    - *Record.* `retarget`'s report and changelog line say no change was needed: see 98.10. A second changelog line
+      (`mod-changelog add`, Test1) says what was ported. Upstream has nothing newer (2.4.3 is the last release; one later
+      commit is unreleased).
+    - *What its live run must show.* A passing run alone proves nothing for this port. The RC7 port's safety net catches
+      `Throwable` in the shield-shunt hook, so the unported jar would also "pass" on RC9, with the shunt silently off. The
+      run must put a station with the shield-shunt augment into combat, and the log must hold no error line from
+      `shieldShunt`.
   - *Wide Horizons: no port needed, an upstream update instead.* The author released 1.5.1b on 2026-11-25 for 0.98.5a-RC9.
-    It calls RC9's renamed picker class first and falls back to the RC8 one on a LinkageError; javap shows both RC9 members.
+    It picks RC9's renamed picker class or the RC8 one by the game's version string (`supportsStarsector0985aApis()`)
+    and catches a LinkageError around its music setup; javap shows both RC9 members.
     Taken in as `Wide-Horizons-1.5.1b` and `Wide-Horizons-Content-1.5.1b`. `revive` against RC9 ends ESCALATED (Core 7
     findings, Content 5); the code findings are false positives (98.8, 98.9) or the guarded RC8 fallback. Wide Horizons is
     maintained (three releases in 11 days) and its `Done/` copies are plain upstream folders, not BridgeForge archives:
@@ -67,7 +73,7 @@ four", "Finish on RC7, re-bank later" (the gene bank), and "Live testing is ok f
   it starts.
 
 Found during 98.4 (2026-11-25), added under the owner's standing instruction to keep adding findings (2026-11-16):
-- 98.7 (S) **target-impact and the linkage check miss a removed supertype.** Station Augments' anonymous AI class implements
+- 98.7 **Done 2026-11-25.** **target-impact and the linkage check miss a removed supertype.** Station Augments' anonymous AI class implements
   the game interface `combat/ai/F`, which RC9 renamed to `G`. Neither tool reported it. `linkage.unresolved_references` reads
   only member and class constants a method uses, and `missing_interface_methods` skips a class whose supertype it cannot
   find ("a library could implement anything"). The class fails at load with `NoClassDefFoundError`. Check every game-package
@@ -76,12 +82,47 @@ Found during 98.4 (2026-11-25), added under the owner's standing instruction to 
   *Sweep 2026-11-25, read-only* (every jar under Test1's `Done/` and `In operation/`, 766 jars): 8 jars name a game
   supertype RC9 lacks. Seven are copies of Station Augments (archives, `_replaced` archives, a patch folder). The eighth is
   the archived Fast Rendering 0.6.8: its own `combat/ai/admiral/G`, which replaces the game's class, extends
-  `combat/oooO`. The rig uses Fast Rendering 1.0.2rc1, which has none. So the RC9 catalogue missed no other mod. Fast
-  Rendering is not judged by the linkage check at all: its agent adds the accessor methods it calls at run time.
-- 98.8 (S) **settings-key-missing: a key the mod sets before it reads it.** Wide Horizons 1.5.1b reads `coreWorldScale`,
-  `constellationSize` and others with `getFloat` after writing them with `SettingsAPI.setFloat` from its LunaLib settings
-  (javap of `WHSectorHelper`). The scanner raised four packets for it. A key the same jar writes with `SettingsAPI.set*`
-  should count as defined.
+  `combat/oooO`. The rig uses Fast Rendering 1.0.2rc1, which has none. So the RC9 catalogue missed no other mod through a
+  removed supertype. It still cannot see an obfuscated member that resolves under the same name on both cores but means
+  something else on the new one: that needs the body comparison of 96.14 (`bodymatch.py` in Station Augments'
+  `scratch/rc9-remap/tool/`). Fast Rendering is not judged by the linkage check at all: its agent adds the accessor
+  methods it calls at run time.
+  *Built:* `linkage.unresolved_references` reports each mod class's superclass and interfaces. A `com/fs/` supertype that
+  the core, the mod's own jars and the provider jars all lack becomes a `supertype` problem.
+  - *Order:* it is added after the references, so an existing finding's first evidence line, part of an accepted
+    finding's key, does not change.
+  - *No double report:* a missing superclass was already reported as the `class` problem of the constructor's `super()`
+    call, so only an owner no `class` problem names is added. In practice that is the interface case.
+  - *Consumers:* `target-impact` marks the mod BREAKS and writes "extends or implements `<class>`, which the new core
+    lacks"; the scanner's `jar-linkage-unresolved` evidence reads `<class> [supertype missing]`; `relink` lists it as a
+    port.
+  - *`relink` now refuses* a workspace with such a class (NEEDS_PORT), as it already did for a missing superclass: a
+    class that cannot load needs a hand port first.
+  - *One text form:* `linkage.reference_text` is the text of a problem for all three. `jar_batch`'s port list is now dotted.
+
+  Tests:
+  - `tests/test_jar_linkage.py` `RemovedSupertypeTests`:
+    - a removed interface is reported, after the references, and a removed superclass only once;
+    - a JDK interface, a mod-defined game-package class and a library-provided one are not;
+    - a game-package interface no jar provides is reported;
+    - the scan's evidence names it, and `relink` lists it as a port.
+  - `tests/test_target_impact.py` `test_a_game_supertype_the_new_core_lacks_breaks_the_mod`: BREAKS, the report line and
+    the hand-port step. A copy ported to the new interface is CLEAN, with the interface listed as newly resolved.
+
+  Eight mutants are all caught: the check removed, provider jars ignored, the `com/fs/` filter dropped, the de-duplication
+  removed, supertypes put first, "calls" in the report, the scan's marker dropped, and the old port text. An independent
+  review found that the first draft's ordering would have changed accepted findings' keys, a missing superclass was
+  reported twice, and one assertion could not fail; all three are fixed. Acceptance, against RC9's real jars with this
+  code: Station Augments' RC7-ported jar reports the call to `oO0O.o00000` and then the supertype `combat.ai.F`; the
+  RC9-patched jar reports nothing.
+- 98.8 (S) **settings-key-missing: a key the mod sets before it reads it, or reads under a catch.** The scanner raised four
+  packets for Wide Horizons 1.5.1b, naming 15 keys, and none is a real miss (javap over the whole jar):
+  - 14 keys (`coreWorldScale`, `constellationSize`, ...) are written by the same jar with `SettingsAPI.set*`, from its
+    LunaLib settings, before it reads them with `getFloat`/`getBoolean`;
+  - the 15th, `campaignSecondsPerDay`, is in no settings file, vanilla RC9's included. Wide Horizons reads it inside a
+    try/catch that falls back to the unconverted value.
+
+  A key the same jar writes, or reads only inside a catch, should not be reported as missing.
 - 98.9 (S) **data-class-reference-missing ignores a dependency's jars.** Wide Horizons Content's `rules.csv` commands
   (`WHStartBarEventDialog`, `WHStrangeM2Cmd`, ...) are classes in its dependency Wide Horizons Core's jar, under the
   `ruleCommandPackages` entry `org.widehorizons.rulecmd`. The scanner looked only in the mod's own jars. Resolve rule

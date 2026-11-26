@@ -1,0 +1,1 @@
+- Item 98.7: `target-impact`, the scanner's `jar-linkage-unresolved` and `relink` now report a mod class whose game interface (or superclass) the core lacks: "extends or implements `<class>`, which the new core lacks". Before, such a class read as fine although it cannot load: Station Augments' shield-AI wrapper implements an interface 0.98.5a-RC9 renamed.
