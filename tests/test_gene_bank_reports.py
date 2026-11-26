@@ -5,6 +5,7 @@ import contextlib
 import hashlib
 import io
 import json
+import sys
 import unittest
 from pathlib import Path
 from types import SimpleNamespace
@@ -36,9 +37,10 @@ class FakeBank:
         path.write_bytes(data)
         return digest
 
-    def record(self, mod_id: str, anchor: str, *, version: str = "1.0", folder: str = "working", members: dict | None = None,
+    def record(self, mod_id: str | None, anchor: str, *, version: str = "1.0", folder: str = "working", members: dict | None = None,
                donor: dict | None = None, decision: str = "UNRECORDED", mod_decision: str | None = None,
-               local_only_members: list[str] | None = None, mod_name: str | None = None, current: bool = True) -> str:
+               local_only_members: list[str] | None = None, mod_name: str | None = None, current: bool = True,
+               source_path: str | None = None) -> str:
         self.n += 1
         members = {path: self.blob(data) for path, data in (members or {}).items()}
         donor = {path: self.blob(data) for path, data in (donor or {}).items()}
@@ -51,7 +53,8 @@ class FakeBank:
         _write(self.root / "manifests" / mh[:2] / f"{mh}.json", text.decode("utf-8"))
         rid = f"{self.n:064x}"
         record = {"manifest": mh, "identity": f"{self.n:064x}", "kind": anchor.split(":", 1)[0], "anchor": anchor,
-                  "source": {"mod_id": mod_id, "mod_version": version, "folder": folder, "path": f"In operation/{mod_id}/{folder}"},
+                  "source": {"mod_id": mod_id, "mod_version": version, "folder": folder,
+                             "path": source_path or f"In operation/{mod_id}/{folder}"},
                   "build": "0.98.5a-RC7", "licence": decision, "members": members, "donor": donor, "needs_genes": [],
                   "needs_refused": {}}
         _write(self.root / "records" / f"{rid}.json", json.dumps(record, sort_keys=True))
@@ -79,10 +82,16 @@ class LineageTests(unittest.TestCase):
         # The same mod in two releases holding one blob: an allele, not lineage.
         fake.record("mod_a", "hullmod:a_mod", version="1.1", members={"data/m.csv [a_mod]": b"row of mod a"})
         fake.record("mod_a", "hullmod:a_mod", version="1.0", folder="original", members={"data/m.csv [a_mod]": b"row of mod a"})
+        # Two genes of one release holding one blob: neither an allele nor lineage.
+        fake.record("mod_b", "hullmod:b1", members={"data/x.csv [b1]": b"one release, two genes"})
+        fake.record("mod_b", "hullmod:b2", members={"data/x.csv [b2]": b"one release, two genes"})
         # A member on one side, a donor need on the other (the 2026-11-26 count on Test1's bank).
         fake.record("mod_a", "hullmod:tanks", members={"data/config/settings.json#/days": b"3"})
         fake.record("mod_c", "faction:c", members={"data/c.faction": b"faction c"},
-                    donor={"data/world/factions/default_ship_roles.json#/combatLarge/c_ship": b"3"})
+                    donor={"data/world/factions/default_ship_roles.json#/combatLarge/c_ship": b"3",
+                           "data/config/hull_styles.json#/SHARED": b'{"style": "a donor both sides need"}'})
+        fake.record("mod_b", "hull:b_styled", members={"data/hulls/b_styled.ship": b"b styled"},
+                    donor={"data/config/hull_styles.json#/SHARED": b'{"style": "a donor both sides need"}'})
         # Trivial values both sides hold as members.
         fake.record("mod_b", "hullmod:flags", members={"data/config/settings.json#/on": b"true", "data/config/settings.json#/id": b'"b_id"'})
         fake.record("mod_c", "hullmod:c_flags", members={"data/config/settings.json#/enabled": b"true",
@@ -95,8 +104,9 @@ class LineageTests(unittest.TestCase):
         with resolved_temp_dir() as root:
             report = lineage(self._bank(root))
         self.assertEqual(report["counts"]["shared_blobs"], 2)
-        self.assertEqual(report["counts"]["within_one_mod"], 1)
-        self.assertEqual(report["counts"]["excluded"], {"donor_side": 1, "trivial_value": 2, "vanilla_file": 0})
+        self.assertEqual(report["counts"]["across_copies_of_one_mod"], 1)  # mod_a 1.1 and 1.0; not mod_b's two genes
+        # The donor-only overlap counts once whether a member holds it on one side or no member holds it at all.
+        self.assertEqual(report["counts"]["excluded"], {"donor_side": 2, "trivial_value": 2, "vanilla_file": 0})
         (group,) = report["shared"]
         self.assertEqual(group["mods"], ["mod_a", "mod_b"])
         holders = sorted((h["mod_id"], h["anchor"], h["path"]) for blob in group["blobs"] for h in blob["holders"])
@@ -119,9 +129,54 @@ class LineageTests(unittest.TestCase):
             longer = json.dumps("y" * (TRIVIAL_STRING_CHARS + 1)).encode("utf-8")
             for mod in ("mod_a", "mod_b"):
                 fake.record(mod, f"hullmod:{mod}", members={"data/s.json#/short": short, "data/s.json#/long": longer,
-                                                             "data/s.json#/empty": b"[]"})
+                                                             "data/s.json#/empty": b"[]", "data/blank.txt": b""})
             report = lineage(fake.finish())
-        self.assertEqual((report["counts"]["shared_blobs"], report["counts"]["excluded"]["trivial_value"]), (1, 2))
+        self.assertEqual((report["counts"]["shared_blobs"], report["counts"]["excluded"]["trivial_value"]), (1, 3))
+
+    def test_a_text_file_equal_to_vanilla_after_normalisation_is_vanilla(self) -> None:
+        # Members of text files are hashed normalised (no BOM, LF, no trailing spaces): so must vanilla's files be.
+        with resolved_temp_dir() as root:
+            fake = FakeBank(root)
+            text = b"id,name\nfx_a,Alpha\nfx_b,Beta"
+            for mod in ("mod_a", "mod_b"):
+                fake.record(mod, f"hullmod:{mod}", members={"data/config/table.csv": text})
+            bank = fake.finish()
+            vanilla = root / "core" / "data" / "config" / "table.csv"
+            vanilla.parent.mkdir(parents=True)
+            vanilla.write_bytes(b"\xef\xbb\xbfid,name \r\nfx_a,Alpha\r\nfx_b,Beta\r\n\r\n")
+            report = lineage(bank, vanilla_core=root / "core")
+        self.assertEqual((report["counts"]["shared_blobs"], report["counts"]["excluded"]["vanilla_file"]), (0, 1))
+
+    def test_two_mods_without_an_id_stay_two_and_a_bad_source_does_not_crash(self) -> None:
+        with resolved_temp_dir() as root:
+            fake = FakeBank(root)
+            fake.record(None, "hull:x", members={"graphics/s.png": COPIED}, source_path="In operation/X/working")
+            fake.record(None, "hull:y", members={"graphics/s.png": COPIED}, source_path="In operation/Y/working")
+            broken = fake.record("mod_z", "hull:z", members={"graphics/z.png": b"z"})
+            bank = fake.finish()
+            path = bank.root / "records" / f"{broken}.json"
+            record = json.loads(path.read_text(encoding="utf-8"))
+            path.write_text(json.dumps({**record, "source": None}), encoding="utf-8")
+            report = lineage(bank)
+            licence_report = licences(bank)
+        (group,) = report["shared"]
+        self.assertEqual(group["mods"], ["(no mod id: In operation/X/working)", "(no mod id: In operation/Y/working)"])
+        self.assertEqual((report["counts"]["mod_ids"], licence_report["counts"]["current_records"]), (3, 3))
+
+    def test_an_unreadable_current_record_is_counted_and_a_missing_shared_blob_is_a_bank_error(self) -> None:
+        with resolved_temp_dir() as root:
+            fake = FakeBank(root)
+            fake.record("mod_a", "hull:a", members={"graphics/s.png": COPIED})
+            fake.record("mod_b", "hull:b", members={"graphics/s.png": COPIED})
+            gone = fake.record("mod_c", "hull:c", members={"graphics/c.png": b"c"})
+            bank = fake.finish()
+            (bank.root / "records" / f"{gone}.json").write_text("{not json", encoding="utf-8")
+            counted = lineage(bank)["counts"]
+            blob = bank.root / "blobs" / _sha(COPIED)[:2] / _sha(COPIED)
+            blob.unlink()
+            with self.assertRaisesRegex(BankError, "gene bank verify"):
+                lineage(bank)
+        self.assertEqual((counted["current_records"], counted["unreadable_current_records"]), (2, 1))
 
     def test_the_report_changes_nothing_in_the_bank(self) -> None:
         with resolved_temp_dir() as root:
@@ -199,6 +254,21 @@ class ReportOutputTests(unittest.TestCase):
                 write_report(bank, bank.root / "lineage.json", lineage(bank))
             with self.assertRaises(BankError):
                 write_report(bank, bank.root / "blobs" / "x.json", lineage(bank))
+            after = _snapshot(bank.root)
+        self.assertEqual(before, after)
+
+    @unittest.skipUnless(sys.platform == "win32", "Windows path forms")
+    def test_windows_spellings_of_the_bank_folder_are_refused(self) -> None:
+        # Windows strips a trailing space from a path segment, and \\?\ skips normalisation; both name the bank
+        # but resolve to text that never equals it (review of slice 3a).
+        with resolved_temp_dir() as root:
+            fake = FakeBank(root)
+            fake.record("mod_a", "hull:a_ship", members={"graphics/s.png": COPIED})
+            bank = fake.finish()
+            before = _snapshot(bank.root)
+            for out in (Path(str(bank.root) + " ") / "lineage.json", Path("\\\\?\\" + str(bank.root.resolve())) / "lineage.json"):
+                with self.subTest(out=str(out)), self.assertRaises(BankError):
+                    write_report(bank, out, lineage(bank))
             after = _snapshot(bank.root)
         self.assertEqual(before, after)
 

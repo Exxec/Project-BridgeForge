@@ -30,13 +30,42 @@ def _root_text(bank: Bank) -> str | None:
     return path.read_text(encoding="utf-8").strip() if path.is_file() else None
 
 
-def _current_records(bank: Bank) -> dict[str, dict]:
+def _current_records(bank: Bank) -> tuple[dict[str, dict], list[str]]:
+    """The current records, and the current record ids whose file is missing or unreadable (counted, never dropped silently)."""
     records = bank.records()
-    return {rid: records[rid] for rid in sorted(bank.current_ids() & set(records))}
+    current = bank.current_ids()
+    return ({rid: records[rid] for rid in sorted(current & set(records))}, sorted(current - set(records)))
+
+
+def _source(record: dict) -> dict:
+    source = record.get("source")
+    return source if isinstance(source, dict) else {}
+
+
+def _mod_key(rid: str, record: dict) -> str:
+    """The mod a record belongs to: its id, or for a source without one, its path, so two id-less mods stay two."""
+    source = _source(record)
+    mod_id = source.get("mod_id")
+    if isinstance(mod_id, str) and mod_id:
+        return mod_id
+    return f"(no mod id: {source.get('path') or rid})"
+
+
+def _blob_bytes(bank: Bank, digest: str, limit: int | None = None) -> bytes | None:
+    """A blob's bytes, or None when `limit` is given and the blob is larger. A missing blob is a bank problem `verify` names."""
+    path = bank.root / "blobs" / digest[:2] / digest
+    try:
+        if limit is not None and path.stat().st_size > limit:
+            return None
+        return path.read_bytes()
+    except OSError as exc:
+        raise BankError(f"blob {digest[:12]} of a current record cannot be read ({exc}); run `gene bank verify`") from exc
 
 
 def is_trivial_value(data: bytes) -> bool:
-    """A JSON number, boolean or null, an empty string, list or object, or a string of at most TRIVIAL_STRING_CHARS."""
+    """Empty, a JSON number, boolean or null, an empty string, list or object, or a string of at most TRIVIAL_STRING_CHARS."""
+    if not data.strip():
+        return True
     if len(data) > _PARSE_LIMIT_BYTES:
         return False
     try:
@@ -61,47 +90,57 @@ def vanilla_hashes(vanilla_core: Path) -> set[str]:
             for path in sorted(data.rglob("*")) if path.is_file()}
 
 
-def _holder(record: dict, path: str) -> dict:
-    source = record["source"]
-    return {"mod_id": source.get("mod_id"), "mod_version": source.get("mod_version"), "folder": source.get("folder"),
+def _holder(rid: str, record: dict, path: str) -> dict:
+    source = _source(record)
+    return {"mod_id": _mod_key(rid, record), "mod_version": source.get("mod_version"), "folder": source.get("folder"),
             "anchor": record.get("anchor"), "kind": record.get("kind"), "path": path}
 
 
 def lineage(bank: Bank, vanilla_core: Path | None = None) -> dict:
-    """Shared member blobs across mod ids over the current records; see the module docstring."""
-    records = _current_records(bank)
+    """Shared member blobs across mod ids over the current records; see the module docstring.
+
+    Each blob held by two or more mods in any role is classified once, in this order:
+    - `donor_side`: fewer than two of those mods hold it as a member (a donor need on one side, or on both);
+    - `trivial_value`, then `vanilla_file`: held as a member by two or more mods, but too small or vanilla's own;
+    - shared: the rest, grouped by the full set of mods holding it (a blob three mods hold is one group of three).
+    A blob only one mod holds as a member is counted in `across_copies_of_one_mod` when two or more of that mod's copies
+    (releases or folder kinds) hold it: an allele, not lineage."""
+    records, unreadable = _current_records(bank)
     as_member: dict[str, list[dict]] = defaultdict(list)
     any_role: dict[str, set] = defaultdict(set)
-    for record in records.values():
-        mod = record["source"].get("mod_id")
+    for rid, record in records.items():
+        mod = _mod_key(rid, record)
         for path, digest in sorted((record.get("members") or {}).items()):
-            as_member[digest].append(_holder(record, path))
+            as_member[digest].append(_holder(rid, record, path))
             any_role[digest].add(mod)
         for digest in (record.get("donor") or {}).values():
             any_role[digest].add(mod)
     vanilla = vanilla_hashes(vanilla_core) if vanilla_core is not None else set()
     excluded = {"donor_side": 0, "trivial_value": 0, "vanilla_file": 0}
-    within_one_mod = 0
+    across_copies = 0
     groups: dict[tuple, list[dict]] = defaultdict(list)
     for digest in sorted(any_role):
-        member_mods = {holder["mod_id"] for holder in as_member.get(digest, [])}
+        holders = as_member.get(digest, [])
+        member_mods = {holder["mod_id"] for holder in holders}
         if len(member_mods) < 2:
             if len(any_role[digest]) >= 2:
                 excluded["donor_side"] += 1
-            elif len(as_member.get(digest, [])) >= 2:
-                within_one_mod += 1
+            elif len({(holder["mod_version"], holder["folder"]) for holder in holders}) >= 2:
+                across_copies += 1
             continue
-        if is_trivial_value((bank.root / "blobs" / digest[:2] / digest).read_bytes()):
+        data = _blob_bytes(bank, digest, limit=_PARSE_LIMIT_BYTES)
+        if data is not None and is_trivial_value(data):
             excluded["trivial_value"] += 1
             continue
         if digest in vanilla:
             excluded["vanilla_file"] += 1
             continue
-        groups[tuple(sorted(str(mod) for mod in member_mods))].append({"sha256": digest, "holders": as_member[digest]})
+        groups[tuple(sorted(member_mods))].append({"sha256": digest, "holders": holders})
     shared = [{"mods": list(mods), "blobs": blobs} for mods, blobs in sorted(groups.items())]
-    counts = {"current_records": len(records), "mod_ids": len({r["source"].get("mod_id") for r in records.values()}),
-              "member_blobs": len(as_member), "shared_blobs": sum(len(group["blobs"]) for group in shared),
-              "within_one_mod": within_one_mod, "excluded": excluded}
+    counts = {"current_records": len(records), "unreadable_current_records": len(unreadable),
+              "mod_ids": len({_mod_key(rid, r) for rid, r in records.items()}), "member_blobs": len(as_member),
+              "shared_blobs": sum(len(group["blobs"]) for group in shared), "across_copies_of_one_mod": across_copies,
+              "excluded": excluded}
     return {"schema_version": REPORT_SCHEMA_VERSION, "report": "lineage", "root": _root_text(bank), "counts": counts,
             "shared": shared}
 
@@ -120,7 +159,7 @@ def _ledger_today(manifest: dict, policy_path: Path | None) -> str:
     """The decision describe would give the gene now: the mod's ledger decision, narrowed by a local-only member path."""
     from bridgeforge.licence_ledger import decision, local_only_paths
 
-    provenance = manifest.get("provenance") or {}
+    provenance = manifest.get("provenance") if isinstance(manifest.get("provenance"), dict) else {}
     mod_id, name = provenance.get("mod_id"), provenance.get("mod_name")
     paths = [m["path"] for m in manifest.get("members") or [] if isinstance(m, dict) and isinstance(m.get("path"), str)]
     if local_only_paths(mod_id, name, paths, policy_path):
@@ -133,11 +172,12 @@ def licences(bank: Bank, policy_path: Path | None = None) -> dict:
     rows, narrowed, drift = [], [], []
     by_decision: dict[str, int] = defaultdict(int)
     by_mod: dict[str, dict[str, int]] = defaultdict(lambda: defaultdict(int))
-    for rid, record in _current_records(bank).items():
+    records, unreadable = _current_records(bank)
+    for rid, record in records.items():
         manifest = _manifest(bank, record)
         licence = manifest.get("licence") if isinstance(manifest.get("licence"), dict) else {}
         banked = str(record.get("licence"))
-        row = {"record": rid, **_holder(record, ""), "banked": banked, "reason": licence.get("reason"),
+        row = {"record": rid, **_holder(rid, record, ""), "banked": banked, "reason": licence.get("reason"),
                "mod_decision": licence.get("mod_decision"), "local_only_members": list(licence.get("local_only_members") or [])}
         row.pop("path")
         rows.append(row)
@@ -148,21 +188,42 @@ def licences(bank: Bank, policy_path: Path | None = None) -> dict:
         today = _ledger_today(manifest, policy_path)
         if today != banked:
             drift.append({**row, "ledger_today": today})
-    counts = {"current_records": len(rows), "by_decision": dict(sorted(by_decision.items())), "narrowed": len(narrowed),
-              "drift": len(drift)}
+    counts = {"current_records": len(rows), "unreadable_current_records": len(unreadable),
+              "by_decision": dict(sorted(by_decision.items())), "narrowed": len(narrowed), "drift": len(drift)}
     return {"schema_version": REPORT_SCHEMA_VERSION, "report": "licences", "root": _root_text(bank), "counts": counts,
             "by_mod": {mod: dict(sorted(c.items())) for mod, c in sorted(by_mod.items())}, "records": rows,
             "narrowed": narrowed, "drift": drift}
+
+
+def is_inside(out: Path, root: Path) -> bool:
+    """Whether `out` names the bank folder or anything under it. Besides the resolved paths, each existing ancestor is
+    compared with the bank by file identity: on Windows `<bank> \\x` (a trailing space) and `\\\\?\\<bank>\\x` name the bank
+    but resolve to text that never equals it (review of slice 3a)."""
+    import os
+
+    out, root = Path(out), Path(root)
+    resolved_out, resolved_root = out.resolve(), root.resolve()
+    if resolved_out == resolved_root or resolved_root in resolved_out.parents:
+        return True
+    if not root.exists():
+        return False
+    for candidate in (out, *out.parents):
+        try:
+            if candidate.exists() and os.path.samefile(candidate, root):
+                return True
+        except OSError:
+            continue
+    return False
 
 
 def write_report(bank: Bank, out: Path, report: dict) -> Path:
     """Write `report` to `out`, refusing any path inside the bank folder (put and rebuild refuse a foreign entry there)."""
     from bridgeforge.safeio import atomic_write_json
 
-    out, root = Path(out).resolve(), bank.root.resolve()
-    if out == root or root in out.parents:
-        raise BankError(f"{out} is inside the bank {root}: a report there would make put and rebuild refuse the bank; "
+    if is_inside(out, bank.root):
+        raise BankError(f"{out} is inside the bank {bank.root}: a report there would make put and rebuild refuse the bank; "
                         f"write it elsewhere")
+    out = Path(out).resolve()
     out.parent.mkdir(parents=True, exist_ok=True)
     atomic_write_json(out, report)
     return out
@@ -177,15 +238,17 @@ def run_report_cli(args) -> int:
         counts = report["counts"]
         excluded = counts["excluded"]
         print(f"lineage: {counts['shared_blobs']} shared blob(s) in {len(report['shared'])} group(s) of mod ids, over "
-              f"{counts['current_records']} current record(s) of {counts['mod_ids']} mod id(s); within one mod "
-              f"{counts['within_one_mod']}; excluded: donor side {excluded['donor_side']}, trivial value "
+              f"{counts['current_records']} current record(s) of {counts['mod_ids']} mod id(s) "
+              f"({counts['unreadable_current_records']} unreadable); across copies of one mod "
+              f"{counts['across_copies_of_one_mod']}; excluded: donor side {excluded['donor_side']}, trivial value "
               f"{excluded['trivial_value']}, vanilla file {excluded['vanilla_file']}; ROOT {report['root']}; wrote {out}")
         return 0
     report = licences(bank)
     out = write_report(bank, args.out, report)
     counts = report["counts"]
     decisions = ", ".join(f"{name} {number}" for name, number in counts["by_decision"].items()) or "none"
-    print(f"licences: {counts['current_records']} current record(s) ({decisions}); narrowed {counts['narrowed']}; "
+    print(f"licences: {counts['current_records']} current record(s) ({decisions}; "
+          f"{counts['unreadable_current_records']} unreadable); narrowed {counts['narrowed']}; "
           f"drift from today's ledger {counts['drift']}; ROOT {report['root']}; wrote {out}")
     return 0
 

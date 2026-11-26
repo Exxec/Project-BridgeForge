@@ -149,15 +149,21 @@ through `zipsafe`.
      changes. Acceptance on Test1: the same ROOT before and after, and `verify` with 0 problems.
      - **`gene bank lineage --out OUT [--vanilla-core CORE]`.** A *shared blob* is a member blob that the current
        records of two or more distinct mod ids hold, each as a member.
-       - *Not lineage:* the same mod id across versions or folder kinds holding a blob (an allele, counted apart).
+       - *Not lineage:* the same mod id across versions or folder kinds holding a blob (an allele, counted apart as
+         `across_copies_of_one_mod`; two genes of one release holding a blob are neither). A source with no mod id counts
+         as its own mod, keyed by its path, so two such mods stay two.
        - *Excluded, and counted:*
-         - a blob that only a donor need holds on one side;
+         - a blob two or more mods hold, but fewer than two of them as a member: a donor need on one side, or on both;
          - a trivial JSON value: a number, a boolean, null, an empty string, list or object, or a string of at most 32
            characters (an id or a label). A value that small says nothing about copying; a long string, such as a pasted
            description, still counts;
          - with `--vanilla-core`, a blob equal to a file of the core's `data/`, hashed the way members are.
-       - *Reported:* per pair of mod ids, the shared blobs with each side's anchor, kind and member path, as "shared by",
-         never "copied from". Hashes carry no direction.
+       - *Reported:* per group of mod ids (the full set holding a blob, so a blob three mods hold is one group of three),
+         the shared blobs with each holder's anchor, kind and member path, as "shared by", never "copied from". Hashes
+         carry no direction.
+       - *Robustness (review of slice 3a):* a current record that cannot be read is counted, never dropped silently; a
+         shared blob that is missing is a bank error naming `verify`; an output path is compared with the bank by file
+         identity too, since on Windows a trailing space or a `\\?\` prefix names the bank without resolving to it.
      - **`gene bank licences --out OUT`.** Per current record: the banked `decision`, and from its manifest the
        `reason`, `mod_decision` and `local_only_members`.
        - *Narrowed:* a gene whose decision is LOCAL_ONLY while its mod's is not (a member under a local-only path).
