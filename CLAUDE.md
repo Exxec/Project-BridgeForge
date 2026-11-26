@@ -27,7 +27,8 @@ the build the core reports (`bridgeforge target show` prints `target_core_report
   its `jre\bin` has `javac`); White_Legion has no RC7 core any more.
 - **Test1:** RC9 is `C:\Games\Starsector-0.98.5a-RC9`, installed beside RC7 (`C:\Games\Starsector-0.98.5a-RC7`), which
   stays: it is the previous target, the old core of the RC7 -> RC9 comparison, and the build the gene bank (94.G3) was
-  described against. The 0.98.5a rigs `In operation\_rig-0985a` and `_rig-genes` link to RC7 until they are repointed.
+  described against. The 0.98.5a rig `In operation\_rig-0985a` links to RC9 (repointed 2026-11-25, 98.5); `_rig-genes`
+  stays on RC7 for the gene bank until 98.6.
   `C:\Games\Starsector-0.98.5a-RC3` reports RC3 (believed to be RC7 until checked, 2026-11-17; items 92.38, 92.40).
 Pass `--vanilla-core @target` (any core argument resolves the token from `bridgeforge-state/target.json`; `bridgeforge
 target show`). RC7 is the previous target and the reference for archives validated from 2026-11-15 to 2026-11-25; RC8

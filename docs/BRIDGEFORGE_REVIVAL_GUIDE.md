@@ -18,7 +18,7 @@ $ref  = "C:\Program Files (x86)\Fractal Softworks\Starsector\starsector-core"   
 $rig  = "In operation\_rig-0985a"                                                 # the isolated 0.98.5a test rig, from the repo root
 ```
 
-On Test1 the target core is `C:\Games\Starsector-0.98.5a-RC9\starsector-core`; RC7 stays beside it at `C:\Games\Starsector-0.98.5a-RC7` (the previous target). `In operation\_rig-0985a` is the 0.98.5a rig (its core links to RC7 until it is repointed to RC9, ROADMAP-3 98.5) and `In operation\_rig` the RC8 rig.
+On Test1 the target core is `C:\Games\Starsector-0.98.5a-RC9\starsector-core`; RC7 stays beside it at `C:\Games\Starsector-0.98.5a-RC7` (the previous target). `In operation\_rig-0985a` is the 0.98.5a rig (its core links to RC9 since 2026-11-25, ROADMAP-3 98.5; `_rig-genes` stays on RC7 for the gene bank) and `In operation\_rig` the RC8 rig.
 
 **`@target`.** A core argument written exactly `@target` (`--vanilla-core @target`, or a core given to `target-impact`) resolves to the target core recorded in `<repo>/bridgeforge-state/target.json`. `target set <core>` records it on a machine; `target show` prints the target, every recorded build and `target_core_reports`, the build the core itself reports. Trust that, not a folder name: Test1's `C:\Games\Starsector-0.98.5a-RC3` holds RC3. Without a recorded target the token is refused; name the core path instead.
 

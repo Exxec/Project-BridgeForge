@@ -40,10 +40,12 @@ roadmap item it closes. Delete an entry once it is done (the roadmap keeps the h
 Revivals target 0.98.5a-RC9, the 0.98.5a hotfix (owner 2026-11-25; CLAUDE.md "Target", ROADMAP-3 item 98).
 - **White_Legion:** RC9 replaced RC7 in `Starsector985a`; its registry names RC9 as the target.
 - **Test1:** RC9 is at `C:\Games\Starsector-0.98.5a-RC9`, beside RC7, which stays for the comparison and the gene bank.
-  `_rig-0985a` and `_rig-genes` link to RC7 until repointed (98.5).
-- **What is open:** the catalogue found 346 of 350 archives CLEAN. Four archives call renamed obfuscated internals and need a
-  hand port (98.4: Neutrino Corporation, Station Augments, Wide Horizons 1.5.0 and 1.5.1a). The gene bank finishes 94.G3
-  slice 2 on RC7, then re-banks on RC9 (98.6).
+  `_rig-0985a` links to RC9 (98.5, 2026-11-25); `_rig-genes` stays on RC7 for the gene bank (98.6).
+- **What is open:** the catalogue found 346 of 350 archives CLEAN. Four archives call renamed obfuscated internals (98.4).
+  Neutrino Corporation and Station Augments are ported (+bf.3, READY_FOR_LIVE_TEST). Wide Horizons needs no port: its author
+  released 1.5.1b for RC9, taken in on Test1, and the owner decides how to keep it. Live testing is paused while the owner
+  updates the rig's Prepatcher and Fast Rendering. The first RC9 live run (Neutrino) closed at the main menu before the
+  harness acted, so begin with a vanilla-only smoke. 94.G3 slice 2 is done on RC7; the RC9 re-bank is 98.6.
 
 The section below is the RC7 entry point of 2026-11-17, kept for its machine notes; where it says RC7 is the target, read
 RC9.
