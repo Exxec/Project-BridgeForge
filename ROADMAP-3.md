@@ -3220,6 +3220,43 @@ history as the closure benchmark, a cross-repository trace check, an early Java 
   - **Full suite:** 3555 tests, OK (skipped=13); hermeticity PASS.
   - **Next:** slice 3, lineage, the licence report and `atlas` over the bank. A re-bank on RC9 is item 98.6. `Done/` held no
     copy of a needed gene outside the pilot families, so lineage starts from the corpus beyond `Done/`.
+
+  **Slice 3a Done 2026-11-26: read-only lineage and licence reports over the bank.** Branch `feat/g3-bank-slice3`. The
+  design is in `docs/GENE_BANK_DESIGN.md` ("Slice 3"), set with the advisor. Slice 3 is split: 3a is built; 3b (beyond the
+  bank) is plan-only and not started; 3c (`atlas` over the bank) has two readings and waits for the owner.
+  - **Counted first,** read-only, on Test1's bank: 4 blobs were held by two mod ids, all one-byte JSON numbers, a member on
+    one side and a donor need on the other. So lineage over the bank as it stands is zero.
+  - **`bridgeforge/genome/bank_reports.py`:**
+    - `gene bank lineage --out OUT [--vanilla-core CORE]`: member blobs that the current records of two or more mods
+      hold as members, one group per set of mods, "shared by", never "copied from". Counted apart: the same mod across
+      releases or folder kinds (`across_copies_of_one_mod`, an allele; two genes of one release are neither); a blob two
+      or more mods hold but fewer than two as a member (`donor_side`); a trivial JSON value (empty, a number, boolean or
+      null, an empty container, a string of at most 32 characters); and with a core, a blob equal to one of its data files
+      hashed the way members are. A source with no mod id counts as its own mod, keyed by its path.
+    - `gene bank licences --out OUT`: each current record's banked decision with its manifest's reason, mod decision and
+      local-only members; the genes a local-only path narrows; drift where today's ledger answers otherwise, flagged only.
+    - Both count unreadable current records, name `verify` for a missing shared blob, and refuse an output path inside
+      the bank (also by file identity, for Windows' trailing-space and `\\?\` spellings), since `put` and `rebuild` refuse
+      a bank holding a foreign entry. The reports name mods and members, so they stay on the machine.
+  - **On Test1, against the RC7 bank,** with the final module: ROOT `0f1c4f9c...` and `verify` (0 problems) the same before
+    and after.
+    - *Lineage:* 0 shared blobs over 415 current records of 4 mod ids; of 530 member blobs, 496 are shared across copies of
+      one mod; 4 excluded as donor-side, none as trivial or vanilla.
+    - *Licences:* all 415 records LOCAL_ONLY, 0 narrowed, 0 drift.
+  - **Independent review:** eight problems, all fixed with a test.
+    - *High:* an output path naming the bank with a trailing space, or a `\\?\` prefix, was written into the bank.
+    - *Medium:* a blob three mods hold is one group (the text said "per pair"); id-less sources were merged into one mod.
+    - *Low:* two genes of one release counted as an allele; an empty blob was not trivial; an unreadable record was
+      dropped silently, and a missing blob or a null source crashed; two tests passed against wrong code (path spellings,
+      raw vanilla hashing).
+  - **Tests:** `tests/test_gene_bank_reports.py`, 14 tests (one Windows-only). Synthetic banks cover every classification,
+    the trivial-string boundary, normalised vanilla text, id-less and broken records, narrowing and drift both ways, every
+    output refusal and the CLI. One bank built by the real `put` shows the reports leave its ROOT and `verify` unchanged.
+  - **Mutation check:** 17 mutants, all caught. The first run missed one (the resolved-path refusal, covered by file
+    identity whenever the bank exists); a test for a bank folder not yet created now catches it.
+  - **Full suite:** FILL.
+  - **Next:** 3b, starting from the 2a plan's hits on needed-gene ids under other mod ids; which corpus "beyond `Done/`"
+    means comes from that plan or from the owner. 3c is the owner's question.
 - 94.G4 **Adaptation**: target-impact, gated fixers and `src-to-jar` at gene scope; Project Go carries translations; SpriteForge
   validates sprites and slots.
   **Project Go's part, slice 1 (2026-11-22, Project-Go #19): `ssmt-cli gene-carry`, a read-only report.**

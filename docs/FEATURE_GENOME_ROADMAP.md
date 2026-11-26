@@ -1,6 +1,6 @@
 # Feature genome: extracting and inserting mod features
 
-**Status: approved by the owner 2026-11-17 ("all approved"). Updated 2026-11-23: 94.G1 is done (WP1 to WP6, 2026-11-19) and 94.G2 is done (2026-11-23: all four pilots proven on both boot halves); 94.G3 has started (slices 1 and 2 of 3 done, 2026-11-23 and 2026-11-25, `docs/GENE_BANK_DESIGN.md`); 94.G4 to 94.G7 are not started (ROADMAP-3 item 94).** Requested 2026-11-17: "design roadmap from
+**Status: approved by the owner 2026-11-17 ("all approved"). Updated 2026-11-23: 94.G1 is done (WP1 to WP6, 2026-11-19) and 94.G2 is done (2026-11-23: all four pilots proven on both boot halves); 94.G3 has started (slices 1 and 2 of 3 done, 2026-11-23 and 2026-11-25, and slice 3a, 2026-11-26; `docs/GENE_BANK_DESIGN.md`); 94.G4 to 94.G7 are not started (ROADMAP-3 item 94).** Requested 2026-11-17: "design roadmap from
 now to endgoal of being able to extract and insert features like DNA"; "factor in the other repos as well"; then "all approved.
 Please make sure everything is traceable and each repo gets a copy of its roadmap specific portion." This is a strategy addition
 under CLAUDE.md's development policy, recorded here with its decisions (section 11). It extends, and must not weaken,
