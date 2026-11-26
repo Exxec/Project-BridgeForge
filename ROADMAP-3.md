@@ -70,8 +70,9 @@ four", "Finish on RC7, re-bank later" (the gene bank), and "Live testing is ok f
   **Progress 2026-11-26** (owner: "Resume live testing and continue"; later the same day: "pause live testing unless computer
   idle for a good amouunt [sic] of time"). The 30 minutes are a reading of "a good amount", not a number the owner
   gave: a live run starts only after Test1's desktop has had no input for 30 minutes, checked right before each run. The
-  harness's own clicks reset the idle timer, so a second run needs a new check. No run is recorded or archived: that waits
-  for the owner.
+  harness's own clicks reset the idle timer, so a second run needs a new check. Lifted the same evening (owner: "Lets
+  remove the if idle then live test rule for now. Go ahead and live test until paused again."): live runs need no idle
+  check until the owner pauses them. No run is recorded or archived: that waits for the owner.
   - *The rig as it stood.* Fast Rendering 1.0.2rc1 and StarsectorPrepatcher 0.18.8 were unchanged. Prepatcher fails open on
     RC9, as on RC7, so every run below ran unpatched. Upstream: Prepatcher 0.18.9 (2026-11-20) names 0.98a-RC8 and
     "0.98.5a-RC8", not RC9, and says each release supports the latest validated 0.98.5a RC. Fast Rendering 1.0.2 and
@@ -89,15 +90,17 @@ four", "Finish on RC7, re-bank later" (the gene bank), and "Live testing is ok f
     The cause stays unknown.
   - *Neutrino Corporation 1.8.9+bf.3: live PASS on RC9* (RC9NC-LIVE2): FATAL 0, MOD-ERROR 0. One warning: 3 of 31 planned
     hulls never deployed, the three whose only variant is empty. The RC7 archive run (P962NC2-LIVE-0985a-20261119) had 17 of
-    31, so the warning is not new. The run does not show that the ported code ran: `Neutrino_FighterDroneSystemAI` is the
-    AI of the `neutrino_rotte` system, which the fighters Floh, Gepard Eins and Gepard Drei carry, and no probe line names
-    them. It shows that nothing failed to load or link. Archiving waits for the owner. The rig has been staged for other
+    31, so the warning is not new. The ported class is `Neutrino_FighterDroneSystemAI`, the AI of the `neutrino_rotte`
+    system that the fighters Floh, Gepard Eins and Gepard Drei carry. Five Neutrino carriers in the battle launched
+    wings, and their variants carry Gepard Eins or Gepard Drei wings (jackhammer2, theend, hildolfr and piledriver Gepard
+    Eins; unsung Gepard Drei). The game loaded the class at startup, and the run's stdout and stderr hold no linkage error.
+    So the ported AI was loaded and drove deployed fighters; whether it fired is not logged. Archiving waits for the owner. The rig has been staged for other
     groups since, so recording this run needs its group re-staged, or a new run.
   - *Station Augments 2.4.3+bf.3: standard live PASS on RC9* (RC9SA-LIVE): FATAL 0, MOD-ERROR 0. It shows the same five
     class-sweep failures (its console commands need the Console Commands mod) and the same "Invalid augment id:
     SA_defensePlatforms!" line as the RC7 archive run SA-SR3-20261119. The shield shunt did not run: augments apply only
     in a campaign battle at a station whose market holds them (`scripts/effectApplierScript`).
-  - *The shunt check, built, not yet run.* It is a rig-only mod, kept with its source in the workspace's
+  - *The shunt check: PASS on bf.3, and the control fails it.* It is a rig-only mod, kept with its source in the workspace's
     `scratch/rc9-remap/shunt-check/` and never shipped. In the probe's mission it calls `shieldShunt.applyInCombat` on one
     enemy AI ship whose AI is `BasicShipAI` and whose shield is front or omni. Then it logs, once a second, whether
     `BasicShipAI.shieldAI` still holds SA's wrapper (`shieldShunt$applyInCombat$testValTwo$1`, which implements RC9's
@@ -110,6 +113,21 @@ four", "Finish on RC7, re-bank later" (the gene bank), and "Live testing is ok f
       compiles against the public API and SA's jar only, and reads `BasicShipAI.shieldAI` through SA's own
       `ReflectionUtils`.
     - *What it does not cover:* station modules, since the target is a ship.
+    - *Control, RC9SA-SHUNTCTL-0985a-20261126* (the RC7-ported bf.2 jar in the rig copy): SA logged
+      `NoClassDefFoundError: com/fs/starfarer/loading/specs/M`. The target, an enemy Hammerhead, kept the game's own
+      shield AI (`combat.ai.interface`); the wrapper was never installed, and the shield rose and fell under fire.
+    - *Port, RC9SA-SHUNT-0985a-20261126* (bf.3): the wrapper was installed, with `SA_KKdamper` in the phase-cloak slot.
+      The ship stayed alive with the wrapper for 56 s, the damper was active for 12 s in four bursts, and the shield never
+      rose, since the wrapper drives the damper, not the shield. No linkage error was logged. Probe report PASS (FATAL 0,
+      MOD-ERROR 0).
+    - Both runs' check lines are kept in `scratch/rc9-remap/shunt-check/` (`<run>.evidence.txt`).
+  - *Station Augments' save-reload gate on RC9, not passed.* Its RC7 archive run (SA-SR3-20261119) was a save-reload run,
+    and gate `bf-strag-station-augments` rests on it; SA's `+bf` plugin exists for saving. RC9SA-SR-0985a-20261126
+    (the same solo plan, `--save-reload-after-days 3`) ended LIVE_STUCK at new-game. The campaign started, then 15 s later
+    the game saved, returned to the main menu and exited in order, with no probe check between. The harness had sent
+    its last input 15 s before the campaign started, and the probe logged no save of its own. Test1's last keyboard or
+    mouse input came 5 s after the exit, while the harness sent nothing, so a person at the desktop is possible but not
+    shown. It goes back to the owner before a re-run.
   - *United Aurora Federation:* the author released 0.8.4c1, which declares 0.98.5a-RC9. The archive (0.8.4c,
     live-validated 2026-11-17) is CLEAN on RC9. Whether to take the update in is the owner's choice, as for Wide Horizons.
 - 98.5 **Done 2026-11-25.** **Repoint the 0.98.5a rigs.** `_rig-0985a`'s `starsector-core` links to RC9 (RC9's launcher,

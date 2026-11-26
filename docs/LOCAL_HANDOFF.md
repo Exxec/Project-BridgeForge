@@ -46,14 +46,16 @@ Revivals target 0.98.5a-RC9, the 0.98.5a hotfix (owner 2026-11-25; CLAUDE.md "Ta
   released 1.5.1b for RC9, taken in on Test1, and the owner decides how to keep it. The author of United Aurora Federation
   released 0.8.4c1 for RC9; it is not taken in, and whether to take it is also the owner's choice. 94.G3 slice 2 is done on
   RC7; the RC9 re-bank is 98.6.
-- **Live runs (owner 2026-11-26: "pause live testing unless computer idle for a good amouunt [sic] of time"):** read as 30
-  minutes without input on Test1's desktop, checked right before each run (GetLastInputInfo in the desktop session). The
-  harness's own clicks reset the idle timer, so a second run needs a new check.
-- **Live state 2026-11-26 (98.4):** Neutrino passed on RC9 (RC9NC-LIVE2), though the run does not show its ported drone AI
-  ran. The menu exit of 2026-11-25 did not reproduce in three runs; its cause is unknown. Station Augments passed its
-  standard run (RC9SA-LIVE), which does not exercise the shield shunt. Next: the shunt check in its workspace's
-  `scratch/rc9-remap/shunt-check/`, first with the RC7-ported bf.2 jar as the control, then with bf.3. Recording and archiving wait for the owner; so do the rig's Prepatcher and Fast
-  Rendering versions (Prepatcher 0.18.8 fails open on RC9).
+- **Live runs (owner 2026-11-26, evening):** "Lets remove the if idle then live test rule for now. Go ahead and live test
+  until paused again." No idle check is needed until the owner pauses runs. (Earlier that day the rule was 30 minutes
+  without input on Test1's desktop.)
+- **Live state 2026-11-26 (98.4):** Neutrino passed on RC9 (RC9NC-LIVE2), and fighters carrying its ported drone AI flew.
+  The menu exit of 2026-11-25 did not reproduce in three runs; its cause is unknown. Station Augments passed its standard
+  run and the shunt check (control RC9SA-SHUNTCTL fails it, port RC9SA-SHUNT passes; station modules unproven). Its
+  save-reload gate run RC9SA-SR ended LIVE_STUCK: the game saved and exited 15 s into the campaign with no harness input.
+  It waits for the owner before a re-run. Recording and archiving wait for the owner; so do the rig's Prepatcher and Fast
+  Rendering versions (Prepatcher 0.18.8 fails open on RC9; the owner's own RC8 install has Fast Rendering 1.0.3,
+  Prepatcher 0.18.9 and Mikohime).
 
 The section below is the RC7 entry point of 2026-11-17, kept for its machine notes; where it says RC7 is the target, read
 RC9.
