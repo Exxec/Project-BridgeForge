@@ -139,6 +139,46 @@ through `zipsafe`.
    - Lineage: blob hashes shared across mod ids.
    - Licence: each manifest's `licence` (the WP4 ledger).
 
+   Design, set with the advisor (2026-11-26). Slice 3 is split; 3a is built first.
+   - **Count first.** On Test1's bank (RC7, ROOT `0f1c4f9c...`, 415 current records, 4 mod ids, 593 distinct blobs), a
+     read-only count found 4 blobs held by two mod ids. All 4 are one-byte JSON numbers, a member on one side and a
+     donor need on the other. So lineage over the bank as it stands is zero, and the rules below exclude such
+     coincidences.
+   - **3a: two read-only reports over the current records.** Each writes only its `--out` file, which must lie outside
+     the bank folder: `put` and `rebuild` refuse a bank holding any foreign entry. No record, entry, manifest or blob
+     changes. Acceptance on Test1: the same ROOT before and after, and `verify` with 0 problems.
+     - **`gene bank lineage --out OUT [--vanilla-core CORE]`.** A *shared blob* is a member blob that the current
+       records of two or more distinct mod ids hold, each as a member.
+       - *Not lineage:* the same mod id across versions or folder kinds holding a blob (an allele, counted apart).
+       - *Excluded, and counted:*
+         - a blob that only a donor need holds on one side;
+         - a trivial JSON value: a number, a boolean, null, an empty string, list or object, or a string of at most 32
+           characters (an id or a label). A value that small says nothing about copying; a long string, such as a pasted
+           description, still counts;
+         - with `--vanilla-core`, a blob equal to a file of the core's `data/`, hashed the way members are.
+       - *Reported:* per pair of mod ids, the shared blobs with each side's anchor, kind and member path, as "shared by",
+         never "copied from". Hashes carry no direction.
+     - **`gene bank licences --out OUT`.** Per current record: the banked `decision`, and from its manifest the
+       `reason`, `mod_decision` and `local_only_members`.
+       - *Narrowed:* a gene whose decision is LOCAL_ONLY while its mod's is not (a member under a local-only path).
+       - *Drift:* today's ledger answer (`licence_ledger.decision` and `local_only_paths` for the manifest's provenance
+         and members) differs from the banked decision. It is only flagged: correcting it means a re-put and a new ROOT.
+       - *Summary:* records per decision and per mod.
+     - Both reports name mods and members, so they stay on the machine (like the plan). The roadmap records counts only,
+       and P3's mod (Eridani Combine, LOCAL_ONLY) is never named there.
+   - **3b: beyond the bank, plan only.** No command removes a `sources.json` line, so nothing from a corpus is put to
+     look for copies.
+     - Before writing a walk, read slice 2's alleles plan for needed-gene hits under other mod ids, and check what
+       `sibling-assets` and `supersession` already expose.
+     - A candidate method: for a root that defines a banked anchor under another mod id, describe the gene in memory and
+       intersect its member hashes with the bank's. Unlike a raw file-hash scan, that also covers json-entry members.
+     - Which corpus "beyond `Done/`" means comes from the 2a plan, or else from the owner.
+   - **3c: `atlas` over the bank, an open question for the owner.** Two readings survive, so nothing is built:
+     - a read-only join of atlas facts to banked genes: which other mods define, read or mutate a banked gene's ids
+       (`atlas id` per anchor and closure id);
+     - indexing the bank's genes as atlas entries, so the atlas's conflict rules run over genes.
+     Either way, atlas rows hold paths and modification times, which must never enter the bank.
+
 ## Rules
 
 - **Eridani Combine is LOCAL_ONLY.** No bank listing, index or audit output of it goes in this repository; test

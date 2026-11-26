@@ -461,7 +461,7 @@ def rebuild(vanilla_core: Path, *, bank: Path | None = None, quiet: bool = False
 
 
 def add_bank_parser(gene_sub) -> None:
-    """`gene bank put|verify|rebuild|list|alleles` (94.G3)."""
+    """`gene bank put|verify|rebuild|list|alleles|put-plan|lineage|licences` (94.G3)."""
     bank_cmd = gene_sub.add_parser("bank", help="the gene bank (94.G3): a rebuildable, content-addressed index of gene manifests and "
                                                 "their members' bytes, under the data root's Genes/")
     bank_sub = bank_cmd.add_subparsers(dest="bank_command", required=True)
@@ -495,7 +495,16 @@ def add_bank_parser(gene_sub) -> None:
     put_plan_cmd.add_argument("--vanilla-core", type=Path, required=True, help="starsector-core; its reported build is recorded")
     put_plan_cmd.add_argument("--report", type=Path, required=True, help="the report JSON to write; it names mod folders, so keep it local")
     put_plan_cmd.add_argument("--quiet", action="store_true", help="no progress lines on stderr")
-    for command in (put_cmd, verify_cmd, rebuild_cmd, list_cmd, alleles_cmd, put_plan_cmd):
+    lineage_cmd = bank_sub.add_parser("lineage", help="read-only: member blobs that two or more mod ids' current records hold, "
+                                                      "with trivial values, donor-only overlaps and vanilla files counted apart "
+                                                      "(94.G3 slice 3a)")
+    lineage_cmd.add_argument("--vanilla-core", type=Path, help="also exclude blobs equal to a file of this core's data/")
+    licences_cmd = bank_sub.add_parser("licences", help="read-only: each current record's licence, the genes a local-only path "
+                                                        "narrows, and drift from today's ledger (94.G3 slice 3a)")
+    for command in (lineage_cmd, licences_cmd):
+        command.add_argument("--out", type=Path, required=True,
+                             help="the report JSON to write, outside the bank; it names mods and members, so keep it local")
+    for command in (put_cmd, verify_cmd, rebuild_cmd, list_cmd, alleles_cmd, put_plan_cmd, lineage_cmd, licences_cmd):
         command.add_argument("--bank", type=Path, help="the bank folder (default: <data root>/Genes)")
 
 
@@ -525,6 +534,10 @@ def run_bank_cli(args) -> int:
 
         return run_put_plan_cli(args)
     try:
+        if args.bank_command in ("lineage", "licences"):
+            from bridgeforge.genome.bank_reports import run_report_cli
+
+            return run_report_cli(args)
         if args.bank_command == "put":
             result = put(args.mod, args.anchor, args.vanilla_core, folder=args.folder, bank=args.bank, quiet=args.quiet)
             print(f"stored {result['stored']} gene(s) under build {result['build']}; refused needs: {len(result['refused'])}; "
