@@ -3254,7 +3254,7 @@ history as the closure benchmark, a cross-repository trace check, an early Java 
     output refusal and the CLI. One bank built by the real `put` shows the reports leave its ROOT and `verify` unchanged.
   - **Mutation check:** 17 mutants, all caught. The first run missed one (the resolved-path refusal, covered by file
     identity whenever the bank exists); a test for a bank folder not yet created now catches it.
-  - **Full suite:** FILL.
+  - **Full suite:** 3573 tests, OK (skipped=13); hermeticity PASS.
   - **Next:** 3b, starting from the 2a plan's hits on needed-gene ids under other mod ids; which corpus "beyond `Done/`"
     means comes from that plan or from the owner. 3c is the owner's question.
 - 94.G4 **Adaptation**: target-impact, gated fixers and `src-to-jar` at gene scope; Project Go carries translations; SpriteForge
