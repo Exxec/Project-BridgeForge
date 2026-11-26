@@ -257,6 +257,15 @@ class ReportOutputTests(unittest.TestCase):
             after = _snapshot(bank.root)
         self.assertEqual(before, after)
 
+    def test_an_out_file_inside_a_bank_folder_that_does_not_exist_yet_is_refused(self) -> None:
+        # Writing it would create the folder holding a foreign entry, which put and rebuild then refuse.
+        with resolved_temp_dir() as root:
+            bank = Bank(root / "Genes")
+            with self.assertRaises(BankError):
+                write_report(bank, bank.root / "lineage.json", lineage(bank))
+            created = bank.root.exists()
+        self.assertFalse(created)
+
     @unittest.skipUnless(sys.platform == "win32", "Windows path forms")
     def test_windows_spellings_of_the_bank_folder_are_refused(self) -> None:
         # Windows strips a trailing space from a path segment, and \\?\ skips normalisation; both name the bank
