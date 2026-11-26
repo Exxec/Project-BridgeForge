@@ -24,11 +24,72 @@ four", "Finish on RC7, re-bank later" (the gene bank), and "Live testing is ok f
   the hand tools of 96.14 (`scratch/rc7-remap/` in their workspaces): the same tools map RC9's names. Wide Horizons is ported
   once; the 1.5.0 archive moves to `Done/_replaced-<date>/` if 1.5.1a supersedes it. Then `+bf.N`, a live run on an RC9 rig,
   and the archive on the owner's word. The renames recurring at the next build are the evidence 96.14 asked for.
-- 98.5 (S) **Repoint the 0.98.5a rigs** (`_rig-0985a`, `_rig-genes`) to RC9 when a live run needs them; until then they
-  link to RC7.
+  **Progress 2026-11-25** (owner the same day: "Finish live testing then pause. I will need to update prepatcher/FR etc.";
+  then "continue roadmap work outside of live testing. May have to update some of these mods to more current versions"):
+  - *Neutrino Corporation 1.8.9+bf.3, READY_FOR_LIVE_TEST.* RC9 restored RC8's `combat/systems/F` for RC7's
+    `systems/return`; reversing the RC7 port's two constants gives a class equal to the author's original byte for byte.
+    target-impact RC7 -> RC9 CLEAN. `retarget --apply` bumped it to +bf.2 itself and a hand `bump-version` made +bf.3 (+bf.2
+    is unused; `retarget` bumps, so nothing should bump after it). Live run RC9NC-LIVE-0985a-20261125: LIVE_STUCK. The game
+    reached the main menu, then closed cleanly about 8 s later: no exception, no dialog, a normal JVM exit. The harness had
+    not acted yet (its actions log is empty; it waits 20 s at the menu before the first click), so neither its click nor
+    Neutrino is shown to be the cause. StarsectorPrepatcher 0.18.8 failed open, as on RC7. Next, after the owner's rig
+    update: a vanilla-only smoke on the RC9 rig, then the run again.
+  - *Station Augments 2.4.3+bf.3, READY_FOR_LIVE_TEST.* RC9 renamed four game classes it uses and the methods of two game
+    interfaces: `systems/return` -> `systems/F`, `specs/M` -> `specs/do`, `ai/O0O...` (256 characters) -> `ai/D`, `ai/F`
+    -> `ai/G`. Of `G`'s methods, `super(F,D,..)V` -> `o00000`, `super()Z` -> `o00000`, `Ó00000()Z` -> `Object`.
+    `system/oO0O.o00000` -> `super`.
+    - *Evidence.* RC9's own types (`BasicShipAI.shieldAI` is `G`, `threatEvalAI` is `D`, `Ship.phaseCloak` is `systems/F`,
+      `specs/do.createSystemAI` takes `D`), and identical method bodies of `G`'s game implementer `combat/ai/null` in both
+      builds.
+    - *The tool* (ASM, kept with the evidence in the workspace's `scratch/rc9-remap/`) patched the two shieldShunt classes.
+    - *Checks:*
+      - linkage and missing interface methods against RC9: none;
+      - a JVM load with the verifier on: links on RC9 (the RC7 jar fails, `NoClassDefFoundError: combat/ai/F`);
+      - the names it looks up by reflection: unchanged;
+      - `compile-check` PASS, target-impact CLEAN; `retarget` made +bf.3.
+    - *Record.* `retarget`'s report and changelog line say no change was needed: see 98.10. Upstream has nothing newer
+      (2.4.3 is the last release; one later commit is unreleased).
+  - *Wide Horizons: no port needed, an upstream update instead.* The author released 1.5.1b on 2026-11-25 for 0.98.5a-RC9.
+    It calls RC9's renamed picker class first and falls back to the RC8 one on a LinkageError; javap shows both RC9 members.
+    Taken in as `Wide-Horizons-1.5.1b` and `Wide-Horizons-Content-1.5.1b`. `revive` against RC9 ends ESCALATED (Core 7
+    findings, Content 5); the code findings are false positives (98.8, 98.9) or the guarded RC8 fallback. Wide Horizons is
+    maintained (three releases in 11 days) and its `Done/` copies are plain upstream folders, not BridgeForge archives:
+    keeping it as a plain 1.5.1b copy or taking it through acceptances and a live test is the owner's choice.
+  - *Libraries in the RC9 rig:* target-impact RC7 -> RC9 over its `mods/`: 25 of 26 CLEAN; the 26th is the rig's old
+    Station Augments, which the next install replaces. Newer upstream versions: LunaLib 2.1.0 ("Updated to 0.98.5a"),
+    MagicLib 1.6.1, Nexerelin 0.12.3 ("Update for Starsector 0.98.5a"), GraphicsLib 1.12.2. Wide Horizons Content needs
+    Particle Engine, which the rig lacks. Nothing was written into the rig: the owner is updating it.
+- 98.5 **Done 2026-11-25.** **Repoint the 0.98.5a rigs.** `_rig-0985a`'s `starsector-core` links to RC9 (RC9's launcher,
+  `vmparams` and `jre` equal RC7's); `rig-doctor` isolation and launcher_prefs PASS. `_rig-genes` stays on RC7: the gene
+  bank is on RC7 until 98.6.
 - 98.6 (M) **Re-bank the gene bank on RC9**, after 94.G3 slice 2 completes on RC7 (owner: "Finish on RC7, re-bank later").
   The bank holds one build (`checked_build`), so this is a second bank or rebuild learning one core per build: decide when
   it starts.
+
+Found during 98.4 (2026-11-25), added under the owner's standing instruction to keep adding findings (2026-11-16):
+- 98.7 (S) **target-impact and the linkage check miss a removed supertype.** Station Augments' anonymous AI class implements
+  the game interface `combat/ai/F`, which RC9 renamed to `G`. Neither tool reported it. `linkage.unresolved_references` reads
+  only member and class constants a method uses, and `missing_interface_methods` skips a class whose supertype it cannot
+  find ("a library could implement anything"). The class fails at load with `NoClassDefFoundError`. Check every game-package
+  superclass and interface of a mod class against the new core, report it as BREAKS with the class named, and treat a
+  supertype present in the old core but absent in the new one as a removal, not as an unknown library.
+  *Sweep 2026-11-25, read-only* (every jar under Test1's `Done/` and `In operation/`, 766 jars): 8 jars name a game
+  supertype RC9 lacks. Seven are copies of Station Augments (archives, `_replaced` archives, a patch folder). The eighth is
+  the archived Fast Rendering 0.6.8: its own `combat/ai/admiral/G`, which replaces the game's class, extends
+  `combat/oooO`. The rig uses Fast Rendering 1.0.2rc1, which has none. So the RC9 catalogue missed no other mod. Fast
+  Rendering is not judged by the linkage check at all: its agent adds the accessor methods it calls at run time.
+- 98.8 (S) **settings-key-missing: a key the mod sets before it reads it.** Wide Horizons 1.5.1b reads `coreWorldScale`,
+  `constellationSize` and others with `getFloat` after writing them with `SettingsAPI.setFloat` from its LunaLib settings
+  (javap of `WHSectorHelper`). The scanner raised four packets for it. A key the same jar writes with `SettingsAPI.set*`
+  should count as defined.
+- 98.9 (S) **data-class-reference-missing ignores a dependency's jars.** Wide Horizons Content's `rules.csv` commands
+  (`WHStartBarEventDialog`, `WHStrangeM2Cmd`, ...) are classes in its dependency Wide Horizons Core's jar, under the
+  `ruleCommandPackages` entry `org.widehorizons.rulecmd`. The scanner looked only in the mod's own jars. Resolve rule
+  commands through declared dependencies' jars and every `ruleCommandPackages` entry.
+- 98.10 (S) **`retarget` records "no change" after a hand port.** For Neutrino Corporation and Station Augments it wrote
+  "`target-impact` found no API, linkage or data change affecting this mod" into the revival report and the changelog,
+  although each jar was hand-patched first. `retarget` should take a note, or notice that the working jar differs from the
+  last archive, so the record says what was ported. Until then, 98.4 above is the record `archive` must cite.
 
 **97. The S series' remaining work, re-queued without gates (owner 2026-11-17: "Park S4. Stop treating S2 and S3 as gates.
 Check S series implementation plan and if applicable add remaining items to roadmap queue").**
