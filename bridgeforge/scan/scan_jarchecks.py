@@ -26,7 +26,7 @@ def _scan_jar_linkage(root: Path, result: ScanResult, vanilla_core: Path | None,
     declared = result.metadata.get("jars")
     if vanilla_core is None or not isinstance(declared, list):
         return
-    from ..linkage import unresolved_references
+    from ..linkage import reference_text, unresolved_references
 
     jars = [root / entry for entry in declared if isinstance(entry, str) and (root / entry).is_file()]
     if not jars:
@@ -75,9 +75,8 @@ def _scan_jar_linkage(root: Path, result: ScanResult, vanilla_core: Path | None,
         if not problems:
             continue
         relink = all(p.get("return_type_only") for p in problems)
-        evidence = [f"{p['owner'].replace('/', '.')}.{p['name']}{p['descriptor'] if p['kind'] != 'class' else ''}"
-                    + (f" (RC8: {', '.join(p['candidates'])})" if p.get("candidates") else "") + (" [class missing]" if p["kind"] == "class" else "")
-                    for p in problems][:12]
+        evidence = [reference_text(p) + (f" (RC8: {', '.join(p['candidates'])})" if p.get("candidates") else "")
+                    + {"class": " [class missing]", "supertype": " [supertype missing]"}.get(p["kind"], "") for p in problems][:12]
         result.add(
             id="jar-linkage-unresolved",
             category="bytecode",
