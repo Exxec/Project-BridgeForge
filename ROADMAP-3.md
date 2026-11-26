@@ -51,9 +51,11 @@ four", "Finish on RC7, re-bank later" (the gene bank), and "Live testing is ok f
       (`mod-changelog add`, Test1) says what was ported. Upstream has nothing newer (2.4.3 is the last release; one later
       commit is unreleased).
     - *What its live run must show.* A passing run alone proves nothing for this port. The RC7 port's safety net catches
-      `Throwable` in the shield-shunt hook, so the unported jar would also "pass" on RC9, with the shunt silently off. The
-      run must put a station with the shield-shunt augment into combat, and the log must hold no error line from
-      `shieldShunt`.
+      `Throwable` in the shield-shunt hook, so the RC7-ported bf.2 jar would also "pass" on RC9, with the shunt off and only
+      a log line to show it. The run must put a station with the shield-shunt augment into combat, and the log must hold no
+      error line from `shieldShunt`. (Corrected 2026-11-26: the catch logs only the exception's own text through
+      `niko_SA.SA_debugUtils`, so the line to look for names the linkage error, not `shieldShunt`. The shunt check below
+      replaces the station battle as the proof of the remapped code; it leaves station modules unproven.)
   - *Wide Horizons: no port needed, an upstream update instead.* The author released 1.5.1b on 2026-11-25 for 0.98.5a-RC9.
     It picks RC9's renamed picker class or the RC8 one by the game's version string (`supportsStarsector0985aApis()`)
     and catches a LinkageError around its music setup; javap shows both RC9 members.
@@ -65,6 +67,51 @@ four", "Finish on RC7, re-bank later" (the gene bank), and "Live testing is ok f
     Station Augments, which the next install replaces. Newer upstream versions: LunaLib 2.1.0 ("Updated to 0.98.5a"),
     MagicLib 1.6.1, Nexerelin 0.12.3 ("Update for Starsector 0.98.5a"), GraphicsLib 1.12.2. Wide Horizons Content needs
     Particle Engine, which the rig lacks. Nothing was written into the rig: the owner is updating it.
+  **Progress 2026-11-26** (owner: "Resume live testing and continue"; later the same day: "pause live testing unless computer
+  idle for a good amouunt [sic] of time"). The 30 minutes are a reading of "a good amount", not a number the owner
+  gave: a live run starts only after Test1's desktop has had no input for 30 minutes, checked right before each run. The
+  harness's own clicks reset the idle timer, so a second run needs a new check. No run is recorded or archived: that waits
+  for the owner.
+  - *The rig as it stood.* Fast Rendering 1.0.2rc1 and StarsectorPrepatcher 0.18.8 were unchanged. Prepatcher fails open on
+    RC9, as on RC7, so every run below ran unpatched. Upstream: Prepatcher 0.18.9 (2026-11-20) names 0.98a-RC8 and
+    "0.98.5a-RC8", not RC9, and says each release supports the latest validated 0.98.5a RC. Fast Rendering 1.0.2 and
+    1.0.4rc1 exist. Which versions the rig takes is the owner's call.
+  - *The 2026-11-25 menu exit did not reproduce,* in three runs, each LIVE_DONE (main menu, campaign, one combat round):
+    - RC9VAN-A: the probe alone with an empty config (vanilla filler fleets), plain JDK 25;
+    - RC9VAN-B: the same with Fast Rendering and Prepatcher;
+    - RC9NC-LIVE2: the Neutrino group exactly as on 2026-11-25 (same mods, versions and launcher).
+    Read-only checks of the 2026-11-25 run found no cause:
+    - the harness sends nothing during its 20 s wait at the menu, and its window watcher only reads titles and takes
+      screenshots;
+    - the game logged no exception, and the JVM printed its exit summary, which is consistent with an orderly exit rather
+      than a crash or a kill;
+    - no crash file was written.
+    The cause stays unknown.
+  - *Neutrino Corporation 1.8.9+bf.3: live PASS on RC9* (RC9NC-LIVE2): FATAL 0, MOD-ERROR 0. One warning: 3 of 31 planned
+    hulls never deployed, the three whose only variant is empty. The RC7 archive run (P962NC2-LIVE-0985a-20261119) had 17 of
+    31, so the warning is not new. The run does not show that the ported code ran: `Neutrino_FighterDroneSystemAI` is the
+    AI of the `neutrino_rotte` system, which the fighters Floh, Gepard Eins and Gepard Drei carry, and no probe line names
+    them. It shows that nothing failed to load or link. Archiving waits for the owner. The rig has been staged for other
+    groups since, so recording this run needs its group re-staged, or a new run.
+  - *Station Augments 2.4.3+bf.3: standard live PASS on RC9* (RC9SA-LIVE): FATAL 0, MOD-ERROR 0. It shows the same five
+    class-sweep failures (its console commands need the Console Commands mod) and the same "Invalid augment id:
+    SA_defensePlatforms!" line as the RC7 archive run SA-SR3-20261119. The shield shunt did not run: augments apply only
+    in a campaign battle at a station whose market holds them (`scripts/effectApplierScript`).
+  - *The shunt check, built, not yet run.* It is a rig-only mod, kept with its source in the workspace's
+    `scratch/rc9-remap/shunt-check/` and never shipped. In the probe's mission it calls `shieldShunt.applyInCombat` on one
+    enemy AI ship whose AI is `BasicShipAI` and whose shield is front or omni. Then it logs, once a second, whether
+    `BasicShipAI.shieldAI` still holds SA's wrapper (`shieldShunt$applyInCombat$testValTwo$1`, which implements RC9's
+    `combat/ai/G`), and whether `SA_KKdamper`, the system the wrapper's advance method drives, has run.
+    - *Pass:* the wrapper is installed, the ship's phase-cloak system is `SA_KKdamper`, the ship stays alive with the
+      wrapper for at least 20 s, the damper is active for at least a second, and no linkage error is logged.
+    - *Control first:* the same run with the RC7-ported bf.2 jar must fail the check, to show that the check can fail.
+    - *Why it is built this way:* the swap only runs on Windows and when the AI is a `BasicShipAI`; otherwise SA skips it
+      without a log line. SA calls `getId()` outside its try block, and the id is set late, so the check sets one first. It
+      compiles against the public API and SA's jar only, and reads `BasicShipAI.shieldAI` through SA's own
+      `ReflectionUtils`.
+    - *What it does not cover:* station modules, since the target is a ship.
+  - *United Aurora Federation:* the author released 0.8.4c1, which declares 0.98.5a-RC9. The archive (0.8.4c,
+    live-validated 2026-11-17) is CLEAN on RC9. Whether to take the update in is the owner's choice, as for Wide Horizons.
 - 98.5 **Done 2026-11-25.** **Repoint the 0.98.5a rigs.** `_rig-0985a`'s `starsector-core` links to RC9 (RC9's launcher,
   `vmparams` and `jre` equal RC7's); `rig-doctor` isolation and launcher_prefs PASS. `_rig-genes` stays on RC7: the gene
   bank is on RC7 until 98.6.
@@ -81,8 +128,9 @@ Found during 98.4 (2026-11-25), added under the owner's standing instruction to 
   supertype present in the old core but absent in the new one as a removal, not as an unknown library.
   *Sweep 2026-11-25, read-only* (every jar under Test1's `Done/` and `In operation/`, 766 jars): 8 jars name a game
   supertype RC9 lacks. Seven are copies of Station Augments (archives, `_replaced` archives, a patch folder). The eighth is
-  the archived Fast Rendering 0.6.8: its own `combat/ai/admiral/G`, which replaces the game's class, extends
-  `combat/oooO`. The rig uses Fast Rendering 1.0.2rc1, which has none. So the RC9 catalogue missed no other mod through a
+  the archived Fast Rendering 0.6.8: its own `combat/ai/admiral/G`, which replaces the game's class, implements
+  `combat/oooO` (its class file lists it among the interfaces, not as the superclass; read 2026-11-25, corrected from
+  "extends" 2026-11-26). The rig uses Fast Rendering 1.0.2rc1, which has none. So the RC9 catalogue missed no other mod through a
   removed supertype. It still cannot see an obfuscated member that resolves under the same name on both cores but means
   something else on the new one: that needs the body comparison of 96.14 (`bodymatch.py` in Station Augments'
   `scratch/rc9-remap/tool/`). Fast Rendering is not judged by the linkage check at all: its agent adds the accessor
