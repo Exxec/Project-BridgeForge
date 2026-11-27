@@ -258,13 +258,16 @@ class ResultTests(unittest.TestCase):
         import io
 
         from bridgeforge.probe import cmd_probe_group
+        from bridgeforge.rig import rig_prefs
 
         args = argparse.Namespace(interactive=False, save_reload=True, json=False, test_id="T1", bat="run.bat", menu_timeout=1,
                                   natural_exit=False, exit_wait=1, no_graceful_close=False)
         first = LiveResult("LIVE_DONE", log="T1.stdout.log", prepatcher=prepatcher_log.summarise(CLEAN, SINCE))
         reloaded = LiveResult("LIVE_STUCK", "main-menu", "reload never reached the menu", prepatcher={"verdict": "NO_LOG"})
         out = io.StringIO()
+        # The launches are fakes; the hold over both (tests/test_rig_prefs.py SaveReloadPrefsTests) would read the registry.
         with mock.patch.object(live_run, "live_run", return_value=first), \
+                mock.patch.object(rig_prefs, "owner_prefs_kept", contextlib.nullcontext), \
                 mock.patch.object(save_reload_run, "save_reload_configured", return_value=True), \
                 mock.patch.object(save_reload_run, "clear_stale_fingerprint"), \
                 mock.patch.object(save_reload_run, "reload_run", return_value=reloaded), \

@@ -230,9 +230,30 @@ def _probe_install(args: argparse.Namespace, queue: Path, rig: Path) -> dict | i
     return result
 
 
+def _play(args: argparse.Namespace, rig: Path, direct):
+    """The live run and, with --save-reload after a LIVE_DONE, the reload: (live, reloaded or None).
+
+    The owner's preferences are taken once for both launches and given back after the second: the first launch's save moves
+    `continue` to the rig's save, and the reload's Continue loads that last save (RC8-29). Given back in between, `continue`
+    named the owner's save instead (review of #269, ROADMAP-3 98.23 a)."""
+    import contextlib
+
+    from bridgeforge.live.live_run import live_run
+    from bridgeforge.rig.rig_prefs import owner_prefs_kept
+
+    with owner_prefs_kept() if args.save_reload else contextlib.nullcontext():
+        live = live_run(rig, args.test_id, bat_name=args.bat, menu_timeout=args.menu_timeout,
+                        natural_exit=args.natural_exit, exit_wait=args.exit_wait, save_reload=args.save_reload,
+                        graceful_exit=not args.no_graceful_close, interactive=args.interactive, direct=direct)
+        if not (args.save_reload and live.verdict == "LIVE_DONE"):
+            return live, None
+        from bridgeforge.save.save_reload_run import reload_run
+
+        return live, reload_run(rig, f"{args.test_id}-reload", bat_name=args.bat, menu_timeout=args.menu_timeout, direct=direct)
+
+
 def _probe_live(args: argparse.Namespace, queue: Path, rig: Path) -> dict | int:
     """`probe-group live`: its result, or an exit code when it stops early."""
-    from bridgeforge.live.live_run import live_run
     from bridgeforge.live.input_recorder import describe as describe_desktop
     from bridgeforge.live.prepatcher_log import describe as describe_prepatcher
     if args.interactive:
@@ -253,16 +274,12 @@ def _probe_live(args: argparse.Namespace, queue: Path, rig: Path) -> dict | int:
             print("bridgeforge: --save-reload needs the rig probe config's save_reload.after_days (install with --save-reload-after-days N)", file=sys.stderr)
             return 2
         clear_stale_fingerprint(rig)
-    live = live_run(rig, args.test_id, bat_name=args.bat, menu_timeout=args.menu_timeout,
-                    natural_exit=args.natural_exit, exit_wait=args.exit_wait, save_reload=args.save_reload,
-                    graceful_exit=not args.no_graceful_close, interactive=args.interactive, direct=direct)
+    live, reloaded = _play(args, rig, direct)
     result = {"verdict": live.verdict, "stage": live.stage, "detail": live.detail, "rounds": live.rounds, "stages": live.stages, "log": live.log,
               "prepatcher": live.prepatcher, "desktop": live.desktop}
     first_prepatcher, first_desktop = describe_prepatcher(live.prepatcher), describe_desktop(live.desktop)
-    if args.save_reload and live.verdict == "LIVE_DONE":
+    if reloaded is not None:
         from bridgeforge.save.save_fingerprint import parse_fingerprint
-        from bridgeforge.save.save_reload_run import reload_run
-        reloaded = reload_run(rig, f"{args.test_id}-reload", bat_name=args.bat, menu_timeout=args.menu_timeout, direct=direct)
         block = parse_fingerprint(Path(reloaded.log).read_text(encoding="utf-8", errors="replace")) if reloaded.log and Path(reloaded.log).is_file() else None
         result["reload"] = {"verdict": reloaded.verdict, "stage": reloaded.stage, "detail": reloaded.detail, "stages": reloaded.stages,
                             "log": reloaded.log, "reload_after_save": bool(block and block["compare_observed"]), "fingerprint": block,

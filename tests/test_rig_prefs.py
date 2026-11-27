@@ -129,6 +129,83 @@ class OwnerPrefsTests(unittest.TestCase):
         self.assertEqual(sorted(values), ["continue", "resolution"])
         self.assertEqual(sorted(read.call_args.args[0]), ["continue", "resolution"])
 
+    def test_kept_values_come_back_once_after_the_outermost_hold(self) -> None:
+        store = {"continue": "owner", "serial": "the licence key"}
+        read, write, names = self._patched(store)
+        with read, write, names:
+            with rig_prefs.owner_prefs_kept():
+                with rig_prefs.owner_prefs_kept():
+                    store["continue"] = "rig"
+                self.assertEqual(store["continue"], "rig")  # the inner hold gives nothing back
+        self.assertEqual(store, {"continue": "owner", "serial": "the licence key"})
+
+
+class SaveReloadPrefsTests(unittest.TestCase):
+    """Review of #269: `probe-group live --save-reload` starts the game twice. The first launch saves (the game moves `continue`
+    to the rig's save) and the reload clicks Continue, which loads the last save (RC8-29). Each launch gave every value back,
+    so the reload started with `continue` naming the owner's save. The real pinned_launcher_prefs runs in both fake launches."""
+
+    _patched = OwnerPrefsTests._patched
+    OWNER = {"resolution": "1920x1080", "continue": "..////saves\\owner_save", "serial": "the licence key"}
+
+    def _probe_live(self, first, reload) -> mock.Mock:
+        import argparse
+        import contextlib
+        import io
+        from pathlib import Path
+
+        from bridgeforge.live import live_run
+        from bridgeforge.probe import cmd_probe_group
+        from bridgeforge.save import save_reload_run
+
+        args = argparse.Namespace(interactive=False, save_reload=True, json=False, test_id="T1", bat="run.bat", menu_timeout=1,
+                                  natural_exit=False, exit_wait=1, no_graceful_close=False)
+        with mock.patch.object(live_run, "live_run", side_effect=first), \
+                mock.patch.object(save_reload_run, "save_reload_configured", return_value=True), \
+                mock.patch.object(save_reload_run, "clear_stale_fingerprint"), \
+                mock.patch.object(save_reload_run, "reload_run", side_effect=reload) as reloaded, \
+                contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(io.StringIO()):
+            cmd_probe_group._probe_live(args, Path("queue"), Path("rig"))
+        return reloaded
+
+    def _launch(self, store: dict, then):
+        """A fake launch inside the real pinned_launcher_prefs; `then(store)` is what the game did."""
+        from bridgeforge.live.live_run import LiveResult
+
+        def launch(*_args, **_kwargs):
+            with rig_prefs.pinned_launcher_prefs(rig_prefs.LIVE_PINNED):
+                return then(store) or LiveResult("LIVE_DONE", log=None)
+        return launch
+
+    def test_the_reload_starts_with_the_rigs_save_and_the_owners_values_come_back_after_it(self) -> None:
+        store, seen = dict(self.OWNER), []
+        read, write, names = self._patched(store)
+        with read, write, names:
+            self._probe_live(self._launch(store, lambda s: s.update({"continue": "..////saves\\rig_save"})),
+                             self._launch(store, lambda s: seen.append((s["continue"], s["resolution"]))))
+        self.assertEqual(seen, [("..////saves\\rig_save", "1920x1440")])
+        self.assertEqual(store, self.OWNER)
+
+    def test_a_first_launch_that_fails_or_does_not_finish_still_gives_everything_back(self) -> None:
+        from bridgeforge.live.live_run import LiveResult
+
+        def crash(s):
+            s["continue"] = "rig"
+            raise RuntimeError("the game crashed")
+
+        def stuck(s):
+            s["continue"] = "rig"
+            return LiveResult("LIVE_STUCK", "campaign", "x", log=None)
+
+        store = dict(self.OWNER)
+        read, write, names = self._patched(store)
+        with read, write, names, self.assertRaises(RuntimeError):
+            self._probe_live(self._launch(store, crash), self._launch(store, lambda s: None))
+        self.assertEqual(store, self.OWNER)
+        with read, write, names:
+            reloaded = self._probe_live(self._launch(store, stuck), self._launch(store, lambda s: None))
+        self.assertEqual((store, reloaded.call_count), (self.OWNER, 0))
+
 
 @unittest.skipUnless(sys.platform == "win32", "the Windows registry")
 class PrefNamesTests(unittest.TestCase):
@@ -157,6 +234,24 @@ class PrefNamesTests(unittest.TestCase):
             names = rig_prefs.pref_names(key_path=self.KEY)
             none = rig_prefs.pref_names(key_path=self.KEY + r"\missing")
         self.assertEqual((sorted(names), none), (["can/Skip/Tutorial", "continue", "serial"], []))
+
+    def test_a_listing_error_is_raised_not_taken_for_the_end_of_the_list(self) -> None:
+        """Review of #269: a short list taken as complete made the restore delete every owner value it missed."""
+        import ctypes
+        import winreg
+
+        with winreg.CreateKey(winreg.HKEY_CURRENT_USER, self.KEY):
+            pass
+
+        def enum(_handle, index, buffer, *_rest):
+            if index == 0:
+                buffer.value = "continue"
+                return 0
+            return 6  # ERROR_INVALID_HANDLE
+
+        with mock.patch.object(ctypes.windll.advapi32, "RegEnumValueW", enum), self.assertRaises(OSError) as raised:
+            rig_prefs.pref_names(key_path=self.KEY)
+        self.assertIn("after 1 name(s)", str(raised.exception))
 
 
 @unittest.skipUnless(sys.platform == "win32", "the Windows registry")

@@ -229,12 +229,15 @@ class ResultTests(unittest.TestCase):
 
         from bridgeforge.live import live_run
         from bridgeforge.probe import cmd_probe_group
+        from bridgeforge.rig import rig_prefs
         from bridgeforge.save import save_reload_run
 
         args = argparse.Namespace(interactive=False, save_reload=save_reload, json=False, test_id="T1", bat="run.bat", menu_timeout=1,
                                   natural_exit=False, exit_wait=1, no_graceful_close=False)
         out = io.StringIO()
+        # The launches are fakes; the hold over both (tests/test_rig_prefs.py SaveReloadPrefsTests) would read the registry.
         with mock.patch.object(live_run, "live_run", return_value=first), \
+                mock.patch.object(rig_prefs, "owner_prefs_kept", contextlib.nullcontext), \
                 mock.patch.object(save_reload_run, "save_reload_configured", return_value=True), \
                 mock.patch.object(save_reload_run, "clear_stale_fingerprint"), \
                 mock.patch.object(save_reload_run, "reload_run", return_value=reloaded), \

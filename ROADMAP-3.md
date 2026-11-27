@@ -815,6 +815,16 @@ order then continue live testing followed by more roadmap work based on your rec
       - `OwnerPrefsTests`: the run's `continue`, an added and a removed value come back; the licence key is never read or
         written; the same after an error;
       - `PrefNamesTests`: the names of a real test key are listed while value reads are made to fail.
+    - An independent review found two defects, fixed in the same PR:
+      - `probe-group live --save-reload` starts the game twice, and each launch gave every value back. The first launch's
+        save moves `continue` to the rig's save, and the reload's Continue loads the last save (RC8-29), so the reload
+        started with `continue` naming the owner's save. `rig_prefs.owner_prefs_kept` now takes the owner's values once for
+        both launches and gives them back after the reload, or after a failure; inside it, each launch restores only what it
+        pins. Test: `SaveReloadPrefsTests` runs two fake launches through the real `pinned_launcher_prefs` (it failed on the
+        first version).
+      - A listing error in `pref_names` ended the list as if complete, and the restore would then have deleted every value it
+        missed. Only `ERROR_NO_MORE_ITEMS` ends the list now; any other code raises OSError.
+    - The fix of item 98.20 had cut item 97's heading into the end of item 98; restored.
   - (b) A probe installed on a fresh machine lacks the mission icon (WLVAN-A's Fatal). Installing the probe should copy it
     from the rig's core.
   - (c) No clean vanilla proof run: `rig-up` needs a workspace mod, and an earlier `rig-up`'s recorded target refused the
@@ -825,7 +835,27 @@ order then continue live testing followed by more roadmap work based on your rec
     `bump-version` should also move a name's `[BF rN]` tag.
   - (f) 98.20's visibility check.
   - (g) Live runs on White_Legion in the `live-run` skill: the local gate (ignoring VS Code's java), the preference snapshot
-    and restore, and rig-doctor after each run.
+    and restore, and rig-doctor after each run. Take the snapshot just before each launch: the day's run script restored a
+    snapshot from 11:36 after every later run.
+  - Found later the same day, while UAF was restored as authored (owner: "Restore UAF as authored and revert my original
+    rule"; after the slot-fit live test, "Keep as authored" for UAF and as the standing rule; RC8-56). Queued:
+    - (h) `escalation revoke` names a ruling by its id, and the approve-fixer rulings recorded before ids existed have none.
+      Test1's three 2026-09-29 approvals (`variant-wings-exceed-bays`, `variant-weapon-slot-mismatch`,
+      `variant-weapon-slot-missing`) were taken out of `AUTOMATION_POLICY.json` by script, with a backup and one dated
+      `revokes_fixer` line each in `ESCALATION_RULINGS.jsonl`. `revoke` should accept a fixer id for such rulings.
+    - (i) Revive on White_Legion found no Nexerelin to resolve UAF's ground-battle classes against, and stopped on four
+      `jar-linkage-unresolved` packets that Test1 does not raise. Revive looks for providers in `In operation/_rig/mods`,
+      and White_Legion's rig is `_rig-0985a`; `--providers` reaches only missing-content packets, not the scan.
+    - (j) `probe-group duel` waits only for "Reading save data from". The main menu writes that line only when `continue`
+      names a save the rig has, so twice the slot-fit runs were reported as never reaching a menu that was up. Live runs
+      accept the menu music line too (`MENU_READY`); the duel runner should as well.
+    - (k) 93.24 left one screen copy: `game_click.capture_client` copies the game's rectangle from the screen
+      (`CopyFromScreen`). It serves the menu reader, live runs' stall screenshots and the duel runner. With the game in
+      front that is only the game, but with a window over it the picture shows the owner's window. Draw it with
+      `PrintWindow`, as `window_watch.save_screenshot` does.
+    - (l) Revive still asks the owner to approve the fixer for every `variant-weapon-slot-mismatch`, though the standing
+      rule now accepts them as authored. A standing acceptance that revive applies by itself, quoting the rule, would end
+      the question.
   - *Deferred to G5:*
     - a probe check that every ring band and every graphics key resolves to its mod's own file;
     - a static check for graphics keys two mods share;
@@ -834,7 +864,9 @@ order then continue live testing followed by more roadmap work based on your rec
     - `--client-top auto`;
     - a per-launcher check that the log reaches the console;
     - a progress-aware combat-start wait with faster Play retries. Estimating the time from the batch's size would not have
-      caught the J28 stall: its loading took seconds., re-queued without gates (owner 2026-11-17: "Park S4. Stop treating S2 and S3 as gates.
+      caught the J28 stall: its loading took seconds.
+
+**97. The S series' remaining work, re-queued without gates (owner 2026-11-17: "Park S4. Stop treating S2 and S3 as gates.
 Check S series implementation plan and if applicable add remaining items to roadmap queue").**
 **Approved; queued after items 95 and 96.** From docs/S_SERIES_IMPLEMENTATION_PLAN.md's "what remains" table (status check
 2026-10-26). Each is now an ordinary item: no S-series acceptance waits on it, and it waits on nothing in the S series.
