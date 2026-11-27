@@ -391,6 +391,34 @@ Found during 98.4's runs (2026-11-26), queued the same way:
 - 98.12 (S) **`Hands.front()` ignores whether the game came to the front.** `game_click.bring_to_front` returns it, and
   the result is dropped, so a click after a failed foreground lands in whatever window is in front. Record it in the
   actions log, and retry once or stop.
+  **Done 2026-11-26 (both: one retry, then stop).** Not yet run live.
+  - *The change:*
+    - `real_hands.front` returns `bring_to_front`'s answer.
+    - `window_gone.checked_front` wraps a `front`: on False it tries once more, and a second False raises
+      `GameNotInFront`. None, which test fakes return, counts as in front.
+    - `live_run.recording` applies it with its note, so the actions log shows "front failed: ...; trying again" and
+      "front failed again; stopping".
+    - `save_reload_run.drive_reload` and `duel_run.run_duel` wrap their hands too. The duel sequence moved into
+      `_play_duels`, so one handler covers every `front()` call in it (also those inside `click_menu` and `play_probe_combat`).
+  - *Where it stops:*
+    - `drive` and `drive_reload` end LIVE_STUCK at the stage in progress, with a screenshot `<TESTID>.<stage>-front.png`
+      of whatever covers the game; `drive` also writes the actions file;
+    - the duel run reports it as its problem.
+    - No click, key or scroll is sent after that; the retry's own `bring_to_front` taps Alt once more.
+  - *To watch on the first live run* (second review): `GetForegroundWindow() == hwnd` is stricter than "the click lands on
+    the game". A game that is visible and uncovered but not the foreground window used to get its clicks; now it stops at
+    `new-game`, and its `-front.png` shows the game itself. The check is per sequence, not per click, as before.
+  - *Tests:*
+    - `tests/test_live_run.py`:
+      - `CheckedFrontTests` (4);
+      - `test_a_game_that_will_not_come_to_the_front_gets_nothing_more_and_the_run_stops` (it stops at `new-game`,
+        whose click is the first to bring the game to the front);
+      - `test_one_failed_front_is_tried_again_and_noted`;
+      - `test_real_hands_report_whether_the_game_came_to_the_front`;
+    - `tests/test_save_fingerprint.py` `test_continue_with_the_game_not_in_front_clicks_nothing`;
+    - `tests/test_duel_run.py` `test_a_game_not_in_front_plays_no_duel`.
+  - *Mutation check:* 12 mutants, all caught. The duel test gives the run a short battle wait, so a regression that plays on
+    fails in seconds.
 - 98.13 (S) **A passing run keeps no actions file,** so a failed run has no baseline to compare with (LIVE3 could not be
   compared with LIVE2). Write `<log>.actions.json` for every run.
   - *Also:* the per-second input recorder used for 98.4 (cursor position, whether the game window is in front, the

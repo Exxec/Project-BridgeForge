@@ -75,6 +75,33 @@ class InstallTests(unittest.TestCase):
         self.assertEqual((result["played"], clicks), ([], []))
         self.assertIn("main-menu: the main menu read as 11 buttons", result["problem"])
 
+    def test_a_game_not_in_front_plays_no_duel(self) -> None:
+        # 98.12: a game that does not come to the front, also on a second try, gets no click, and the run says why.
+        import contextlib
+        from unittest import mock
+
+        from bridgeforge.live import live_run, main_menu
+
+        with resolved_temp_dir() as base:
+            log = base / "duel.stdout.log"
+            log.write_text("1 [main] INFO  Reading save data from [x]\n", encoding="utf-8")
+            clicks: list[tuple] = []
+            hands = live_run.Hands(click=lambda fx, fy: clicks.append((fx, fy)), key=lambda v: None, scroll=lambda *a: None,
+                                   sleep=lambda s: None, front=lambda: False, geometry=lambda: (0, 0, 0, 1920, 1440))
+
+            @contextlib.contextmanager
+            def game(*_args, **_kwargs):
+                yield log, hands, 14
+
+            # The menu reader is stubbed, so a regression that plays on never screenshots the real desktop (second review).
+            menu = [(0.72, 0.30 + 0.05 * i) for i in range(9)]
+            with mock.patch.object(duel_run, "install_duel_mod"), mock.patch.object(live_run, "running_game", game), \
+                    mock.patch.object(main_menu, "_menu_buttons", lambda _hands: menu):
+                # A short battle wait, so a regression that plays on fails in seconds rather than waiting out a battle.
+                result = duel_run.run_duel(base, "DUEL-T", combat_timeout=0.5)
+        self.assertEqual((result["played"], clicks), ([], []))
+        self.assertIn("front: the game window did not come to the front", result["problem"])
+
 
 if __name__ == "__main__":
     unittest.main()

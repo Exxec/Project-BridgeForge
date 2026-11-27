@@ -1,0 +1,1 @@
+- Live runs stop when the game window will not come to the front: `Hands.front()` now returns whether it did, and a second failure in a row stops the run instead of clicking into another window. The live run notes each failure in its actions log; the live and save-reload runs end LIVE_STUCK with a screenshot of what covers the game; the duel run reports it as its problem.

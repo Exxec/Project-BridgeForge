@@ -9,6 +9,7 @@ from __future__ import annotations
 
 from .safeio import safe_rmtree
 
+import dataclasses
 import json
 import re
 import shutil
@@ -180,42 +181,52 @@ def wait_for_end(log: Path, label: str, timeout: float, hands, rig: Path, test_i
     return False, evidence
 
 
+def _play_duels(log: Path, hands, vanilla_rows: int, combat_timeout: float, only: tuple[str, ...] | None, played: list[str],
+                rig: Path, test_id: str) -> str | None:
+    """From the main menu: open the mission list, play each duel mission, appending to `played`; the run's problem, or None."""
+    hands.sleep(20)
+    hands.front()
+    try:
+        lr.click_menu(hands, "Missions", lr.MAIN_MENU_MISSIONS)
+    except lr.MenuMisread as exc:  # nothing was clicked on a misread menu (98.11)
+        return f"main-menu: {exc}"
+    hands.sleep(3)
+    layout = lr.mission_list_layout(lr._log_text(log), vanilla_rows, DUEL_MOD_ID)
+    below, total = layout if layout else (0, None)
+    rows_in_mod = len(DUEL_MISSIONS)
+    # The mod is named "zz ..." so the launcher lists it last and its missions sit at the bottom of the list; a mission more
+    # than MAX_ROWS_REACHABLE rows up is off-screen and a click there replays whatever was selected (DUEL12-20261011).
+    if below + rows_in_mod - 1 > lr.MAX_ROWS_REACHABLE:
+        return f"the duel missions sit {below} rows above the bottom of the mission list; only {lr.MAX_ROWS_REACHABLE} are reachable"
+    for position, label in enumerate(DUEL_MISSIONS):
+        if only and label not in only:
+            continue
+        offset = len(lr._log_text(log))
+        lr.play_probe_combat(hands, below + (rows_in_mod - 1 - position), total)
+        finished, evidence = wait_for_end(log, label, combat_timeout, hands, rig, test_id, since=offset)
+        if not finished:
+            return f"{label}: no END line from the duel plugin" + (f"; stall evidence: {', '.join(evidence)}" if evidence else "")
+        played.append(label)
+        hands.sleep(3)
+        hands.front()
+        hands.click(*lr.COMBAT_CONTINUE)
+        hands.sleep(4)
+    return None
+
+
 def run_duel(rig: Path, test_id: str, bat_name: str = "run-j25-direct.bat", combat_timeout: float = 600, only: tuple[str, ...] | None = None) -> dict:
     """Install the duel mod, start the game, play each duel mission from the main menu, stop the game, return the summary."""
     install_duel_mod(rig)
     played: list[str] = []
     problem: str | None = None
     with lr.running_game(rig, test_id, bat_name) as (log, hands, vanilla_rows):
+        hands = dataclasses.replace(hands, front=lr.checked_front(hands.front))  # stop when the game will not come to the front (98.12)
         if not lr.wait_for(log, lr.MENU_LOADED, 240, hands):
             problem = "main-menu: the game never logged that the main menu was up"
         else:
-            hands.sleep(20)
-            hands.front()
             try:
-                lr.click_menu(hands, "Missions", lr.MAIN_MENU_MISSIONS)
-            except lr.MenuMisread as exc:  # nothing was clicked on a misread menu (98.11)
-                problem = f"main-menu: {exc}"
-            hands.sleep(3)
-            layout = lr.mission_list_layout(lr._log_text(log), vanilla_rows, DUEL_MOD_ID)
-            below, total = layout if layout else (0, None)
-            rows_in_mod = len(DUEL_MISSIONS)
-            # The mod is named "zz ..." so the launcher lists it last and its missions sit at the bottom of the list; a mission more
-            # than MAX_ROWS_REACHABLE rows up is off-screen and a click there replays whatever was selected (DUEL12-20261011).
-            if problem is None and below + rows_in_mod - 1 > lr.MAX_ROWS_REACHABLE:
-                problem = f"the duel missions sit {below} rows above the bottom of the mission list; only {lr.MAX_ROWS_REACHABLE} are reachable"
-            for position, label in enumerate(DUEL_MISSIONS if problem is None else ()):
-                if only and label not in only:
-                    continue
-                offset = len(lr._log_text(log))
-                lr.play_probe_combat(hands, below + (rows_in_mod - 1 - position), total)
-                finished, evidence = wait_for_end(log, label, combat_timeout, hands, rig, test_id, since=offset)
-                if not finished:
-                    problem = f"{label}: no END line from the duel plugin" + (f"; stall evidence: {', '.join(evidence)}" if evidence else "")
-                    break
-                played.append(label)
-                hands.sleep(3)
-                hands.front()
-                hands.click(*lr.COMBAT_CONTINUE)
-                hands.sleep(4)
+                problem = _play_duels(log, hands, vanilla_rows, combat_timeout, only, played, rig, test_id)
+            except lr.GameNotInFront as exc:  # nothing more was sent to a window that is not in front (98.12)
+                problem = f"front: {exc}"
     duels = parse_duel_log(lr._log_text(log))
     return {"played": played, "problem": problem, "summary": summarise(duels), "log": str(log)}

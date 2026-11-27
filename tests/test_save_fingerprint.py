@@ -223,6 +223,27 @@ class DriveTests(unittest.TestCase):
             self.assertEqual(clicks, [])
             self.assertEqual([p.name for p in shots], ["run.continue-menu.png"])
 
+    def test_continue_with_the_game_not_in_front_clicks_nothing(self) -> None:
+        # 98.12: a game that does not come to the front, also on a second try, gets no click.
+        from unittest import mock
+
+        with resolved_temp_dir() as base:
+            log = base / "run.stdout.log"
+            log.write_text("1 [main] INFO  Reading save data from [x]\n", encoding="utf-8")
+            clicks: list[tuple] = []
+            shots: list[Path] = []
+            fronts: list[int] = []
+            hands = live_run.Hands(click=lambda fx, fy: clicks.append((fx, fy)), key=lambda v: None, scroll=lambda *a: None,
+                                   sleep=lambda s: None, capture=lambda p: shots.append(p) or True,
+                                   front=lambda: (fronts.append(1), False)[1], geometry=lambda: (0, 0, 0, 1920, 1440))
+            menu = [(0.72, 0.30 + 0.05 * i) for i in range(9)]
+            with mock.patch.object(main_menu, "_menu_buttons", lambda _hands: menu):
+                result = save_reload_run.drive_reload(log, hands, menu_timeout=0.2)
+        self.assertEqual((result.verdict, result.stage), ("LIVE_STUCK", "continue"))
+        self.assertIn("did not come to the front, also on a second try", result.detail)
+        self.assertEqual((clicks, len(fronts)), ([], 2))
+        self.assertEqual([p.name for p in shots], ["run.continue-front.png"])
+
     def test_a_vanished_window_at_continue_is_stuck_there(self) -> None:
         with resolved_temp_dir() as base:
             log = base / "run.stdout.log"

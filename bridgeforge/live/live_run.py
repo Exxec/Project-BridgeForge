@@ -21,7 +21,8 @@ from typing import Callable
 
 from bridgeforge.log_triage import MAIN_MENU_RE
 from bridgeforge.launch import EXIT_POLL_SECONDS, GameRefused, LaunchNoProcess, settle_exit  # noqa: F401  (re-exported: callers and tests import them from here)
-from bridgeforge.live.window_gone import GameWindowGone, detail as window_gone_detail  # noqa: F401  (GameWindowGone re-exported: 93.50)
+from bridgeforge.live.window_gone import (GameNotInFront, GameWindowGone, checked_front,  # noqa: F401  (re-exported: 93.50, 98.12)
+                                          detail as window_gone_detail)
 from bridgeforge.live.main_menu import (MENU_CHECK_READS, MenuMisread, _main_menu_shown, _menu_buttons,  # noqa: F401
                                       click_menu, menu_point)  # (re-exported: save_reload_run, duel_run and tests import them from here)
 
@@ -82,7 +83,7 @@ class Hands:
     scroll: Callable[[float, float, int], None]
     sleep: Callable[[float], None] = time.sleep
     alive: Callable[[], bool] = lambda: True
-    front: Callable[[], None] = lambda: None
+    front: Callable[[], bool | None] = lambda: None  # False: the game did not come to the front (98.12, `checked_front`)
     geometry: Callable[[], tuple] | None = None
     capture: Callable[[Path], bool] | None = None  # a screenshot of the game window to this path; True once written
 
@@ -101,7 +102,8 @@ class LiveResult:
 
 
 def recording(hands: Hands, log: Path, actions: list[dict]) -> Hands:
-    """`hands`, with each key, click and scroll appended to `actions` as {"t", "action", "log_bytes"}."""
+    """`hands`, with each key, click and scroll appended to `actions` as {"t", "action", "log_bytes"}, and a front() that retries
+    once and then stops the run, noting each failure (98.12, `checked_front`)."""
     start = time.monotonic()
 
     def note(text: str) -> None:
@@ -123,7 +125,7 @@ def recording(hands: Hands, log: Path, actions: list[dict]) -> Hands:
         note("scroll " + ",".join(str(a) for a in args))
         hands.scroll(*args)
 
-    return Hands(click=click, key=key, scroll=scroll, sleep=hands.sleep, alive=hands.alive, front=hands.front,
+    return Hands(click=click, key=key, scroll=scroll, sleep=hands.sleep, alive=hands.alive, front=checked_front(hands.front, note),
                  geometry=hands.geometry, capture=hands.capture)
 
 
@@ -494,8 +496,10 @@ def drive(log: Path, hands: Hands, menu_timeout: float = 240, campaign_timeout: 
         result.stage, result.detail = at[0], window_gone_detail(_log_text(log))
         _write_actions(log, result.actions)
         return result
-    except MenuMisread as exc:  # nothing was clicked; the menu is still up, so the screenshot shows what was misread (98.11)
-        shot = _capture(hands, log, f"{at[0]}-menu")
+    except (MenuMisread, GameNotInFront) as exc:
+        # Nothing was clicked: on a misread menu, which is still up (98.11), or after a window that would not come to the front,
+        # whose screenshot shows what covers it (98.12).
+        shot = _capture(hands, log, f"{at[0]}-{'menu' if isinstance(exc, MenuMisread) else 'front'}")
         result.stage, result.detail = at[0], f"{exc}" + (f"; screenshot {shot}" if shot else "")
         _write_actions(log, result.actions)
         return result
@@ -598,8 +602,8 @@ def real_hands(rig: Path, launcher_pid: int | None = None) -> Hands:
             raise GameWindowGone("the game window is gone")
         return found
 
-    def front() -> None:
-        game_click.bring_to_front(geometry()[0])
+    def front() -> bool:
+        return game_click.bring_to_front(geometry()[0])  # whether it came to the front; checked_front acts on it (98.12)
 
     return Hands(click=lambda fx, fy: game_click.click_fraction(geometry(), fx, fy),
                  key=game_click.press_key,

@@ -22,9 +22,11 @@ class FakeGame:
                  late_redefinition: bool = False, dies_at_deploy: int | None = None, dies_in_battle: bool = False,
                  saves_after_end: bool = False, menu_after_exits: int | None = None, lost_spaces: int = 0,
                  round_seconds: float = 0.0, window_gone_on: tuple[float, float] | None = None,
-                 window_gone_at_deploy: int | None = None, extra_bands: int = 0) -> None:
+                 window_gone_at_deploy: int | None = None, extra_bands: int = 0, front_fails: tuple[int, ...] = ()) -> None:
         self.log, self.rounds, self.stall_at = log, rounds, stall_at
         self.extra_bands = extra_bands  # bands the menu reader sees below the nine buttons (98.11)
+        # front_fails: these front() calls (1-based) report that the game did not come to the front (98.12)
+        self.front_fails, self.fronts = set(front_fails), 0
         # window_gone_on: a click on this point finds no window (SR7-LIVE-0985a-20261117's New Game click, 93.50);
         # window_gone_at_deploy: the Nth DEPLOY click does
         self.window_gone_on, self.window_gone_at_deploy = window_gone_on, window_gone_at_deploy
@@ -59,8 +61,10 @@ class FakeGame:
         if not self.alive:
             raise live_run.GameWindowGone("the game window is gone")
 
-    def front(self) -> None:
+    def front(self) -> bool | None:
         self._window()
+        self.fronts += 1
+        return False if self.fronts in self.front_fails else None
 
     def scroll(self, *args) -> None:
         self._window()
@@ -153,6 +157,41 @@ class FakeGame:
                               alive=lambda: self.alive, front=self.front, geometry=geometry)
 
 
+class CheckedFrontTests(unittest.TestCase):
+    """98.12: `checked_front` retries a front() that reports False once, then raises; True and None (fakes) pass."""
+
+    def _run(self, answers: list[bool | None]) -> tuple[int, list[str], bool]:
+        replies, notes = iter(answers), []
+        calls = []
+
+        def front():
+            calls.append(1)
+            return next(replies)
+
+        try:
+            live_run.checked_front(front, notes.append)()
+        except live_run.GameNotInFront:
+            return len(calls), notes, True
+        return len(calls), notes, False
+
+    def test_in_front_at_once_is_one_call_and_no_note(self) -> None:
+        self.assertEqual(self._run([True]), (1, [], False))
+        self.assertEqual(self._run([None]), (1, [], False))
+
+    def test_a_failure_then_success_is_two_calls_and_one_note(self) -> None:
+        calls, notes, raised = self._run([False, True])
+        self.assertEqual((calls, len(notes), raised), (2, 1, False))
+
+    def test_two_failures_raise_after_two_notes(self) -> None:
+        calls, notes, raised = self._run([False, False])
+        self.assertEqual((calls, len(notes), raised), (2, 2, True))
+        self.assertIn("stopping", notes[-1])
+
+    def test_without_a_note_it_still_stops(self) -> None:
+        with self.assertRaises(live_run.GameNotInFront):
+            live_run.checked_front(lambda: False)()
+
+
 class DriveTests(unittest.TestCase):
     def _drive(self, rounds: int = 1, stall_at: str | None = None, **fake):
         with resolved_temp_dir() as base:
@@ -169,6 +208,41 @@ class DriveTests(unittest.TestCase):
         self.assertEqual(clicks[0], live_run.MAIN_MENU_NEW_GAME)
         self.assertIn(live_run.START_GAME, clicks)
         self.assertLess(clicks.index(live_run.START_GAME), clicks.index(live_run.PROBE_MISSION))
+
+    def test_a_game_that_will_not_come_to_the_front_gets_nothing_more_and_the_run_stops(self) -> None:
+        # 98.12: Hands.front() dropped bring_to_front's answer, so the next click went to whatever window was in front.
+        with resolved_temp_dir() as base:
+            log = base / "run.stdout.log"
+            game = FakeGame(log, front_fails=(1, 2))
+            result = live_run.drive(log, game.hands(), menu_timeout=0.2, campaign_timeout=0.2, combat_timeout=0.2)
+            saved = json.loads(Path(f"{log}.actions.json").read_text(encoding="utf-8"))
+        self.assertEqual((result.verdict, result.stage), ("LIVE_STUCK", "new-game"))  # New Game's click is the first to bring it to the front
+        self.assertIn("did not come to the front, also on a second try", result.detail)
+        self.assertEqual([p.name for p in game.captures], ["run.new-game-front.png"])
+        self.assertIn("run.new-game-front.png", result.detail)
+        self.assertEqual([a for a in game.actions if a[0] in ("click", "key", "scroll")], [])
+        notes = [a["action"] for a in result.actions]
+        self.assertEqual(notes, ["front failed: the game window is not in front; trying again", "front failed again; stopping"])
+        self.assertEqual(saved, result.actions)
+
+    def test_one_failed_front_is_tried_again_and_noted(self) -> None:
+        result, game = self._drive(front_fails=(1,))
+        self.assertEqual(result.verdict, "LIVE_DONE", result)
+        notes = [a["action"] for a in result.actions if a["action"].startswith("front")]
+        self.assertEqual(notes, ["front failed: the game window is not in front; trying again"])
+        self.assertEqual(game.captures, [])
+
+    def test_real_hands_report_whether_the_game_came_to_the_front(self) -> None:
+        from unittest import mock
+
+        with resolved_temp_dir() as rig, \
+                mock.patch("bridgeforge.boot_test._running_java_under", return_value=[{"pid": 4}]), \
+                mock.patch("bridgeforge.game_click.game_window", return_value=(7, 0, 0, 1920, 1440)), \
+                mock.patch("bridgeforge.game_click.bring_to_front", side_effect=[False, True]) as bring:
+            hands = live_run.real_hands(rig)
+            self.assertIs(hands.front(), False)
+            self.assertIs(hands.front(), True)
+        self.assertEqual([c.args for c in bring.call_args_list], [(7,), (7,)])
 
     def test_every_round_of_the_combat_plan_is_played(self) -> None:
         result, game = self._drive(rounds=3)

@@ -8,13 +8,14 @@ start the rig game, choose Continue (or Load Game and pick the newest save), and
 """
 from __future__ import annotations
 
+import dataclasses
 import json
 import re
 from pathlib import Path
 
 from bridgeforge.live.live_run import (GameRefused, Hands, LaunchNoProcess, LiveResult, MENU_LOADED, MenuMisread, _capture, _log_text,
                                        click_menu, running_game, wait_for)
-from bridgeforge.live.window_gone import GameWindowGone, detail as window_gone_detail
+from bridgeforge.live.window_gone import GameNotInFront, GameWindowGone, checked_front, detail as window_gone_detail
 
 RELOAD_EXPECTED = ("main_menu", "campaign_load", "reload_after_save")
 COMPARE_MARKER = "|compare|equal="
@@ -63,6 +64,7 @@ def drive_reload(log: Path, hands: Hands, menu_timeout: float = 240, compare_tim
     dialog and no Fatal (88.19). A vanished window ends it LIVE_STUCK at the stage in progress (93.50)."""
     result = LiveResult("LIVE_STUCK", log=str(log))
     at = ["main-menu"]
+    hands = dataclasses.replace(hands, front=checked_front(hands.front))  # a game that will not come to the front stops it (98.12)
 
     def stuck(detail: str) -> LiveResult:
         result.stage, result.detail = at[0], detail
@@ -106,8 +108,8 @@ def drive_reload(log: Path, hands: Hands, menu_timeout: float = 240, compare_tim
         return result
     except GameWindowGone:
         return stuck(window_gone_detail(_log_text(log)))
-    except MenuMisread as exc:  # nothing was clicked (98.11); the menu is still up for the screenshot
-        shot = _capture(hands, log, f"{at[0]}-menu")
+    except (MenuMisread, GameNotInFront) as exc:  # nothing was clicked (98.11, 98.12); the screenshot shows the menu or what covers it
+        shot = _capture(hands, log, f"{at[0]}-{'menu' if isinstance(exc, MenuMisread) else 'front'}")
         return stuck(f"{exc}" + (f"; screenshot {shot}" if shot else ""))
 
 
