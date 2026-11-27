@@ -202,6 +202,27 @@ class DriveTests(unittest.TestCase):
         self.assertEqual((result.verdict, result.stage), ("LIVE_STUCK", "after-compare"))
         self.assertIn("exited", result.detail)
 
+    def test_continue_on_a_misread_or_save_less_menu_clicks_nothing(self) -> None:
+        # 98.11: a steady reading that is not nine buttons (eight: no save, so no Continue; eleven: misread) is not clicked.
+        from unittest import mock
+
+        for count, words in ((8, "has 8 buttons and no 'Continue'"), (11, "read as 11 buttons, not 8 or 9")):
+            with self.subTest(count=count), resolved_temp_dir() as base:
+                log = base / "run.stdout.log"
+                log.write_text("1 [main] INFO  Reading save data from [x]\n", encoding="utf-8")
+                clicks: list[tuple] = []
+                shots: list[Path] = []
+                hands = live_run.Hands(click=lambda fx, fy: clicks.append((fx, fy)), key=lambda v: None,
+                                       scroll=lambda *a: None, sleep=lambda s: None, capture=lambda p: shots.append(p) or True,
+                                       geometry=lambda: (0, 0, 0, 1920, 1440))
+                menu = [(0.72, 0.30 + 0.05 * i) for i in range(count)]
+                with mock.patch.object(live_run, "_menu_buttons", lambda _hands: menu):
+                    result = save_reload_run.drive_reload(log, hands, menu_timeout=0.2)
+            self.assertEqual((result.verdict, result.stage), ("LIVE_STUCK", "continue"))
+            self.assertIn(words, result.detail)
+            self.assertEqual(clicks, [])
+            self.assertEqual([p.name for p in shots], ["run.continue-menu.png"])
+
     def test_a_vanished_window_at_continue_is_stuck_there(self) -> None:
         with resolved_temp_dir() as base:
             log = base / "run.stdout.log"

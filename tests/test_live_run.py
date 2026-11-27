@@ -22,8 +22,9 @@ class FakeGame:
                  late_redefinition: bool = False, dies_at_deploy: int | None = None, dies_in_battle: bool = False,
                  saves_after_end: bool = False, menu_after_exits: int | None = None, lost_spaces: int = 0,
                  round_seconds: float = 0.0, window_gone_on: tuple[float, float] | None = None,
-                 window_gone_at_deploy: int | None = None) -> None:
+                 window_gone_at_deploy: int | None = None, extra_bands: int = 0) -> None:
         self.log, self.rounds, self.stall_at = log, rounds, stall_at
+        self.extra_bands = extra_bands  # bands the menu reader sees below the nine buttons (98.11)
         # window_gone_on: a click on this point finds no window (SR7-LIVE-0985a-20261117's New Game click, 93.50);
         # window_gone_at_deploy: the Nth DEPLOY click does
         self.window_gone_on, self.window_gone_at_deploy = window_gone_on, window_gone_at_deploy
@@ -141,8 +142,10 @@ class FakeGame:
         return True
 
     def menu_buttons(self, _hands) -> list[tuple[float, float]]:
-        """The main menu's nine buttons while it shows, none on any other screen (stands in for live_run._menu_buttons)."""
-        return [(0.72, 0.30 + 0.05 * i) for i in range(9)] if self.menu else []
+        """The main menu's nine buttons while it shows, none on any other screen (stands in for live_run._menu_buttons);
+        `extra_bands` more below them, as RC9NC-LIVE3's reading had (98.11)."""
+        count = 9 + self.extra_bands
+        return [(0.72, 0.30 + 0.05 * i) for i in range(count)] if self.menu else []
 
     def hands(self) -> live_run.Hands:
         geometry = (lambda: (0, 0, 0, 1920, 1440)) if self.menu_after_exits is not None else None
@@ -324,12 +327,12 @@ class DriveTests(unittest.TestCase):
                 config.write_text(text, encoding="utf-8")
                 self.assertIs(live_run.probe_saves_after_checks(rig), expected, text)
 
-    def _drive_screen(self, menu_after_exits: int):
+    def _drive_screen(self, menu_after_exits: int, extra_bands: int = 0):
         from unittest import mock
 
         with resolved_temp_dir() as base:
             log = base / "run.stdout.log"
-            game = FakeGame(log, menu_after_exits=menu_after_exits)
+            game = FakeGame(log, menu_after_exits=menu_after_exits, extra_bands=extra_bands)
             with mock.patch.object(live_run, "_menu_buttons", game.menu_buttons):
                 result = live_run.drive(log, game.hands(), menu_timeout=0.2, campaign_timeout=0.2, combat_timeout=0.2,
                                         generic_fallback=False)
@@ -353,6 +356,24 @@ class DriveTests(unittest.TestCase):
         escapes = [a for a in result.actions if a["action"] == "key 0x1B"]
         self.assertEqual(len(escapes), 2)
         self.assertTrue(all(isinstance(a["log_bytes"], int) and a["log_bytes"] > 0 for a in escapes))
+
+    def test_a_menu_that_reads_with_extra_bands_is_not_clicked_and_the_run_stops(self) -> None:
+        # 98.11, RC9NC-LIVE3-0985a-20261126: two extra bands shifted "Missions" onto "Load Game"; the row, Play and Deploy clicks
+        # then loaded a save. Now nothing is clicked on a menu that is not eight or nine buttons, and the run stops with a
+        # screenshot and its actions.
+        result, game, saved = self._drive_screen(menu_after_exits=1, extra_bands=2)
+        self.assertEqual((result.verdict, result.stage), ("LIVE_STUCK", "leave-campaign"))
+        self.assertIn("11 buttons", result.detail)
+        self.assertIn("leave-campaign-menu.png", result.detail)
+        self.assertEqual([p.name for p in game.captures], ["run.leave-campaign-menu.png"])
+        menu = game.menu_buttons(None)
+        self.assertTrue(menu)  # the menu is still up: nothing was clicked on it
+        clicks = [a[1:] for a in game.actions if a[0] == "click"]
+        self.assertFalse(set(clicks) & set(menu))
+        self.assertNotIn(live_run.PLAY_MISSION, clicks)
+        self.assertNotIn(live_run.DEPLOY, clicks)
+        self.assertEqual(saved, result.actions)
+        self.assertEqual(game.exit_oks, 1)  # a menu that is up but misread is not taken for a missing one: no second Exit
 
     def test_a_menu_on_the_first_exit_needs_no_retry(self) -> None:
         result, game, _ = self._drive_screen(menu_after_exits=1)

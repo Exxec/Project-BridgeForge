@@ -220,6 +220,22 @@ Found during 98.4's runs (2026-11-26), queued the same way:
   - *Fix:* accept only the expected count (eight, or nine with Continue); confirm the mission list is up (its layout read
     from the screen) before the row click; otherwise take a screenshot and stop.
   - *Test:* `FakeGame` with extra bands.
+  **Progress 2026-11-26: the strict reading is built; confirming the mission list is still open.** Branch
+  `fix/98-11-menu-count`.
+  - `screen_read.main_menu_target` names a button only from a reading of exactly eight buttons, or nine with Continue.
+    `main_menu_present` (eight bands or more) says whether a menu is up at all.
+  - `live_run.menu_point` raises `MenuMisread` on a steady reading it cannot name a button from, rather than clicking a guess.
+    The message tells a misread (not 8 or 9) from a well-read menu without the button (Continue with no save).
+  - `drive`, `save_reload_run.drive_reload` and `duel_run.run_duel` end LIVE_STUCK, or with a problem, at the stage in
+    progress, with a screenshot (`<TESTID>.<stage>-menu.png`) and the actions file. Nothing is clicked on that menu.
+  - `_main_menu_shown` counts a misread menu as shown, so leaving the campaign is not repeated onto it.
+  - *Tests:*
+    - `tests/test_screen_read.py` `test_more_bands_than_the_menu_has_give_nothing`;
+    - `tests/test_live_run.py` `test_a_menu_that_reads_with_extra_bands_is_not_clicked_and_the_run_stops`;
+    - `tests/test_save_fingerprint.py` `test_continue_on_a_misread_or_save_less_menu_clicks_nothing`;
+    - `tests/test_duel_run.py` `test_a_misread_main_menu_plays_no_duel`.
+  - *Still open:* confirming the mission list is up before the row click. `screen_read.list_rows` reads the list's
+    thumbnails; whether the Load Game screen reads differently needs a screenshot of each, which the next misread will give.
 - 98.12 (S) **`Hands.front()` ignores whether the game came to the front.** `game_click.bring_to_front` returns it, and
   the result is dropped, so a click after a failed foreground lands in whatever window is in front. Record it in the
   actions log, and retry once or stop.

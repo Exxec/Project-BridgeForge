@@ -201,10 +201,16 @@ def _menu_buttons(hands: Hands) -> list[tuple[float, float]] | None:
         return None
 
 
+class MenuMisread(RuntimeError):
+    """The main menu is on screen and stopped moving, but reads as more or fewer buttons than it has: nothing was clicked (98.11).
+    drive ends the run LIVE_STUCK at the stage in progress, with a screenshot."""
+
+
 def menu_point(hands: Hands, name: str, fallback: tuple[float, float]) -> tuple[float, float]:
     """Where the main menu's `name` button is, read from the screen once the menu has stopped moving (it slides in after a return
     from the campaign, and a reading taken mid-slide sent a click to the wrong row, GRP-CMU3-20261011); the measured fraction when
-    the screen cannot be read."""
+    the screen cannot be read. A steady reading that cannot name the button (not eight or nine buttons) raises MenuMisread rather
+    than clicking a guess: in RC9NC-LIVE3-0985a-20261126 such a click opened Load Game and the next clicks loaded a save (98.11)."""
     from bridgeforge.screen_read import main_menu_target
 
     previous = None
@@ -212,8 +218,13 @@ def menu_point(hands: Hands, name: str, fallback: tuple[float, float]) -> tuple[
         buttons = _menu_buttons(hands)
         if buttons is None:
             return fallback
-        if buttons and buttons == previous and main_menu_target(buttons, name):
-            return main_menu_target(buttons, name)
+        if buttons and buttons == previous:
+            target = main_menu_target(buttons, name)
+            if target is None:
+                if len(buttons) in (8, 9):  # a well-read menu without this button: Continue needs a save (RC8-29)
+                    raise MenuMisread(f"the main menu has {len(buttons)} buttons and no '{name}', so nothing was clicked")
+                raise MenuMisread(f"the main menu read as {len(buttons)} buttons, not 8 or 9, so '{name}' was not clicked")
+            return target
         previous = buttons
         hands.sleep(1.0)
     return (main_menu_target(previous, name) if previous else None) or fallback
@@ -323,15 +334,15 @@ MENU_CHECK_READS = 6  # screen reads, a second apart, for the main menu to appea
 
 
 def _main_menu_shown(hands: Hands) -> bool | None:
-    """Whether the main menu is on screen (its Missions button found), waiting up to MENU_CHECK_READS reads; None when the screen
-    cannot be read."""
-    from bridgeforge.screen_read import main_menu_target
+    """Whether the main menu is on screen (eight bands or more: a menu misread as too many is still up, and its click is refused
+    later by menu_point, 98.11), waiting up to MENU_CHECK_READS reads; None when the screen cannot be read."""
+    from bridgeforge.screen_read import main_menu_present
 
     for _ in range(MENU_CHECK_READS):
         buttons = _menu_buttons(hands)
         if buttons is None:
             return None
-        if main_menu_target(buttons, "Missions"):
+        if main_menu_present(buttons):
             return True
         hands.sleep(1.0)
     return False
@@ -560,6 +571,11 @@ def drive(log: Path, hands: Hands, menu_timeout: float = 240, campaign_timeout: 
                       new_game_grace, vanilla_rows, save_reload, probe_saves)
     except GameWindowGone:
         result.stage, result.detail = at[0], window_gone_detail(_log_text(log))
+        _write_actions(log, result.actions)
+        return result
+    except MenuMisread as exc:  # nothing was clicked; the menu is still up, so the screenshot shows what was misread (98.11)
+        shot = _capture(hands, log, f"{at[0]}-menu")
+        result.stage, result.detail = at[0], f"{exc}" + (f"; screenshot {shot}" if shot else "")
         _write_actions(log, result.actions)
         return result
 
