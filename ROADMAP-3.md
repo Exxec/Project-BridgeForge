@@ -528,6 +528,26 @@ order then continue live testing followed by more roadmap work based on your rec
   `rig-doctor` reads the agent jar's tables and the rig core's `CombatEngine` offline. It says which table the agent will
   load, and fails when that table does not describe the core: one or more of the classes the table maps must be missing
   from the core. Each run's manifest also records the agent jar's SHA-256.
+  **Done 2026-11-26.**
+  - *The check:* `bridgeforge/rig/prepatcher_namespace.py`; `rig-doctor` runs it as `prepatcher_namespace`. It replays the
+    agent's detection offline:
+    - the tables are those the detector's class names, out of the `.tsv` files the jar ships;
+    - a table matches when it maps canonical `combat/Object/String` to `CombatEngine.getResults()`'s type;
+    - a tie is broken by `getCombatMap()` only when the detector carries that tie-break (the rig jar of 98.14 does).
+  - *Its verdicts:*
+    - PASS: the chosen table's classes all exist in the core's jars, or the core is the canonical build;
+    - FAIL: the chosen table names classes the core lacks, so its patches would call members that do not exist;
+    - WARN: no table matches, or several do, so the agent fails open and the game runs unpatched;
+    - SKIPPED: the rig has no agent.
+  - *The manifest:* `run_manifest.runtime_hashes` adds `prepatcher_agent_sha256`, so every run records which agent ran.
+  - *Acceptance against the real jars* (White_Legion):
+    - stock 0.18.9 on RC9 picks `linux-0.98.5a-RC8`, with 1304 of its 2962 classes missing: FAIL, the shape of
+      RC9NC-LIVE4;
+    - the rig jar on RC9 breaks the tie to `windows-0.98.5a-RC9`, with none missing: PASS;
+    - both jars pick their own table on RC8, and match nothing on RC3 (the agent fails open there, as seen with 0.18.8).
+  - *Tests:* `tests/test_prepatcher_namespace.py` (9): the stock-on-RC9 FAIL, the tie broken, a tie left unbroken, no
+    match, the canonical build, a shipped table the detector does not name, no agent, `rig-doctor` failing the rig, and
+    the manifest's hash.
 - 98.18 (S) **Every live result carries a Prepatcher summary:** patches applied, warnings, errors, rollbacks and the agent
   version, read from `mods/StarsectorPrepatcher/logs/prepatcher.log` for the run's time window. The proof run above needed
   that check by hand.

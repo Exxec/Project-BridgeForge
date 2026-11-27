@@ -262,9 +262,12 @@ def runtime_hashes(rig: Path, launcher: Path | None) -> dict:
     enabled = rig / "mods" / "enabled_mods.json"
     config = rig / CONFIG_RELATIVE
     files, java = _launcher_files(rig, launcher)
+    # Which Prepatcher agent ran: the stock 0.18.9 jar crashed RC9 at start-up, the rig jar of 98.14 does not (98.17).
+    agent = rig / "mods" / "StarsectorPrepatcher" / "agent" / "StarsectorPrepatcherAgent.jar"
     return {"enabled_mods_sha256": _sha256_file(enabled) if enabled.is_file() else None,
             "probe_config_sha256": _sha256_file(config) if config.is_file() else None,
-            "launcher_files": files, "java_executable": java, "java_version": _java_version(rig, launcher, java)}
+            "launcher_files": files, "java_executable": java, "java_version": _java_version(rig, launcher, java),
+            "prepatcher_agent_sha256": _sha256_file(agent) if agent.is_file() else None}
 
 
 @_rig_hash_cache
