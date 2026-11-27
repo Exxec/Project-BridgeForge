@@ -86,6 +86,7 @@ class PowerShellPathTests(unittest.TestCase):
 
         with resolved_temp_dir() as root, mock.patch.object(subprocess, "run", side_effect=run) as ran:
             self.assertFalse(window_watch.save_screenshot(root / "x.png"))  # no window: nothing runs, nothing is captured
+            self.assertFalse(window_watch.save_screenshot(root / "z.png", 0))  # nor for a null window handle
             ran.assert_not_called()
             window_watch.save_screenshot(root / "y.png", 4242)
         self.assertIn("GetWindowRect", recorded["script"])
