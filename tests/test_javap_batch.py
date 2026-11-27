@@ -85,7 +85,7 @@ class OneLaunchPerJarTests(unittest.TestCase):
             _jar(jar, b"com/fs/starfarer/api/SettingsAPI")
             calls, patch = _recorded(_BATCHED)
             with patch:
-                found = settings_keys.jar_reads(jar, root / "javap.exe")
+                found = settings_keys.jar_settings(jar, root / "javap.exe").reads
         self.assertEqual(len(calls), 1)
         self.assertEqual(calls[0][calls[0].index("-cp") + 2:], ["p.Outer", "p.Outer$Inner", "q.Gen"])
         self.assertEqual(found, [("p/Outer.class", "getFloat", "someKey")])

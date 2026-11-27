@@ -274,13 +274,16 @@ def _scan_settings_keys_missing(root: Path, result: ScanResult, vanilla_core: Pa
     opening a market reading blackMarketMinSupplies, 2026-10-04). Needs the vanilla core to know RC8's keys."""
     if vanilla_core is None:
         return
-    from ..settings_keys import guarded_keys, jar_reads, settings_keys, source_reads
+    from ..settings_keys import (GETTER_KIND, guarded_keys, jar_settings, listed_jars, loose_script_class, settings_keys, source_reads,
+                                 source_writes)
 
     known = settings_keys(vanilla_core / "data" / "config" / "settings.json", root / "data" / "config" / "settings.json",
                           *[Path(d) / "data" / "config" / "settings.json" for d in result.migration_context.get("dependency_roots") or []])
     if not known:
         return
     reads: list[tuple[str, str, str, str]] = []
+    # (key, kind) the mod sets itself (setFloat/setBoolean) in code the game runs: its listed jars, its loose scripts (98.8)
+    written: set[tuple[str, str]] = set()
     guarded_by_path: dict[str, set[str]] = {}
     for source in sorted(root.rglob("*.java")):
         if "disabled_files" in source.relative_to(root).parts:
@@ -292,6 +295,10 @@ def _scan_settings_keys_missing(root: Path, result: ScanResult, vanilla_core: Pa
         if "getSettings" in text:
             reads += [(_relative(root, source), f"line:{line}", getter, key) for line, getter, key in source_reads(text)]
             guarded_by_path[_relative(root, source)] = guarded_keys(text)
+            # A bundled src/ tree never runs, nor a loose copy of a class a jar defines: their writes define nothing.
+            runs_as = loose_script_class(_relative(root, source), text)
+            if runs_as is not None and runs_as not in result.compiled_class_names:
+                written |= source_writes(text)
     jars = [p for p in root.rglob("*.jar") if "disabled_files" not in p.relative_to(root).parts]
     if jars:
         if not _JDK_FOR_PROCGEN:
@@ -299,15 +306,19 @@ def _scan_settings_keys_missing(root: Path, result: ScanResult, vanilla_core: Pa
 
             _JDK_FOR_PROCGEN.append(find_jdk())
         if _JDK_FOR_PROCGEN[0] is not None:
+            loaded = listed_jars(root)
             for jar in jars:
-                for cls, getter, key in jar_reads(jar, _JDK_FOR_PROCGEN[0].javap):
+                found = jar_settings(jar, _JDK_FOR_PROCGEN[0].javap)
+                if _relative(root, jar) in loaded:  # a jar mod_info.json does not list never runs: its writes define nothing
+                    written |= found.writes
+                for cls, getter, key in found.reads:
                     # The class's bundled source shows this read behind an isModEnabled guard (Kadur Remnant).
                     stem = cls.split("$", 1)[0].removesuffix(".class") + ".java"
                     if any(path.endswith(stem) and key in keys for path, keys in guarded_by_path.items()):
                         continue
                     reads.append((f"{_relative(root, jar)}!{cls}", "jar", getter, key))
     for file, where, getter, key in reads:
-        if key in known:
+        if key in known or (key, GETTER_KIND.get(getter)) in written:
             continue
         result.add(
             id="settings-key-missing",
@@ -316,7 +327,8 @@ def _scan_settings_keys_missing(root: Path, result: ScanResult, vanilla_core: Pa
             classification="REVIEW",
             confidence="HIGH",
             explanation=(f"Global.getSettings().{getter}(\"{key}\") reads a key that neither RC8's settings.json, this "
-                         "mod's nor a declared dependency's defines: RC8 throws JSONException when the line runs "
+                         "mod's nor a declared dependency's defines, and that the mod never sets with setFloat/setBoolean: "
+                         "RC8 throws JSONException (wrapped in a RuntimeException) when the line runs "
                          "(Exigency 0.8's black market read blackMarketMinSupplies, which vanilla dropped in 0.9a, "
                          "2026-10-04). Define the key in the mod's settings.json, or read it with "
                          "getSettingsJSON().optDouble(key, default) using the old vanilla value."),

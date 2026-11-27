@@ -52,7 +52,7 @@
       "scan/scan_missions.py::_scan_mission_required_files",
       "scan/scan_port.py::_classes",
       "scan/scanner.py::_scan_jars",
-      "settings_keys.py::jar_reads",
+      "settings_keys.py::jar_settings",
       "substitutes.py::provider_for",
       "system_reachability.py::jar_classes",
       "translation.py::export_translation"
