@@ -1,3 +1,61 @@
+**99. Standing rules reassessed against live evidence (owner 2026-11-27).** A standing fixer dropped weapons that did not fit
+their slot, on the belief that the game could not use them; a live test showed it keeps and fires them. Owner: "Ok this is
+significant and we may have to check other rules and reassess them. Ontop of reversing this rule for already revived mods."
+Rule from now on: a fixer runs without asking only when an RC8-NN row (a live run, a log or javap) shows the game fails without
+its change.
+- 99.1 **Done 2026-11-27.** **The variant slot rules.**
+  - Proven on RC9:
+    - RC8-56: a weapon larger than its slot is kept and fires;
+    - RC8-57: a weapon of the wrong type is kept and fires;
+    - RC8-58: wings beyond the bays are kept in the variant, and only as many launch as there are bays;
+    - RC8-59, the campaign side:
+      - the game's own fit check says these weapons do not fit;
+      - NPC fleets are refitted by the game's inflater to fit slots, OP and bays, whatever the file holds;
+      - a player's ship keeps the author's loadout across a save and reload.
+  - The owner's rulings: "Keep as authored" for size mismatches, then the same for type mismatches and for extra wings.
+    "Re-approve it" for `variant-weapon-slot-missing`, a Fatal when the ship is drawn (RC8-17).
+  - Test1's three approvals of 2026-09-29 were withdrawn by script (98.23 h), and slot-missing was re-approved with ruling
+    `Rc189b0071e40`. `docs/BUG_CLASSES.md` LOA-VAR-01 is corrected. The revive skill carries the rules.
+- 99.2 **The withdrawn rule, reversed in archived mods.** Owner: "Start now", then "Retarget all 20 to RC9".
+  - Inventory (read-only, Test1's `Done/` against the RC9 core). BridgeForge made about 160 of the archives; the other 193
+    folders in `Done/` are mods as downloaded. 22 archives lost entries to the withdrawn rule: 40 weapons (5 for size, 35 for
+    type) and 47 wings. The wings are counted as a multiset, so a repeated wing cut from a list counts.
+  - Every affected variant file differs from the author's only by those removals, so it comes back whole.
+  - 3 removals of weapons in slots the hull lacks stay (RC8-17).
+  - The 17 archives validated on RC8 read CLEAN for RC8 -> RC9 (`target-impact`: 0 breaks, 0 relinks, 0 review); the 3 on
+    RC7 read CLEAN for RC7 -> RC9.
+  - Order: a pilot of three through to a report, then the rest. Then groups are live-tested and re-archived with `+bf.N`.
+    Anything not live-tested stays staged.
+  - The per-archive list names mods, so it stays on the machines (`bridgeforge-state/reassess-20261127/`).
+- 99.3 **Every other standing rule, by evidence** (an audit of the code, docs and tests, spot-checked).
+  - *Proven needed:* `faction-known-lists-missing`, `procgen-planet-row-missing`, `procgen-mod-body-leak` (if the author
+    meant it), `jar-linkage-unresolved`, `rules-csv-curly-quote-unreadable`, `variant-weapon-slot-missing`.
+  - *Proven unneeded (kept as authored):* slot mismatches and extra wings (99.1). Over-budget variants are proven to load
+    (RC8-06: RC8 ships 12 of its own over budget).
+  - *Assumed, never shown:*
+    - `mod-info-game-version-inexact`;
+    - `data-file-not-utf8`;
+    - `csv-fullwidth-number`;
+    - `csv-missing-design-type-column`;
+    - `csv-row-extra-columns`: its padding case; its space-before-quote case is unclear;
+    - `shippable-work-file`: hygiene, and the game never loads those files.
+  - *Evidence does not settle it:*
+    - `undeclared-library-dependency`;
+    - `target-interface-method-missing`;
+    - `jar-interface-method-missing`;
+    - `jar-call-signature-changed`;
+    - `nexerelin-corvus-mode-import`;
+    - the hard-coded campaign lookup guards.
+  - 451 more archived variants changed by other rules (OP trims, merges with the reference build), mostly in four total
+    conversions: to reassess after 99.2.
+- 99.4 **Experiments queued** (rig-only scratch mods, never recorded; the harness is the duel runner's, 98.23 j):
+  - **Done 2026-11-27:** the campaign: NPC fleet autofit (`DefaultFleetInflater`), save/reload, and the game's own fit
+    verdict (`WeaponSlotAPI.weaponFits`) for the 99.1 cases and an over-budget variant (RC8-59, SLOTCAMP-SR-0985a-20261127).
+    Not tested: the refit screen's handling when a player edits such a ship;
+  - start-up tests, one scratch mod per case: gameVersion, CP-1252 bytes, full-width digits, the design-type column, extra
+    CSV cells, a space before a quote;
+  - then the unsettled code fixers.
+
 **98. The 0.98.5a-RC9 hotfix (owner 2026-11-25).** The owner installed RC9 over RC7 on White_Legion and asked for it on
 Test1, then for a check of what the roadmap and the workflow need. Owner rulings the same day: "Yes, bump to RC9", "Port all
 four", "Finish on RC7, re-bank later" (the gene bank), and "Live testing is ok for now if need be while working".

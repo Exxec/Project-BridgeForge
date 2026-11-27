@@ -1,0 +1,1 @@
+- Standing rules reassessed against live evidence (ROADMAP-3 item 99): RC9 keeps and fires weapons that do not fit their slot, keeps extra wings, and the campaign refits NPC fleets itself (RC8-57 to RC8-59); slot mismatches and extra wings are now kept as authored, and LOA-VAR-01 is corrected.

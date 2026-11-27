@@ -114,11 +114,16 @@ Never edit Done/ in place.
 - Keep CSV rows that have no file and that nothing uses; ignore their warnings ("keep them and ignore warning if it doesn't
   affect anything").
 - Over-budget variants that the reference build shares: accept as authored (ruling option 2).
-- A weapon larger than its slot (`variant-weapon-slot-mismatch`): accept as authored, never fix ("Keep as authored", 2026-11-27).
-  RC9 keeps such a weapon in the loaded variant, the built ship and combat, and it fires (RC8-56). The owner withdrew the
-  2026-09-29 rule that dropped these weapons, and its three standing fixer approvals. Missing slots
-  (`variant-weapon-slot-missing`) and too many wings (`variant-wings-exceed-bays`) stay the owner's decision for each mod.
-  Record each one with `escalation accept "<ws>" variant-weapon-slot-mismatch --reason`, quoting the rule.
+- A weapon that does not fit its slot, by size or by type (`variant-weapon-slot-mismatch`): accept as authored, never fix
+  ("Keep as authored", 2026-11-27, extended to type mismatches the same day). RC9 keeps such a weapon in the loaded variant,
+  the built ship and combat, and it fires (RC8-56 sizes, RC8-57 types).
+- More wings than the hull's bays (`variant-wings-exceed-bays`): accept as authored ("Keep as authored", 2026-11-27). RC9
+  keeps every wing in the variant and launches only as many as there are bays (RC8-58).
+- The owner withdrew the 2026-09-29 rule that dropped these weapons and wings. `variant-weapon-slot-missing` (a weapon in a
+  slot the hull lacks) was re-approved as a standing fixer the same day ("Re-approve it"): that is a Fatal when the ship is
+  drawn (RC8-17).
+- Record each acceptance per workspace with `escalation accept "<ws>" <finding> --reason`, quoting the rule. Do not use the
+  queue-wide `escalation rule --accept`: it writes into every escalated mod's baseline.
 - Mods that are active upstream are skipped (AoTD, 2026-11-17). Abandoned mods are ported, however hard the port.
 - A probe `class-sweep` FAIL whose missing class belongs to another mod is setup-dependent and accepted ("UAF/nex is accepted
   since it initially declares it as required. This can be set rule for everything else.", 2026-11-27) when:
