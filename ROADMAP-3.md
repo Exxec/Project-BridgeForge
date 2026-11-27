@@ -3967,6 +3967,14 @@ fixes of 93.28. 93.26-93.35 are that day's findings.
   `install 4` named Tania instead of KoC (2026-11-17). Keep the config, or its hash, with the run manifest and read that.
   **Closed 2026-11-19 (roadmap review): superseded by 95.4.**
   **Reopened 2026-11-23 (owner, roadmap reassessment): LIVE-001 is not fixed.** probe-group report still reads the rig's current probe config, not the run's own: `cmd_probe_group._probe_report` loads `<rig>/saves/common/<CONFIG_FILE>` (checked 2026-11-23). `live` and `record` bind the run manifest; `report` does not.
+  **Done 2026-11-27.** `run_manifest.prepare_run` keeps a byte copy of the probe config each run starts with, beside its
+  manifest (`logs/<run>.probe-config.data`; the manifest's `probe_config_sha256` is its hash), and `probe-group report`
+  reads it through `run_manifest.config_for_run`: the run id is the log's name, so a reload's log finds the reload's
+  copy. A run from before this (no copy) reads the rig's current config only while its hash is still the one recorded at
+  launch, and the report refuses otherwise, naming the fix (re-install that group's config, or run it again). A log with no
+  manifest reads the current config and says so. The report prints which config it read. Seen again 2026-11-26: the
+  `live-run` skill's post-run report of RC9NC-LIVE6 (Neutrino) read Station Augments' group and printed "PASS
+  niko_stationAugments". Tests: `tests/test_run_config.py`.
 - 93.30 **Scenario testbed (owner design 2026-11-17).** Hidden mission factions whose fleets the code builds by hand (Tania's Blood
   Trail and Frost Fire: `createEmptyFleet` then `addFleetMember("tania_blood_stork_main_Death_Special")`, spawned by
   `tania_mission_unlocker_per_rep` at WELCOMING/FRIENDLY standing) cannot be exercised by `faction-fleet-gen`. Owner: "start a new

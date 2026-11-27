@@ -1,0 +1,1 @@
+- `probe-group report` reads the probe config its run started with (each run keeps a copy beside its manifest), not the rig's current one, which the next `install` replaced; it prints which config it read, and refuses when an older run's config is no longer in the rig.
