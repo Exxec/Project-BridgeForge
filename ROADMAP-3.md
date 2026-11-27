@@ -3988,7 +3988,7 @@ fixes of 93.28. 93.26-93.35 are that day's findings.
     list; an untrusted manifest fell back silently; `--json` did not say which config; the copy could be missing after a
     failure or a repeat prepare. All fixed. Not covered: the log is matched to its run by file name, and the mods' own
     folders are read as they are now.
-  - *Tests:* `tests/test_run_config.py`.
+  - *Tests:* `tests/test_run_config.py`. Mutation check: 13 mutants through `mutate_batch.py`, all caught.
 - 93.30 **Scenario testbed (owner design 2026-11-17).** Hidden mission factions whose fleets the code builds by hand (Tania's Blood
   Trail and Frost Fire: `createEmptyFleet` then `addFleetMember("tania_blood_stork_main_Death_Special")`, spawned by
   `tania_mission_unlocker_per_rep` at WELCOMING/FRIENDLY standing) cannot be exercised by `faction-fleet-gen`. Owner: "start a new
