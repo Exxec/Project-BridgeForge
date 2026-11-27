@@ -51,9 +51,10 @@ def child_text(handle: int) -> str:
 
 
 def save_screenshot(path: Path, handle: int | None = None) -> bool:
-    """One of the game's windows as a PNG: that window's rectangle only, DPI-aware, never the whole screen. Without a window
-    nothing is captured. Owner 2026-11-27: live tests run on White_Legion, the owner's own desktop, which is never captured
-    (ROADMAP-3 93.24); the earlier capture took the whole virtual screen.
+    """One of the game's windows as a PNG, drawn by the window itself (`PrintWindow` with `PW_RENDERFULLCONTENT`), so whatever
+    covers it on screen is not in the picture; never the whole screen. Without a window nothing is captured. Owner 2026-11-27:
+    live tests run on White_Legion, the owner's own desktop, which is never captured (ROADMAP-3 93.24); the earlier capture took
+    the whole virtual screen, and copying the window's rectangle from the screen would still show a window in front of it.
 
     The path and the window go to PowerShell in environment variables, never inside the script: a single-quoted string also ends
     at U+2018-U+201B, and the mass test's paths carried a mod's id (ROADMAP-3 93.47)."""
@@ -65,12 +66,14 @@ def save_screenshot(path: Path, handle: int | None = None) -> bool:
     script = ("Add-Type -AssemblyName System.Drawing; Add-Type 'using System; using System.Runtime.InteropServices; public class BfWindow { "
               "[DllImport(\"user32.dll\")] public static extern bool SetProcessDPIAware(); "
               "[StructLayout(LayoutKind.Sequential)] public struct Rect { public int Left; public int Top; public int Right; public int Bottom; } "
-              "[DllImport(\"user32.dll\")] public static extern bool GetWindowRect(IntPtr window, out Rect rect); }'; "
-              "[BfWindow]::SetProcessDPIAware() | Out-Null; $r=New-Object BfWindow+Rect; "
-              "if (-not [BfWindow]::GetWindowRect([IntPtr][long]$env:BF_WINDOW, [ref]$r)) { exit 3 }; "
+              "[DllImport(\"user32.dll\")] public static extern bool GetWindowRect(IntPtr window, out Rect rect); "
+              "[DllImport(\"user32.dll\")] public static extern bool PrintWindow(IntPtr window, IntPtr dc, uint flags); }'; "
+              "[BfWindow]::SetProcessDPIAware() | Out-Null; $r=New-Object BfWindow+Rect; $win=[IntPtr][long]$env:BF_WINDOW; "
+              "if (-not [BfWindow]::GetWindowRect($win, [ref]$r)) { exit 3 }; "
               "$w=$r.Right-$r.Left; $h=$r.Bottom-$r.Top; if ($w -le 0 -or $h -le 0) { exit 3 }; "
-              "$b=New-Object System.Drawing.Bitmap $w,$h; $g=[System.Drawing.Graphics]::FromImage($b); "
-              "$g.CopyFromScreen($r.Left,$r.Top,0,0,$b.Size); $b.Save($env:BF_IMAGE_PATH, [System.Drawing.Imaging.ImageFormat]::Png)")
+              "$b=New-Object System.Drawing.Bitmap $w,$h; $g=[System.Drawing.Graphics]::FromImage($b); $dc=$g.GetHdc(); "
+              "$ok=[BfWindow]::PrintWindow($win, $dc, 2); $g.ReleaseHdc($dc); if (-not $ok) { exit 4 }; "
+              "$b.Save($env:BF_IMAGE_PATH, [System.Drawing.Imaging.ImageFormat]::Png)")
     try:
         subprocess.run(["powershell", "-NoProfile", "-Command", script], capture_output=True, timeout=60, check=True,
                        env={**os.environ, "BF_IMAGE_PATH": str(path), "BF_WINDOW": str(int(handle))})
@@ -93,7 +96,6 @@ class WindowWatcher:
         self._clock, self._now, self._sleep = clock, now, sleep
         self._marker = MAIN_MENU_MARKER
         self._seen: set[tuple[int, str]] = set()
-        self._game_window: int | None = None
         self._shots = 0
         self._menu_reached = False
         self._suspect_shot = False
@@ -122,8 +124,6 @@ class WindowWatcher:
             if (handle, title) in self._seen:
                 continue
             self._seen.add((handle, title))
-            if self._game_window is None:
-                self._game_window = handle  # the first window of the game's processes: the one a no-menu shot shows
             self.note(f"window: '{title}'")
             text = self._child_text(handle)
             if text:
@@ -134,8 +134,18 @@ class WindowWatcher:
                 self._screenshot(self.logs / f"{self.test_id}-window{self._shots}.png", handle)  # that window only
         if pids and not self._menu_reached and not self._suspect_shot and self._clock() - self._started > NO_MENU_SECONDS:
             self._suspect_shot = True
-            if self._game_window is not None:  # with no game window there is nothing to show, and the screen is never captured
-                self._screenshot(self.logs / f"{self.test_id}-no-main-menu.png", self._game_window)
+            window = self._game_window_now(pids)
+            if window is not None:  # with no game window there is nothing to show, and the screen is never captured
+                if not self._screenshot(self.logs / f"{self.test_id}-no-main-menu.png", window):
+                    self.note("shot: the no-main-menu screenshot of the game's window failed")
+
+    def _game_window_now(self, pids: set[int]) -> int | None:
+        """The game's window as it is now, not the first one seen: the launcher's window is destroyed before the game's own
+        window opens (RC9 `GLLauncher$2` calls `Display.destroy()` before Play's `actionPerformed`; review of 93.24). A window
+        titled Starsector that is not an error comes first, else any window of the game's processes."""
+        windows = list(self._enumerate(pids))
+        named = [handle for handle, title in windows if "Starsector" in title and not ERROR_TITLE.search(title)]
+        return (named or [handle for handle, _ in windows] or [None])[0]
 
     def _run(self) -> None:
         while not self._stop.is_set():

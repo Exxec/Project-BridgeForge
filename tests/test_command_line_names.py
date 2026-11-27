@@ -90,7 +90,9 @@ class PowerShellPathTests(unittest.TestCase):
             ran.assert_not_called()
             window_watch.save_screenshot(root / "y.png", 4242)
         self.assertIn("GetWindowRect", recorded["script"])
+        self.assertIn("PrintWindow($win, $dc, 2)", recorded["script"])  # drawn by the window itself: what covers it is not shown
         self.assertNotIn("VirtualScreen", recorded["script"])
+        self.assertNotIn("CopyFromScreen", recorded["script"])
         self.assertEqual(recorded["env"]["BF_WINDOW"], "4242")
 
     def test_the_game_window_capture(self) -> None:

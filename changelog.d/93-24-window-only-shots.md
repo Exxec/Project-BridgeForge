@@ -1,1 +1,1 @@
-- Live runs never capture the whole screen: the window watcher's screenshots show only the game window or dialog that triggered them, and nothing when there is no game window (ROADMAP-3 93.24).
+- Live runs never capture the screen: the window watcher's screenshots are drawn by the game window or dialog that triggered them (`PrintWindow`), so nothing in front of them shows, and there is no shot when there is no game window (ROADMAP-3 93.24).
