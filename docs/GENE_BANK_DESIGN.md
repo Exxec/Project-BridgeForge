@@ -195,7 +195,7 @@ through `zipsafe`.
      The plan, once the owner names the corpus:
      1. Run `gene bank alleles CORPUS --out PLAN` over it, unchanged for a queue under the data root. Its rows already
         list every root that defines one of the current records' anchors, with the mod id it defines it under.
-     2. A new read-only command, `gene bank lineage-scan PLAN --out OUT [--vanilla-core CORE]`. For each plan row whose
+     2. A new read-only command, `gene bank lineage-scan PLAN --out OUT --vanilla-core CORE` (the core is required: describe needs it). For each plan row whose
         mod id differs from the record's, it describes that root's gene in memory and intersects the member hashes with
         the bank's blobs. It applies 3a's exclusions (donor side, trivial JSON, vanilla data) and reports "shared by",
         never "copied from".

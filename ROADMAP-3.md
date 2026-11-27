@@ -3761,20 +3761,36 @@ history as the closure benchmark, a cross-repository trace check, an early Java 
   legion's mod folder as well if needed." The Downloads archive itself (zips) was not chosen.
   **Slice 3b built 2026-11-27: `gene bank lineage-scan PLAN --out OUT --vanilla-core CORE`** (`bridgeforge/genome/lineage_scan.py`),
   read-only.
-  - *Candidates:* every plan row that defines one of the bank's anchors under a mod id the bank does not hold that anchor
-    for (a root with no mod id is always one).
-  - *Each candidate* is described in memory with the same walk `put` uses, after checking its `mod_info.json` is still
-    the plan's, and its member hashes are intersected with the bank's member blobs. A match is reported as "shared by",
-    with the bank's holders; 3a's exclusions are counted apart (donor side, trivial value, vanilla file), and so is a
-    match only with the candidate's own mod id (`same_mod`, an allele).
-  - *Bounds:* the core must report the bank's build (describe's closure depends on it); one progress line per candidate
-    and a checkpoint keyed by the plan and the bank's ROOT, kept while errors remain; a root changed or gone since the
-    plan, or a describe that fails, is an error for that candidate and the scan goes on; the report goes through 3a's
-    `write_report`, which refuses a path inside the bank, and names mods, so it stays on the machine.
-  - *Tests:* `tests/test_gene_lineage_scan.py`: over a bank built by the real `put`, a full copy under another mod id
-    shares both of its members, a copy whose ship file was edited shares exactly the unchanged CSV row, a plan with only
-    the banked mod finds nothing, and the bank's files and `verify` are unchanged; plus each exclusion, errors and resume,
-    the build refusal and the CLI.
+  - *Candidates:* each plan root that defines banked anchors under a mod the bank does not hold them for; a root with no
+    mod id is keyed by its path, as 3a keys an id-less source.
+  - *Each candidate root* is described in memory once, walking each of its candidate anchors with the walk `put` uses
+    (after checking its `mod_info.json` is still the plan's), and the member hashes of every gene reached are compared
+    with the bank's member blobs. Each blob is classified once, in order: `donor_side` (the bank holds it only as a donor
+    need), `same_mod` (only the candidate's own mod holds it), `trivial_value`, `vanilla_file`, else shared, with the
+    bank's holders of other mods, as "shared by". Counts are of distinct blobs; refused anchors and refused needs are
+    recorded per root.
+  - *Bounds:* the core must report the bank's build, and so must the current records; the plan must come from this data
+    root and cover every anchor the bank holds now; one progress line per root and a checkpoint keyed by the plan, the
+    bank's ROOT, the build and the core's data files, kept while errors remain; a root changed or gone since the plan, or
+    a describe that fails, is that root's error only. The CLI refuses an output or checkpoint inside the bank before it
+    starts, and the report goes through 3a's `write_report`; it names mods, so it stays on the machine.
+  - *Independent review:* with `--out` inside the bank, the first version wrote its checkpoint into the bank and refused
+    only after the scan, which left a file that made `put` and `verify` fail (HIGH). It also compared an id-less banked
+    root with itself, did not notice a plan older than the bank, dropped refused needs, walked and counted a root once per
+    anchor, and resumed a scan made with another core's data. All fixed with tests.
+  - *Tests:* `tests/test_gene_lineage_scan.py` (18), over banks built by the real `put`: a full copy under another mod id
+    shares both its members, a copy whose ship file was edited shares exactly the unchanged CSV row, a plan with only the
+    banked mod finds nothing, and the bank's files and `verify` are unchanged; plus id-less roots, a root with two anchors,
+    refused needs, each bucket and its order, errors and resume, every refusal, and the CLI.
+  - *The runs (counts only; the plans and reports stay on their machines):*
+    - Test1's `In operation/`, `gene bank alleles --exclude "_*"`: 715 roots, 0 errors; 8 define a banked anchor, all
+      the pilots' own working and original copies. 0 candidates.
+    - White_Legion's RC8 install `mods/` (the owner's "if needed"; its RC9 install's `mods/` is empty), the same plan
+      read against a copy of Test1's bank: 205 roots, 0 errors; 4 define a banked anchor, all the four pilots' own
+      installed copies. 0 candidates.
+    - So no other mod in either corpus defines a banked gene: lineage beyond the bank is 0. *Limit:* only roots that
+      define a banked anchor's id are compared; content copied under a new id is not looked for (a raw file-hash sweep
+      would be another slice, the owner's call).
 - 94.G4 **Adaptation**: target-impact, gated fixers and `src-to-jar` at gene scope; Project Go carries translations; SpriteForge
   validates sprites and slots.
   **Project Go's part, slice 1 (2026-11-22, Project-Go #19): `ssmt-cli gene-carry`, a read-only report.**
