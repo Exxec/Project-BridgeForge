@@ -496,15 +496,16 @@ def drive(log: Path, hands: Hands, menu_timeout: float = 240, campaign_timeout: 
                       new_game_grace, vanilla_rows, save_reload, probe_saves)
     except GameWindowGone:
         result.stage, result.detail = at[0], window_gone_detail(_log_text(log))
-        _write_actions(log, result.actions)
         return result
     except (MenuMisread, GameNotInFront) as exc:
         # Nothing was clicked: on a misread menu, which is still up (98.11), or after a window that would not come to the front,
         # whose screenshot shows what covers it (98.12).
         shot = _capture(hands, log, f"{at[0]}-{'menu' if isinstance(exc, MenuMisread) else 'front'}")
         result.stage, result.detail = at[0], f"{exc}" + (f"; screenshot {shot}" if shot else "")
-        _write_actions(log, result.actions)
         return result
+    finally:
+        # Every run keeps its actions file, a passing one too (98.13): LIVE3 could not be compared with LIVE2, which kept none.
+        _write_actions(log, result.actions)
 
 
 def _drive(log: Path, hands: Hands, result: LiveResult, at: list[str], menu_timeout: float, campaign_timeout: float,
@@ -513,8 +514,7 @@ def _drive(log: Path, hands: Hands, result: LiveResult, at: list[str], menu_time
     """drive's sequence; `at[0]` names the stage in progress (set where a click can find the window gone)."""
     def stuck(stage: str, detail: str) -> LiveResult:
         result.stage, result.detail = stage, detail
-        _write_actions(log, result.actions)
-        return result
+        return result  # drive writes the actions file for every outcome
 
     if not wait_for(log, MENU_READY, menu_timeout, hands):
         return stuck("main-menu", "the game never logged that the main menu was up")

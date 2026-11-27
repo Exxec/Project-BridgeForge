@@ -209,6 +209,17 @@ class DriveTests(unittest.TestCase):
         self.assertIn(live_run.START_GAME, clicks)
         self.assertLess(clicks.index(live_run.START_GAME), clicks.index(live_run.PROBE_MISSION))
 
+    def test_a_passing_run_keeps_its_actions_file_too(self) -> None:
+        # 98.13: only a stuck run wrote one, so RC9NC-LIVE3 (stuck) had no passing run to be compared with.
+        with resolved_temp_dir() as base:
+            log = base / "run.stdout.log"
+            game = FakeGame(log, 1, None)
+            result = live_run.drive(log, game.hands(), menu_timeout=0.2, campaign_timeout=0.2, combat_timeout=0.2)
+            saved = json.loads(Path(f"{log}.actions.json").read_text(encoding="utf-8"))
+        self.assertEqual(result.verdict, "LIVE_DONE", result)
+        self.assertEqual(saved, result.actions)
+        self.assertEqual(sum(1 for a in saved if a["action"].startswith("click")), sum(1 for a in game.actions if a[0] == "click"))
+
     def test_a_game_that_will_not_come_to_the_front_gets_nothing_more_and_the_run_stops(self) -> None:
         # 98.12: Hands.front() dropped bring_to_front's answer, so the next click went to whatever window was in front.
         with resolved_temp_dir() as base:

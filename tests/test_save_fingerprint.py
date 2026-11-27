@@ -156,6 +156,20 @@ class DriveTests(unittest.TestCase):
         result, _ = self._reload([LOAD])
         self.assertEqual((result.verdict, result.stage), ("LIVE_STUCK", "fingerprint-compare"))
 
+    def test_the_reload_keeps_an_actions_file_of_its_own(self) -> None:
+        # 98.13: the reload is a second launch with its own log; its keys and clicks went nowhere before.
+        from unittest import mock
+
+        written = []
+        with mock.patch.object(save_reload_run, "_write_actions", lambda log, actions: written.append((Path(log).name, list(actions)))):
+            result, clicks = self._reload([LOAD, *reload_log(SAME, True)])
+        self.assertEqual(result.verdict, "LIVE_DONE", result)
+        self.assertEqual(len(written), 1)
+        name, actions = written[0]
+        self.assertTrue(name.endswith(".log"), name)
+        self.assertEqual([a["action"] for a in actions if a["action"].startswith("click")],
+                         [f"click {x:.4f},{y:.4f}" for x, y in clicks])
+
     def test_continue_that_loads_no_save_is_stuck_at_continue(self) -> None:
         # 88.22: ICBF2C-J28's Continue started a New Game; the log showed a new sector, not a load.
         result, _ = self._reload(["200 [main] INFO  com.fs.starfarer.campaign.CampaignEngine  - Generating sector"])
