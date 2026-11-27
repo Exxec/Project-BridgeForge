@@ -4,6 +4,7 @@ from __future__ import annotations
 import unittest
 from unittest import mock
 
+import tests.support  # noqa: F401  (installs the registry guard when this module runs alone)
 from bridgeforge.live import live_run, main_menu
 
 FALLBACK = (0.5, 0.5)
