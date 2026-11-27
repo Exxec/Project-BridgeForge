@@ -164,11 +164,12 @@ def loose_script_class(relative: str, text: str) -> str | None:
 def listed_jars(root: Path) -> set[str]:
     """The jars mod_info.json lists, as paths relative to the mod root: the only ones the game loads (a leftover
     `jars/old/x.jar` never runs)."""
-    from bridgeforge.scan.scanner import _load_lenient_json_file
+    from bridgeforge.mod_files import read_mod_info
 
-    info = _load_lenient_json_file(Path(root) / "mod_info.json")
-    entries = info.get("jars") if isinstance(info, dict) else None
-    return {Path(entry.replace("\\", "/")).as_posix().removeprefix("./") for entry in entries or [] if isinstance(entry, str)}
+    entries = (read_mod_info(Path(root)) or {}).get("jars")
+    if not isinstance(entries, list):
+        return set()
+    return {Path(entry.replace("\\", "/")).as_posix().removeprefix("./") for entry in entries if isinstance(entry, str)}
 
 
 class _Method(NamedTuple):

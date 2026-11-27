@@ -285,7 +285,7 @@ Found during 98.4 (2026-11-25), added under the owner's standing instruction to 
       - an unlisted jar's write, and writes in `src/` and in a loose script a jar class shadows, defining nothing.
   - *Also:* `jar_reads` became `jar_settings` (one javap launch per jar gives reads and writes), and its duplication
     baseline entry is renamed with it.
-  - *Mutation check:* 24 mutants, all caught.
+  - *Mutation check:* 35 mutants through `mutate_batch.py`, all caught at the final commit.
 - 98.9 (S) **data-class-reference-missing ignores a dependency's jars.** Wide Horizons Content's `rules.csv` commands
   (`WHStartBarEventDialog`, `WHStrangeM2Cmd`, ...) are classes in its dependency Wide Horizons Core's jar, under the
   `ruleCommandPackages` entry `org.widehorizons.rulecmd`. The scanner looked only in the mod's own jars. Resolve rule
