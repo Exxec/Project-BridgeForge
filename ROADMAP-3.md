@@ -504,6 +504,12 @@ order then continue live testing followed by more roadmap work based on your rec
   - *Tests* (`tests/test_raw_intake_and_lunalib_rule.py`): 1.12.1 and 1.12.3 with the reference get LunaLib; a GraphicsLib
     without it stays advice only; an unlisted jar's reference is ignored.
   - *Mutation check:* 4 mutants through `mutate_batch.py`, all caught.
+  - *Review (2026-11-27):* the real 1.12.1 (extracted from its 7z) and 1.12.3 jars both give True. A corrupt deflate stream
+    raised `zlib.error` out of the rule and crashed `probe-group install` and `rig-up`; such a jar (corrupt, truncated,
+    unknown method, encrypted) now reads as no reference. A `jars` value that is not a list is ignored, and Windows
+    separators in a listed path are read on every system. Test: `test_a_corrupt_jar_a_string_jar_list_and_windows_separators`.
+    Mutation check: the corrupt-entry mutant is caught; the separator mutant can only fail on POSIX (a Windows path reads
+    both separators), so CI's Ubuntu shards check it.
 - 98.16 (S) **A pause the code enforces.** The owner paused live testing at about 20:05, but an idle gate already in the
   background kept polling, and launched RC9NC-LIVE4 at 22:03 when Test1 went idle. *Fix:* `bridgeforge live pause [--reason]`
   and `live resume` keep a flag on the machine. `probe-group live`, `smoke`, `live-queue` and `duel`, and the
