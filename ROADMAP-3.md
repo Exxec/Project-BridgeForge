@@ -3785,14 +3785,16 @@ history as the closure benchmark, a cross-repository trace check, an early Java 
     - The core's digest held content hashes without paths, so a renamed data file resumed. It now digests path and hash
       (`bank_reports.vanilla_file_hashes`).
     - The resume test compared counts that were 0 in both runs. It now compares the resumed report with a fresh one.
-  - *Tests:* `tests/test_gene_lineage_scan.py` (25), over banks built by the real `put`: a full copy under another mod id
+  - *Tests:* `tests/test_gene_lineage_scan.py` (26), over banks built by the real `put`: a full copy under another mod id
     shares both its members, a copy whose ship file was edited shares exactly the unchanged CSV row, a plan with only the
     banked mod finds nothing, and the bank's files and `verify` are unchanged; plus id-less roots, a root with two anchors
     (walked once), refused needs, each bucket and its order, a blob classified once, distinct counts, errors, resume
-    (equal to a fresh scan, and a root changed after its row was saved), every refusal, and the CLI.
+    (equal to a fresh scan; a root changed after its row was saved; a failed describe retried), every refusal, and the CLI.
   - *Mutation check:* 28 mutants of the reworked module; the first batch missed 5 (the walk-once skip, a blob two genes
     hold, trivial before vanilla, distinct bucket counts, a plan without anchors). A test now catches each; the re-run caught
-    all 28.
+    all 28. After the second review, 31 (three for its fixes, including both old lines): 30 caught. The 31st, a failed row
+    saved to the checkpoint, survived because the new key no longer matches a gone root; a test of a failed describe on an
+    unchanged root now catches it (re-run at that commit; the module was unchanged).
   - *The runs (counts only; the plans and reports stay on their machines):*
     - Test1's `In operation/`, `gene bank alleles --exclude "_*"`: 715 roots, 0 errors; 8 define a banked anchor, all
       the pilots' own working and original copies. 0 candidates.
@@ -3813,6 +3815,21 @@ history as the closure benchmark, a cross-repository trace check, an early Java 
   - *So nothing is dropped; it moves:* A's join becomes G5's first collision slice (under 94.G5 below, with its own
     acceptance), and B is reconsidered only if that join proves too thin. RevenantLib's copy of its G3 portion does not
     mention the atlas, so it is unchanged.
+
+  **94.G3 Done 2026-11-27: its Accept is met** ("the bank holds the pilots and every allele of them in the corpus; licence
+  state per gene; rebuildable from sources").
+  - *The pilots and their alleles:* the bank holds the 12 pilot copies in `Done/` (slice 2b: ROOT `0f1c4f9c...`, 415
+    records). Beyond `Done/`, a read-only check the same day (the advisor: 3b skips a mod's own copies, so it says nothing
+    about whether they are banked):
+    - Test1's `In operation/`: the 8 roots that define banked anchors under the pilots' own ids (each pilot's original
+      and working copy) were described in memory, gene by gene. All 166 genes equal a current record's members: 0 differ,
+      0 absent, 0 refused, 0 errors.
+    - White_Legion's RC8 install: its 4 pilot folders are byte-identical to the original releases on Test1, apart from 7
+      junk files intake strips (`desktop.ini`, `.png~` backups), which no gene holds.
+    So no copy in either corpus holds an allele the bank lacks.
+  - *Licence state per gene:* slice 3a's `gene bank licences` (415 records, all LOCAL_ONLY, 0 narrowed, 0 drift).
+  - *Rebuildable from sources:* slice 2b's rebuilds, in place and into an empty folder, gave the same ROOT.
+  - *Lineage:* 0 shared blobs across mods, in the bank (3a) and beyond it (3b). 3c moved to G5. Re-banking on RC9 is 98.6.
 - 94.G4 **Adaptation**: target-impact, gated fixers and `src-to-jar` at gene scope; Project Go carries translations; SpriteForge
   validates sprites and slots.
   **Project Go's part, slice 1 (2026-11-22, Project-Go #19): `ssmt-cli gene-carry`, a read-only report.**
