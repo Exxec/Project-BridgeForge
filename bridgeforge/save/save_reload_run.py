@@ -8,14 +8,13 @@ start the rig game, choose Continue (or Load Game and pick the newest save), and
 """
 from __future__ import annotations
 
-import dataclasses
 import json
 import re
 from pathlib import Path
 
 from bridgeforge.live.live_run import (GameRefused, Hands, LaunchNoProcess, LiveResult, MENU_LOADED, MenuMisread, _capture, _log_text,
-                                       click_menu, running_game, wait_for)
-from bridgeforge.live.window_gone import GameNotInFront, GameWindowGone, checked_front, detail as window_gone_detail
+                                       _write_actions, click_menu, recording, running_game, wait_for)
+from bridgeforge.live.window_gone import GameNotInFront, GameWindowGone, detail as window_gone_detail
 
 RELOAD_EXPECTED = ("main_menu", "campaign_load", "reload_after_save")
 COMPARE_MARKER = "|compare|equal="
@@ -64,7 +63,17 @@ def drive_reload(log: Path, hands: Hands, menu_timeout: float = 240, compare_tim
     dialog and no Fatal (88.19). A vanished window ends it LIVE_STUCK at the stage in progress (93.50)."""
     result = LiveResult("LIVE_STUCK", log=str(log))
     at = ["main-menu"]
-    hands = dataclasses.replace(hands, front=checked_front(hands.front))  # a game that will not come to the front stops it (98.12)
+    # Keys and clicks go to the actions file, as in the first launch (98.13), and a game that will not come to the front stops
+    # the run (98.12; recording applies checked_front).
+    hands = recording(hands, log, result.actions)
+    try:
+        return _drive_reload(log, hands, result, at, menu_timeout, compare_timeout, load_timeout, settle_seconds)
+    finally:
+        _write_actions(log, result.actions)
+
+
+def _drive_reload(log: Path, hands: Hands, result: LiveResult, at: list[str], menu_timeout: float, compare_timeout: float,
+                  load_timeout: float, settle_seconds: int) -> LiveResult:
 
     def stuck(detail: str) -> LiveResult:
         result.stage, result.detail = at[0], detail
@@ -117,11 +126,11 @@ def reload_run(rig: Path, test_id: str, bat_name: str = "run-j25-direct.bat", me
     """Start the rig game again under its own manifest, load the last save and observe the compare line. `direct` starts it
     without the launcher, as the first run did (ROADMAP-3 95.4). The reload is a new game start, so Prepatcher's agent runs
     and logs again: the result carries its own summary (98.18)."""
-    from bridgeforge.live.live_run import with_prepatcher
+    from bridgeforge.live.live_run import with_evidence
     from bridgeforge.live.prepatcher_log import run_started
 
     since = run_started()
-    return with_prepatcher(_reload(rig, test_id, bat_name, menu_timeout, direct), rig, since, Path(rig) / bat_name)
+    return with_evidence(_reload(rig, test_id, bat_name, menu_timeout, direct), rig, since, Path(rig) / bat_name)
 
 
 def _reload(rig: Path, test_id: str, bat_name: str, menu_timeout: float, direct) -> LiveResult:

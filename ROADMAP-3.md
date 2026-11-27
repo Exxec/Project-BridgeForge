@@ -424,6 +424,32 @@ Found during 98.4's runs (2026-11-26), queued the same way:
   - *Also:* the per-second input recorder used for 98.4 (cursor position, whether the game window is in front, the
     last-input tick; no screenshots or titles; kept with Station Augments' `scratch/rc9-remap/`) could become part of
     `probe-group live`. It shows whether a person touched the desktop during a run.
+  **Done 2026-11-27.**
+  - *Actions file:* `live_run.drive` writes `<log>.actions.json` in a `finally`, for every outcome, a passing run too. The
+    reload records its own keys and clicks: `drive_reload` wraps its hands with `recording` (which also applies 98.12's
+    `checked_front`) and writes its file the same way. The duel run keeps none (its hands are not wrapped).
+  - *Input recorder:* `bridgeforge/live/input_recorder.py` samples about once a second, from Python (user32 through typed
+    ctypes calls): the cursor position, the last-input tick, and whose window is in front: `game` (one of
+    `live_run.game_pids`, shared with `real_hands`), `other`, `none`, or `gone` when no game process exists. A call that
+    fails leaves its field empty; a sample that fails is an `error` row. It writes `<log>.input.csv` with the PowerShell
+    recorder's columns, one line at a time with no handle held, after removing an earlier run's file of the same name. It
+    takes no screenshot and no window title (owner rule). `running_game` records from the launch until the harness starts
+    stopping the game, so every launch has one: live, reload, duel and gene boots. Outside Windows, in the test suite
+    (`BRIDGEFORGE_INPUT_RECORDER=off`), or when the file cannot be started, it records nothing; nothing in it can stop the
+    run.
+  - *In the result:* `LiveResult.desktop` (from `with_evidence`, which also attaches 98.18's Prepatcher summary) gives the
+    record's segments (`other 6s | game 305s | ...`) and `away_seconds`: the time the game, once first in front, was not in
+    front while its process ran (another window or none, to the end of the record; `gone` is not away). `probe-group live`
+    prints a `desktop:` line per launch (the first launch's labelled when a reload follows) and keeps it in its JSON,
+    `live-queue` in each row, and the duel run in its result.
+  - *Review (2026-11-27):* a takeover kept to the end of the run read clean (the trailing stretch was left out), several
+    tests could not fail, a slow process lookup let the thread outlive its block and hold the file open, one failed sample
+    ended the record silently, the suite sampled the real desktop, and the ctypes calls were untyped. All fixed; the stop
+    order (recorder before `stop_game`), `drive`'s finally and the tick arithmetic held up.
+  - *Tests:* `tests/test_input_recorder.py`; `tests/test_live_run.py` `test_a_passing_run_keeps_its_actions_file_too`;
+    `tests/test_save_fingerprint.py` `test_the_reload_keeps_an_actions_file_of_its_own`; `tests/test_direct_start.py`
+    `test_the_launch_is_recorded_beside_its_log`; `tests/test_duel_run.py` (the duel's desktop record). Mutation check: 17 mutants
+    through `mutate_batch.py`, all caught.
 - 98.14 (M) **StarsectorPrepatcher for RC9: build its name table ourselves, for the rig only.** Approved (owner 2026-11-26:
   "Build an RC9 table ourselves", over asking the author or waiting). The licence is MIT plus the Commons Clause, so
   modifying it for our own use is allowed; selling it is not.

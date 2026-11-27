@@ -231,6 +231,7 @@ def _probe_install(args: argparse.Namespace, queue: Path, rig: Path) -> dict | i
 def _probe_live(args: argparse.Namespace, queue: Path, rig: Path) -> dict | int:
     """`probe-group live`: its result, or an exit code when it stops early."""
     from bridgeforge.live.live_run import live_run
+    from bridgeforge.live.input_recorder import describe as describe_desktop
     from bridgeforge.live.prepatcher_log import describe as describe_prepatcher
     if args.interactive:
         print("Starting the game: play, then close it; nothing is clicked for you after the launcher's Play button.", file=sys.stderr)
@@ -254,8 +255,8 @@ def _probe_live(args: argparse.Namespace, queue: Path, rig: Path) -> dict | int:
                     natural_exit=args.natural_exit, exit_wait=args.exit_wait, save_reload=args.save_reload,
                     graceful_exit=not args.no_graceful_close, interactive=args.interactive, direct=direct)
     result = {"verdict": live.verdict, "stage": live.stage, "detail": live.detail, "rounds": live.rounds, "stages": live.stages, "log": live.log,
-              "prepatcher": live.prepatcher}
-    first_prepatcher = describe_prepatcher(live.prepatcher)
+              "prepatcher": live.prepatcher, "desktop": live.desktop}
+    first_prepatcher, first_desktop = describe_prepatcher(live.prepatcher), describe_desktop(live.desktop)
     if args.save_reload and live.verdict == "LIVE_DONE":
         from bridgeforge.save.save_fingerprint import parse_fingerprint
         from bridgeforge.save.save_reload_run import reload_run
@@ -263,10 +264,11 @@ def _probe_live(args: argparse.Namespace, queue: Path, rig: Path) -> dict | int:
         block = parse_fingerprint(Path(reloaded.log).read_text(encoding="utf-8", errors="replace")) if reloaded.log and Path(reloaded.log).is_file() else None
         result["reload"] = {"verdict": reloaded.verdict, "stage": reloaded.stage, "detail": reloaded.detail, "stages": reloaded.stages,
                             "log": reloaded.log, "reload_after_save": bool(block and block["compare_observed"]), "fingerprint": block,
-                            "prepatcher": reloaded.prepatcher}
+                            "prepatcher": reloaded.prepatcher, "desktop": reloaded.desktop}
         if not args.json:
-            if describe_prepatcher(reloaded.prepatcher):
-                print(f"  reload {describe_prepatcher(reloaded.prepatcher)}")
+            for line in (describe_prepatcher(reloaded.prepatcher), describe_desktop(reloaded.desktop)):
+                if line:
+                    print(f"  reload {line}")
             print(f"  reload: {reloaded.verdict}; reload_after_save={result['reload']['reload_after_save']}; "
                   f"equal={block['equal'] if block else None}; differing sections: {', '.join(block['diff_sections']) if block and block['diff_sections'] else 'none'}")
             print(reload_next_step(rig, args.test_id, block))
@@ -276,6 +278,8 @@ def _probe_live(args: argparse.Namespace, queue: Path, rig: Path) -> dict | int:
         print(f"{live.verdict}: stages {', '.join(live.stages) or 'none'}; combat rounds {live.rounds}")
         if first_prepatcher:  # after a failed reload the verdict above is the reload's: say whose this line is (review)
             print(f"  {'first launch: ' if args.save_reload else ''}{first_prepatcher}")
+        if first_desktop:
+            print(f"  {'first launch: ' if args.save_reload else ''}{first_desktop}")
         if live.verdict != "LIVE_DONE":
             print(f"  stuck at {live.stage}: {live.detail}")
         else:

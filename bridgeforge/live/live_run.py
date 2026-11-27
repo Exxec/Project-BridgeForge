@@ -101,6 +101,8 @@ class LiveResult:
     actions: list[dict] = field(default_factory=list)
     # 98.18: Prepatcher's own account of the launch (prepatcher_log.summary); None when the rig does not enable it.
     prepatcher: dict | None = None
+    # 98.13: who had the desktop during the launch, from <log>.input.csv (input_recorder.summary); None without a record.
+    desktop: dict | None = None
 
 
 def recording(hands: Hands, log: Path, actions: list[dict]) -> Hands:
@@ -496,15 +498,16 @@ def drive(log: Path, hands: Hands, menu_timeout: float = 240, campaign_timeout: 
                       new_game_grace, vanilla_rows, save_reload, probe_saves)
     except GameWindowGone:
         result.stage, result.detail = at[0], window_gone_detail(_log_text(log))
-        _write_actions(log, result.actions)
         return result
     except (MenuMisread, GameNotInFront) as exc:
         # Nothing was clicked: on a misread menu, which is still up (98.11), or after a window that would not come to the front,
         # whose screenshot shows what covers it (98.12).
         shot = _capture(hands, log, f"{at[0]}-{'menu' if isinstance(exc, MenuMisread) else 'front'}")
         result.stage, result.detail = at[0], f"{exc}" + (f"; screenshot {shot}" if shot else "")
-        _write_actions(log, result.actions)
         return result
+    finally:
+        # Every run keeps its actions file, a passing one too (98.13): LIVE3 could not be compared with LIVE2, which kept none.
+        _write_actions(log, result.actions)
 
 
 def _drive(log: Path, hands: Hands, result: LiveResult, at: list[str], menu_timeout: float, campaign_timeout: float,
@@ -513,8 +516,7 @@ def _drive(log: Path, hands: Hands, result: LiveResult, at: list[str], menu_time
     """drive's sequence; `at[0]` names the stage in progress (set where a click can find the window gone)."""
     def stuck(stage: str, detail: str) -> LiveResult:
         result.stage, result.detail = stage, detail
-        _write_actions(log, result.actions)
-        return result
+        return result  # drive writes the actions file for every outcome
 
     if not wait_for(log, MENU_READY, menu_timeout, hands):
         return stuck("main-menu", "the game never logged that the main menu was up")
@@ -587,16 +589,22 @@ def _drive(log: Path, hands: Hands, result: LiveResult, at: list[str], menu_time
     return result
 
 
-def real_hands(rig: Path, launcher_pid: int | None = None) -> Hands:
-    """Hands on the game under `rig`: foreground and click through game_click, aliveness from the rig's java processes and, when the
-    launcher's process id is given, everything it started (the java-28 JDK sits outside the rig)."""
-    from bridgeforge import game_click
+def game_pids(rig: Path, launcher_pid: int | None = None) -> set[int]:
+    """The game's process ids: the rig's java processes and, when the launcher's process id is given, everything it started
+    (the java-28 JDK sits outside the rig)."""
     from bridgeforge.boot_test import _running_java_under
     from bridgeforge.launcher_click import descendant_pids
 
+    found = {item["pid"] for item in _running_java_under(rig) if isinstance(item.get("pid"), int)}
+    return found | (descendant_pids(launcher_pid) if launcher_pid else set())
+
+
+def real_hands(rig: Path, launcher_pid: int | None = None) -> Hands:
+    """Hands on the game under `rig`: foreground and click through game_click, aliveness from the game's processes (game_pids)."""
+    from bridgeforge import game_click
+
     def pids() -> set[int]:
-        found = {item["pid"] for item in _running_java_under(rig) if isinstance(item.get("pid"), int)}
-        return found | (descendant_pids(launcher_pid) if launcher_pid else set())
+        return game_pids(rig, launcher_pid)
 
     def geometry():
         found = game_click.game_window(pids())
@@ -695,7 +703,12 @@ def running_game(rig: Path, test_id: str, bat_name: str = "run-j25-direct.bat", 
     hands.alive = alive_and_click
     try:
         core_list = rig / "starsector-core" / "data" / "missions" / "mission_list.csv"
-        yield log, hands, (_mission_rows(str(core_list.parent.parent.parent)) or VANILLA_MISSION_ROWS)
+        # 98.13: about once a second, who has the desktop (no screenshot, no window title), from the launch until the harness
+        # starts stopping the game (a natural exit's wait and the graceful close come after, in stop_game).
+        from .input_recorder import recording as record_desktop  # not this module's `recording`, the Hands wrapper
+
+        with record_desktop(Path(f"{log}.input.csv"), lambda: game_pids(rig, process.pid)):
+            yield log, hands, (_mission_rows(str(core_list.parent.parent.parent)) or VANILLA_MISSION_ROWS)
     finally:
         try:
             launch.stop_game(rig, test_id, process, record_exit=natural_exit, await_exit=bool((outcome or {}).get("await_exit")),
@@ -727,19 +740,24 @@ def live_run(rig: Path, test_id: str, bat_name: str = "run-j25-direct.bat", menu
     since = run_started()
     result = _live_run(rig, test_id, bat_name, menu_timeout, natural_exit, exit_wait, save_reload, graceful_exit, interactive,
                        scenario, direct)
-    return with_prepatcher(result, rig, since, Path(rig) / bat_name)
+    return with_evidence(result, rig, since, Path(rig) / bat_name)
 
 
 NOTHING_STARTED = ("refused", "LAUNCH_NO_PROCESS")  # stages at which no game process ran: nothing to summarise
 
 
-def with_prepatcher(result: LiveResult, rig: Path, since, launcher: Path | None = None) -> LiveResult:
-    """`result` with Prepatcher's summary of the launch that began at `since`. A run that started no game gets none, and a summary
-    that fails is UNREADABLE: the evidence never costs the run its result (review, 2026-11-27)."""
+def with_evidence(result: LiveResult, rig: Path, since, launcher: Path | None = None) -> LiveResult:
+    """`result` with Prepatcher's summary of the launch that began at `since` (98.18) and who had the desktop (98.13). A run that
+    started no game gets neither, and a summary that fails is UNREADABLE: the evidence never costs the run its result (review,
+    2026-11-27)."""
+    from .input_recorder import summary as desktop_summary
     from .prepatcher_log import safe_summary
 
-    if result.stage not in NOTHING_STARTED:
-        result.prepatcher = safe_summary(rig, since, launcher)
+    if result.stage in NOTHING_STARTED:
+        return result
+    result.prepatcher = safe_summary(rig, since, launcher)
+    if result.log:
+        result.desktop = desktop_summary(Path(f"{result.log}.input.csv"))
     return result
 
 

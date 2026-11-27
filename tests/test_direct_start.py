@@ -2,7 +2,9 @@
 from __future__ import annotations
 
 import argparse
+import contextlib
 import unittest
+from pathlib import Path
 from unittest import mock
 
 from bridgeforge import launch
@@ -80,13 +82,13 @@ class ReloadDirectTests(unittest.TestCase):
 
 
 class RunningGameDirectTests(unittest.TestCase):
-    def _run(self, direct):
+    def _run(self, direct, descendants: frozenset[int] = frozenset()):
         with resolved_temp_dir() as root:
             _, targets = _two(root)
             rig = make_rig(root, {"lib": []})
             stage(rig, {"mod_b": targets["mod_b"]}, ["lib"])
             (rig / "run-j25-direct.bat").write_text("@echo off", encoding="utf-8")
-            calls = {"popen": None, "clicked": 0, "placed": [], "pinned": []}
+            calls = {"popen": None, "clicked": 0, "placed": [], "pinned": [], "recorded": []}
 
             class Proc:
                 pid = 1
@@ -106,6 +108,21 @@ class RunningGameDirectTests(unittest.TestCase):
                 calls["placed"].append(top)
                 return "placed"
 
+            @contextlib.contextmanager
+            def recording(path, pids, **_kwargs):  # 98.13: the launch is recorded beside its log
+                calls["recorded"].append((Path(path).name, pids()))
+                calls["recording"] = True
+                try:
+                    yield path
+                finally:
+                    calls["recording"] = False
+
+            real_stop = launch.stop_game
+
+            def stop_game(*args, **kwargs):  # the recorder has stopped before the game is stopped (review, 2026-11-27)
+                calls["recording_at_stop"] = calls.get("recording")
+                return real_stop(*args, **kwargs)
+
             def pin(values=None):
                 calls["pinned"].append(values)
                 return mock.MagicMock()
@@ -116,8 +133,10 @@ class RunningGameDirectTests(unittest.TestCase):
                     mock.patch.object(launch, "click_launcher", click), \
                     mock.patch("bridgeforge.live.direct_start.place_window", place), \
                     mock.patch.object(live_run, "real_hands", lambda rig_, pid: mock.MagicMock(alive=lambda: False)), \
-                    mock.patch("bridgeforge.launcher_click.descendant_pids", return_value=set()), \
-                    mock.patch("bridgeforge.boot_test._terminate_tree"):
+                    mock.patch("bridgeforge.launcher_click.descendant_pids", return_value=set(descendants)), \
+                    mock.patch("bridgeforge.boot_test._terminate_tree"), \
+                    mock.patch("bridgeforge.live.input_recorder.recording", recording), \
+                    mock.patch.object(launch, "stop_game", stop_game):
                 with live_run.running_game(rig, "D-1", graceful_exit=False, direct=direct) as (_log, hands, _rows):
                     hands.alive()  # the first poll: the launcher click, or the window placement
             return calls
@@ -127,6 +146,11 @@ class RunningGameDirectTests(unittest.TestCase):
         self.assertIn("-DlaunchDirect=true -DstartRes=1920x1440", calls["popen"]["JAVA_TOOL_OPTIONS"])
         self.assertEqual((calls["clicked"], calls["placed"]), (0, [-200]))
         self.assertEqual(calls["pinned"][0]["resolution"], "1920x1440")
+
+    def test_the_launch_is_recorded_beside_its_log(self) -> None:
+        calls = self._run(None, frozenset({77}))
+        self.assertEqual(calls["recorded"], [("D-1.stdout.log.input.csv", {77})])  # the launcher's descendants are the game's
+        self.assertIs(calls["recording_at_stop"], False)
 
     def test_without_direct_the_launcher_is_clicked_as_before(self) -> None:
         calls = self._run(None)

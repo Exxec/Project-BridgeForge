@@ -69,11 +69,14 @@ class InstallTests(unittest.TestCase):
                 yield log, hands, 14
 
             menu = [(0.72, 0.30 + 0.05 * i) for i in range(11)]
+            (base / "duel.stdout.log.input.csv").write_text(  # 98.13: the duel result carries the launch's desktop record
+                "time,tick_ms,last_input_tick_ms,idle_ms,cursor_x,cursor_y,foreground\n00:00:01,1,1,0,1,2,game\n", encoding="ascii")
             with mock.patch.object(duel_run, "install_duel_mod"), mock.patch.object(live_run, "running_game", game), \
                     mock.patch.object(main_menu, "_menu_buttons", lambda _hands: menu):
                 result = duel_run.run_duel(base, "DUEL-T")
         self.assertEqual((result["played"], clicks), ([], []))
         self.assertIn("main-menu: the main menu read as 11 buttons", result["problem"])
+        self.assertEqual(result["desktop"]["segments"], "game 1s")
 
     def test_a_game_not_in_front_plays_no_duel(self) -> None:
         # 98.12: a game that does not come to the front, also on a second try, gets no click, and the run says why.
