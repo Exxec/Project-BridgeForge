@@ -721,21 +721,25 @@ def live_run(rig: Path, test_id: str, bat_name: str = "run-j25-direct.bat", menu
              graceful_exit: bool = True, interactive: bool = False, scenario: str = "probe-group live", direct=None) -> LiveResult:
     """Play a group's live run (see drive) on a freshly started rig game, then stop it. With `natural_exit`, a finished run
     (LIVE_DONE) first waits for the game to be quit from its menu and records the observed exit (see running_game). The result
-    carries Prepatcher's summary of the run when the rig enables it (98.18)."""
+    carries Prepatcher's summary of the run when its launcher loads the agent or the rig enables it (98.18)."""
     from .prepatcher_log import run_started
 
     since = run_started()
     result = _live_run(rig, test_id, bat_name, menu_timeout, natural_exit, exit_wait, save_reload, graceful_exit, interactive,
                        scenario, direct)
-    return with_prepatcher(result, rig, since)
+    return with_prepatcher(result, rig, since, Path(rig) / bat_name)
 
 
-def with_prepatcher(result: LiveResult, rig: Path, since) -> LiveResult:
-    """`result` with Prepatcher's summary of the launch that began at `since`; a refused run started nothing to summarise."""
-    from .prepatcher_log import summary
+NOTHING_STARTED = ("refused", "LAUNCH_NO_PROCESS")  # stages at which no game process ran: nothing to summarise
 
-    if result.stage != "refused":
-        result.prepatcher = summary(rig, since)
+
+def with_prepatcher(result: LiveResult, rig: Path, since, launcher: Path | None = None) -> LiveResult:
+    """`result` with Prepatcher's summary of the launch that began at `since`. A run that started no game gets none, and a summary
+    that fails is UNREADABLE: the evidence never costs the run its result (review, 2026-11-27)."""
+    from .prepatcher_log import safe_summary
+
+    if result.stage not in NOTHING_STARTED:
+        result.prepatcher = safe_summary(rig, since, launcher)
     return result
 
 

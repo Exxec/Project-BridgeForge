@@ -274,8 +274,8 @@ def _probe_live(args: argparse.Namespace, queue: Path, rig: Path) -> dict | int:
             live = reloaded
     if not args.json:
         print(f"{live.verdict}: stages {', '.join(live.stages) or 'none'}; combat rounds {live.rounds}")
-        if first_prepatcher:
-            print(f"  {first_prepatcher}")
+        if first_prepatcher:  # after a failed reload the verdict above is the reload's: say whose this line is (review)
+            print(f"  {'first launch: ' if args.save_reload else ''}{first_prepatcher}")
         if live.verdict != "LIVE_DONE":
             print(f"  stuck at {live.stage}: {live.detail}")
         else:

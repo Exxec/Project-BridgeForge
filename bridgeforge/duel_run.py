@@ -219,6 +219,9 @@ def run_duel(rig: Path, test_id: str, bat_name: str = "run-j25-direct.bat", comb
     install_duel_mod(rig)
     played: list[str] = []
     problem: str | None = None
+    from bridgeforge.live.prepatcher_log import run_started, safe_summary
+
+    since = run_started()  # 98.18: the duel launch carries Prepatcher's summary too
     with lr.running_game(rig, test_id, bat_name) as (log, hands, vanilla_rows):
         hands = dataclasses.replace(hands, front=lr.checked_front(hands.front))  # stop when the game will not come to the front (98.12)
         if not lr.wait_for(log, lr.MENU_LOADED, 240, hands):
@@ -229,4 +232,5 @@ def run_duel(rig: Path, test_id: str, bat_name: str = "run-j25-direct.bat", comb
             except lr.GameNotInFront as exc:  # nothing more was sent to a window that is not in front (98.12)
                 problem = f"front: {exc}"
     duels = parse_duel_log(lr._log_text(log))
-    return {"played": played, "problem": problem, "summary": summarise(duels), "log": str(log)}
+    return {"played": played, "problem": problem, "summary": summarise(duels), "log": str(log),
+            "prepatcher": safe_summary(rig, since, Path(rig) / bat_name)}

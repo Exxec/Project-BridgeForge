@@ -1,14 +1,19 @@
 """Prepatcher's own account of one live run (ROADMAP-3 98.18).
 
 StarsectorPrepatcher's javaagent writes `logs/prepatcher.log` in its mod folder at each game start, one line per event:
-`2026-11-27T05:43:06.500912300Z [INFO] StarsectorPrepatcher 0.18.9 javaagent starting`. The 98.14 proof run on RC9 was judged
-from that file by hand (63 patches applied on 40 classes, no WARN or ERROR). `summary` reads the lines written since a run
-began, so a log left from an earlier start never passes for this one: an enabled Prepatcher with no line in the window means
-the agent did not start (a launcher without `-javaagent`, or a crash before it ran).
+`2026-11-27T05:43:06.500912300Z [INFO] StarsectorPrepatcher 0.18.9 javaagent starting`. It opens the file truncated, so the log
+holds one start (javap of the agent's PrepatcherLog, 2026-11-27). The 98.14 proof run on RC9 was judged from that file by hand
+(63 patches applied on 40 classes, no WARN or ERROR). `summary` reads the lines written since a run began, so a log left from an
+earlier start never passes for this one.
 
-The wording counted below is the agent's own (strings in StarsectorPrepatcherAgent.jar, checked 2026-11-27): "APPLIED <patch>
-to <class>:", "Patched <class> structurally", "... rolled back ...", "... failed open ..." (the original game code runs
-unpatched).
+Whether the agent runs is decided by the launcher's java line, not by enabled_mods.json: the agent never reads the mod list,
+and `probe-group install` rewrites it (review, 2026-11-27). The log is read from the agent jar's mod folder (the jar's
+grandparent; a relative `-javaagent` is relative to `starsector-core`, where the game starts). A launcher that cannot be read
+falls back to the mod list.
+
+The wording counted below is the agent's own (strings in StarsectorPrepatcherAgent.jar, checked 2026-11-27): a line starting
+"APPLIED " is a patch applied ("APPLIED <patch> to <class>:", or a hook such as "APPLIED AoTD economy-restore completion
+hook"), "Patched <class> structurally", "... rolled back ...", "... failed open ..." (the original game code runs unpatched).
 """
 from __future__ import annotations
 
@@ -23,7 +28,8 @@ MAX_PROBLEM_LINES = 5
 
 _LINE = re.compile(r"^(?P<at>\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2})(?:\.\d+)?Z \[(?P<level>[A-Z]+)\] (?P<text>.*)$")
 _STARTING = re.compile(r"\bStarsectorPrepatcher (?P<version>\S+) javaagent starting\b")
-_APPLIED = re.compile(r"\bAPPLIED \S+ to (?P<cls>[^\s:]+)")
+_APPLIED = re.compile(r"^APPLIED\b")
+_APPLIED_CLASS = re.compile(r"^APPLIED .+? to (?P<cls>[^\s:]+)")
 _PATCHED = re.compile(r"\bPatched (?P<cls>\S+) structurally\b")
 
 
@@ -44,6 +50,32 @@ def _prepatcher_folder(rig: Path) -> Path | None:
         return None
     folders = _rig_folders(rig).get(PREPATCHER_ID, [])
     return folders[0] if len(folders) == 1 else None
+
+
+def launch_agents(launcher: Path) -> list[str] | None:
+    """The Prepatcher `-javaagent` jars the launcher's java line loads (before the main class), or None when the launcher or its
+    java line cannot be read."""
+    from bridgeforge.bytecode.java_matrix import PREPATCHER_MARKER
+    from bridgeforge.env_check import main_class_index, read_launch
+
+    try:
+        launch = read_launch(launcher)
+    except (OSError, ValueError):
+        return None
+    if not launch["java"]:
+        return None
+    tokens = launch["tokens"]
+    main_at = main_class_index(tokens)
+    return [token.split(":", 1)[1] for token in (tokens[:main_at] if main_at is not None else tokens)
+            if token.startswith("-javaagent:") and PREPATCHER_MARKER in token]
+
+
+def agent_log(rig: Path, agent: str) -> Path:
+    """The log of the agent jar `agent` names: <its mod folder>/logs/prepatcher.log."""
+    jar = Path(agent.replace("\\", "/"))
+    if not jar.is_absolute():
+        jar = Path(rig) / "starsector-core" / jar
+    return jar.parent.parent.joinpath(*LOG_PARTS)
 
 
 def _read(path: Path) -> str | None:
@@ -67,7 +99,9 @@ def summarise(text: str, since: datetime) -> dict:
         elif keep and kept:
             kept[-1] = (kept[-1][0], f"{kept[-1][1]} {line.strip()}")
     versions = sorted({m["version"] for _level, text in kept if (m := _STARTING.search(text))})
-    classes = {m["cls"] for _level, text in kept if (m := _APPLIED.search(text) or _PATCHED.search(text))}
+    starts = sum(1 for _level, text in kept if _STARTING.search(text))
+    applied = sum(1 for _level, text in kept if _APPLIED.match(text))
+    classes = {m["cls"] for _level, text in kept if (m := _APPLIED_CLASS.match(text) or _PATCHED.search(text))}
     errors = [text for level, text in kept if level in ("ERROR", "FATAL")]
     warnings = [text for level, text in kept if level == "WARN"]
     rolled_back = [text for _level, text in kept if "rolled back" in text]
@@ -77,35 +111,59 @@ def summarise(text: str, since: datetime) -> dict:
         verdict = "NO_LOG"
     elif problems:
         verdict = "PROBLEMS"
+    elif not starts:
+        verdict = "NO_START"  # lines in the window, but not the agent's start line
+    elif not applied:
+        verdict = "NOTHING_APPLIED"
     elif warnings:
         verdict = "WARNINGS"
     else:
         verdict = "CLEAN"
-    return {"verdict": verdict, "version": ", ".join(versions) or None, "starts": sum(1 for _level, text in kept if _STARTING.search(text)),
-            "lines": len(kept), "applied": sum(1 for _level, text in kept if _APPLIED.search(text)), "classes": len(classes),
+    return {"verdict": verdict, "version": ", ".join(versions) or None, "starts": starts,
+            "lines": len(kept), "applied": applied, "classes": len(classes),
             "warnings": len(warnings), "errors": len(errors), "rolled_back": len(rolled_back), "failed_open": len(failed_open),
             "problem_lines": [text[:300] for text in (problems or warnings)[:MAX_PROBLEM_LINES]]}
 
 
-def summary(rig: Path, since: datetime) -> dict | None:
-    """Prepatcher's summary of the run that began at `since`, or None when the rig does not enable Prepatcher."""
-    folder = _prepatcher_folder(Path(rig))
-    if folder is None:
-        return None
-    path = folder.joinpath(*LOG_PARTS)
+def summary(rig: Path, since: datetime, launcher: Path | None = None) -> dict | None:
+    """Prepatcher's summary of the launch that began at `since`, or None when the launch did not load the agent and the rig
+    does not enable Prepatcher. With the agent enabled in the mod list but not on the launcher's java line: NOT_LOADED."""
+    rig = Path(rig)
+    agents = launch_agents(launcher) if launcher is not None else None
+    if agents:
+        path = agent_log(rig, agents[-1])
+    else:
+        folder = _prepatcher_folder(rig)
+        if folder is None:
+            return None
+        if agents == []:
+            return {"verdict": "NOT_LOADED", "log": None, "launcher": str(launcher)}
+        path = folder.joinpath(*LOG_PARTS)
     text = _read(path) if path.is_file() else ""
     if text is None:
         return {"verdict": "UNREADABLE", "log": str(path)}
     return {**summarise(text, since), "log": str(path)}
 
 
+def safe_summary(rig: Path, since: datetime, launcher: Path | None = None) -> dict | None:
+    """`summary`, with any failure reported as UNREADABLE: the evidence never costs a finished run its result (review,
+    2026-11-27: a stamp that fits the pattern but is no real time raised out of strptime)."""
+    try:
+        return summary(rig, since, launcher)
+    except Exception as exc:  # evidence only
+        return {"verdict": "UNREADABLE", "error": f"{type(exc).__name__}: {exc}"[:300]}
+
+
 def describe(found: dict | None) -> str | None:
     """One line for a live run's printout, or None when there is no summary."""
     if not found:
         return None
-    if found["verdict"] == "UNREADABLE":
-        return f"prepatcher: UNREADABLE ({found['log']})"
-    if found["verdict"] == "NO_LOG":
-        return "prepatcher: NO_LOG: enabled, and wrote no line during this run (was the agent on the java line?)"
-    return (f"prepatcher {found['version'] or '?'}: {found['verdict']}; applied {found['applied']} on {found['classes']} classes; "
+    verdict = found["verdict"]
+    if verdict == "UNREADABLE":
+        return f"prepatcher: UNREADABLE ({found.get('error') or found.get('log')})"
+    if verdict == "NOT_LOADED":
+        return f"prepatcher: NOT_LOADED: enabled in the mod list, but {found['launcher']} loads no Prepatcher agent"
+    if verdict == "NO_LOG":
+        return "prepatcher: NO_LOG: the agent wrote no line during this run, so it did not start"
+    return (f"prepatcher {found['version'] or '?'}: {verdict}; applied {found['applied']} on {found['classes']} classes; "
             f"WARN {found['warnings']}, ERROR {found['errors']}, rolled back {found['rolled_back']}, failed open {found['failed_open']}")

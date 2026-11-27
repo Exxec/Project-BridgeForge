@@ -121,7 +121,7 @@ def reload_run(rig: Path, test_id: str, bat_name: str = "run-j25-direct.bat", me
     from bridgeforge.live.prepatcher_log import run_started
 
     since = run_started()
-    return with_prepatcher(_reload(rig, test_id, bat_name, menu_timeout, direct), rig, since)
+    return with_prepatcher(_reload(rig, test_id, bat_name, menu_timeout, direct), rig, since, Path(rig) / bat_name)
 
 
 def _reload(rig: Path, test_id: str, bat_name: str, menu_timeout: float, direct) -> LiveResult:
