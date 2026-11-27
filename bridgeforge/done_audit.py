@@ -10,6 +10,10 @@ working copy was +bf.2, as for Arkgneisis, Megastructures Tab and Slightly Bette
   the mod's baseline does not accept: the ids in CRASH_CLASS plus every MANUAL / UNKNOWN finding.
 
 Read-only. Writes Done/DONE_AUDIT.json and .md; progress per mod and a checkpoint (DONE_AUDIT.partial.jsonl).
+
+With `all_findings` (`--all-findings`, ROADMAP-3 98.19) each record also lists every finding the scan gave, accepted ones
+marked, so `findings-diff` can compare any check between two checkouts; the result and the checkpoint name the code that
+ran (`code_identity`), so a resumed run under other code starts over.
 """
 from __future__ import annotations
 
@@ -107,14 +111,29 @@ def packaging_problems(folder: Path, root: Path) -> list[str]:
     return problems
 
 
-def audit_one(folder: Path, queue: Path, vanilla_core: Path | None, provider_roots: list[Path]) -> dict:
+def code_identity() -> dict:
+    """{"checkout", "head"}: the source tree this code was imported from and its git HEAD (None outside git)."""
+    import subprocess
+
+    from .paths import checkout_root
+
+    root = checkout_root()
     try:
-        return _audit_one(folder, queue, vanilla_core, provider_roots)
+        done = subprocess.run(["git", "rev-parse", "HEAD"], cwd=root, capture_output=True, text=True, timeout=30, check=False)
+        head = done.stdout.strip() if done.returncode == 0 else None
+    except (OSError, subprocess.SubprocessError):
+        head = None
+    return {"checkout": str(root), "head": head}
+
+
+def audit_one(folder: Path, queue: Path, vanilla_core: Path | None, provider_roots: list[Path], all_findings: bool = False) -> dict:
+    try:
+        return _audit_one(folder, queue, vanilla_core, provider_roots, all_findings)
     except OSError as exc:  # a folder another process holds open (Windows 'Access is denied'): report, go on
         return {"mod": folder.name, "status": "ERROR", "stale": None, "findings": [], "error": str(exc)[:300]}
 
 
-def _audit_one(folder: Path, queue: Path, vanilla_core: Path | None, provider_roots: list[Path]) -> dict:
+def _audit_one(folder: Path, queue: Path, vanilla_core: Path | None, provider_roots: list[Path], all_findings: bool = False) -> dict:
     from .baseline import finding_dict_baseline_key, mod_baseline_keys
     from bridgeforge.scan.scanner import scan_mod
 
@@ -126,10 +145,14 @@ def _audit_one(folder: Path, queue: Path, vanilla_core: Path | None, provider_ro
     if working.is_dir():
         stale = _casefold_hash(working) != _casefold_hash(root)
     accepted = mod_baseline_keys(root) | (mod_baseline_keys(working) if working.is_dir() else set())
-    hits, compat = [], []
+    hits, compat, every = [], [], []
     for finding in scan_mod(root, vanilla_core=vanilla_core, provider_roots=provider_roots or None).findings:
         data = asdict(finding)
-        if finding_dict_baseline_key(data) in accepted:
+        is_accepted = finding_dict_baseline_key(data) in accepted
+        if all_findings:
+            every.append({"id": data["id"], "classification": data["classification"], "file": data.get("file"),
+                          "evidence": (data.get("evidence") or [])[:3], "accepted": is_accepted})
+        if is_accepted:
             continue
         if data["id"] in COMPAT_CLASS:
             compat.append({"id": data["id"], "file": data.get("file"), "evidence": (data.get("evidence") or [])[:1]})
@@ -140,8 +163,11 @@ def _audit_one(folder: Path, queue: Path, vanilla_core: Path | None, provider_ro
     packaging = packaging_problems(folder, root)
     behind = status_behind_live_record(folder, working)
     status = "STALE" if stale else ("PACKAGING" if packaging else ("FINDINGS" if hits else ("STATUS_BEHIND" if behind else "CLEAN")))
-    return {"mod": folder.name, "status": status, "stale": stale, "status_behind": behind, "packaging": packaging, "findings": hits,
-            "compat": compat}
+    record = {"mod": folder.name, "status": status, "stale": stale, "status_behind": behind, "packaging": packaging, "findings": hits,
+              "compat": compat}
+    if all_findings:
+        record["all_findings"] = every
+    return record
 
 
 def status_behind_live_record(folder: Path, working: Path) -> str | None:
@@ -168,13 +194,15 @@ def status_behind_live_record(folder: Path, working: Path) -> str | None:
     return f"archive note says {match.group(1)}, live record {live.get('test_id')} ({live.get('date')}) is current"
 
 
-def done_audit(done: Path, queue: Path, vanilla_core: Path | None = None, quiet: bool = False) -> dict:
+def done_audit(done: Path, queue: Path, vanilla_core: Path | None = None, quiet: bool = False, all_findings: bool = False) -> dict:
     from .revive import outside_provider_sources
 
     done, queue = Path(done).resolve(), Path(queue).resolve()
     providers = [p for p in (queue / "_rig" / "mods", queue, *outside_provider_sources(queue)) if p.is_dir()]
     folders = sorted(p for p in done.iterdir() if p.is_dir() and not p.name.startswith("_"))
-    header = {"done": str(done), "queue": str(queue), "vanilla_core": str(vanilla_core) if vanilla_core else None}
+    code = code_identity()
+    header = {"done": str(done), "queue": str(queue), "vanilla_core": str(vanilla_core) if vanilla_core else None,
+              "all_findings": all_findings, "code": code}
     records = []
     with Checkpoint(done / CHECKPOINT, header) as checkpoint:
         for number, folder in enumerate(folders, 1):
@@ -188,7 +216,7 @@ def done_audit(done: Path, queue: Path, vanilla_core: Path | None = None, quiet:
             elif cached is not None and not cached.get("closed"):
                 record = cached
             else:
-                record = audit_one(folder, queue, vanilla_core, providers)
+                record = audit_one(folder, queue, vanilla_core, providers, all_findings)
             if record is not cached:
                 checkpoint.add(folder.name, record)
             cached = cached if record is cached else None  # the progress line says "from checkpoint" only for a reused record
@@ -199,7 +227,8 @@ def done_audit(done: Path, queue: Path, vanilla_core: Path | None = None, quiet:
         counts: dict[str, int] = {}
         for record in records:
             counts[record["status"]] = counts.get(record["status"], 0) + 1
-        result = {"schema_version": 1, "mode": "DONE_AUDIT", "done": str(done), "counts": counts, "mods": records}
+        result = {"schema_version": 1, "mode": "DONE_AUDIT", "done": str(done), "counts": counts, "mods": records,
+                  "all_findings": all_findings, "code": code}
         (done / RESULT_JSON).write_text(json.dumps(result, indent=2, ensure_ascii=False), encoding="utf-8")
         lines = ["# Done/ audit", "", "Counts: " + ", ".join(f"{k} {v}" for k, v in sorted(counts.items())), ""]
         for record in records:

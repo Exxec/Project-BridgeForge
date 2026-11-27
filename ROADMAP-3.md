@@ -611,6 +611,31 @@ order then continue live testing followed by more roadmap work based on your rec
   runs of `finding-stats`-style per-archive finding lists and prints what was dropped and what appeared, per archive. The
   `bridgeforge-pr` skill runs it for any change to a scanner check. 98.8's hand-made sweep (53 findings become 20, nothing
   new) is the model.
+  **Done 2026-11-27.**
+  - *The command:* `bridgeforge/findings_diff.py` reads two inputs, each `done-audit`'s `DONE_AUDIT.json` or a plain
+    `{archive: [finding, ...]}` map. It matches a finding by id, file and first evidence line, counts identical findings one
+    by one, and prints what each input is (kind, checkout, HEAD), the totals, and per archive the findings dropped and the
+    new ones. `--id` limits it to one check; `--json` lists everything.
+  - *What it refuses:* an archive either run could not audit (ERROR, NO_MOD_ROOT, closed by the owner) is listed as not
+    compared, so a failed scan never reads as findings dropped. It exits 1 when both inputs come from the same checkout
+    and HEAD, an `--id` appears in neither input, or no archive is in both.
+  - *done-audit:* `--all-findings` lists every finding per archive, accepted ones marked. Without it a record keeps only the
+    crash-class, MANUAL and UNKNOWN findings the baseline does not accept, about a third of the check ids; `findings-diff`
+    says so. The result and the checkpoint header record the code (`done_audit.code_identity`: checkout and git HEAD), so a
+    run resumed under the other checkout starts over.
+  - *The skill:* `bridgeforge-pr` step 4 has the sweep for a scanner-check change: `done-audit --all-findings` once with each
+    checkout's code on Test1, one after the other, the worktree's with `BRIDGEFORGE_DATA_ROOT` set to the main checkout
+    (without it `@target` fails and no rig JDK is found), moving the old JSON away and checking the exit code; then
+    `findings-diff`.
+  - *On real data:* 98.8's sweep files (a plain map of that one check over 351 mod folders) give "53 findings become 20 over
+    351 archives: 33 dropped, 0 new, in 3 archive(s)", the hand count; the re-run of 98.8's final code on Test1 compared
+    equal to it.
+  - *Review (2026-11-27):* the first version read DONE_AUDIT.json's filtered findings for every check, so a change to most
+    checks would have compared nothing and printed "0 dropped, 0 new"; collapsed identical findings into one; let a crashed
+    run's leftover file compare with itself; did not list an archive skipped in one run and absent from the other; and the
+    skill's worktree command failed on `@target`. All fixed.
+  - *Tests:* `tests/test_findings_diff.py`; `tests/test_done_audit.py`
+    `test_all_findings_lists_every_finding_and_the_run_names_its_code`. Mutation check: 17 mutants on the first version, all caught; the review fixes, 12 more, all caught.
 - *Machine-local skills* (each machine's `~/.claude/skills`, mirrored by `memory-mirror`, not this repository):
   - `live-run`: the bounded idle gate, the input recorder, the run `.cmd` generator, the post-run checks and the pause
     procedure;
