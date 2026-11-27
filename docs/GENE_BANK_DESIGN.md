@@ -179,6 +179,32 @@ through `zipsafe`.
      - A candidate method: for a root that defines a banked anchor under another mod id, describe the gene in memory and
        intersect its member hashes with the bank's. Unlike a raw file-hash scan, that also covers json-entry members.
      - Which corpus "beyond `Done/`" means comes from the 2a plan, or else from the owner.
+
+     Checked 2026-11-26, read-only:
+     - *The 2a plan names no corpus.* Over Test1's `Done/` (616 roots), no root outside the pilot families defines a
+       banked anchor. So the corpus is the owner's to name. The candidates are:
+       - the queue, `In operation/`, on either machine;
+       - the Downloads archive: the owner's backlog, mostly 0.95a, and mostly zips;
+       - both.
+     - *Existing tools:* `supersession` compares `mod_info.json` across folders and a `corpus-index` database (the
+       Downloads archive), by id and version only. `sibling-assets` borrows files for one workspace from named siblings.
+       Neither reads member hashes, so neither answers lineage.
+     - *Limits of 2a today:* `gene bank alleles` takes only a corpus under the data root, and reads a zip for its
+       `mod_info.json` alone. The Downloads archive needs both changed.
+
+     The plan, once the owner names the corpus:
+     1. Run `gene bank alleles CORPUS --out PLAN` over it, unchanged for a queue under the data root. Its rows already
+        list every root that defines one of the current records' anchors, with the mod id it defines it under.
+     2. A new read-only command, `gene bank lineage-scan PLAN --out OUT [--vanilla-core CORE]`. For each plan row whose
+        mod id differs from the record's, it describes that root's gene in memory and intersects the member hashes with
+        the bank's blobs. It applies 3a's exclusions (donor side, trivial JSON, vanilla data) and reports "shared by",
+        never "copied from".
+        - Nothing is put. The report names mods, so it stays on the machine; the roadmap records counts only.
+     3. Only if the owner picks the Downloads archive: a zip root, described from a bounded extraction to a temporary
+        folder (`zipsafe` reads, entry names checked as for jars), and a corpus outside the data root, named explicitly.
+        That is a separate slice, because it reads untrusted archives at scale.
+     - *Acceptance:* the scan over Test1's `Done/` finds 0 shared blobs, matching 3a's lineage. A synthetic corpus with a
+       copied member under a new mod id finds exactly that blob.
    - **3c: `atlas` over the bank, an open question for the owner.** Two readings survive, so nothing is built:
      - a read-only join of atlas facts to banked genes: which other mods define, read or mutate a banked gene's ids
        (`atlas id` per anchor and closure id);

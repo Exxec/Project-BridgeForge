@@ -3399,6 +3399,17 @@ history as the closure benchmark, a cross-repository trace check, an early Java 
   - **Full suite:** 3573 tests, OK (skipped=13); hermeticity PASS.
   - **Next:** 3b, starting from the 2a plan's hits on needed-gene ids under other mod ids; which corpus "beyond `Done/`"
     means comes from that plan or from the owner. 3c is the owner's question.
+
+  **Slice 3b planned 2026-11-26 (plan only; waits for the owner to name the corpus).** The plan is in
+  `docs/GENE_BANK_DESIGN.md` ("3b"). Checked read-only first:
+  - The 2a plan names no corpus beyond `Done/`: no root outside the pilot families defines a banked anchor.
+  - `supersession` and `sibling-assets` compare ids, versions or files, never member hashes.
+  - `gene bank alleles` reads only a corpus under the data root, and only a zip's `mod_info.json`.
+  - *Plan:* run 2a over the corpus the owner names. A new read-only `gene bank lineage-scan PLAN` then describes each root
+    that defines a banked anchor under another mod id in memory, and intersects its member hashes with the bank's, using
+    3a's exclusions.
+  - *Corpus:* the Downloads archive (mostly zips, outside the data root) would be its own slice of bounded zip reads.
+  - *For the owner:* the corpus: `In operation/`, the Downloads archive, or both.
 - 94.G4 **Adaptation**: target-impact, gated fixers and `src-to-jar` at gene scope; Project Go carries translations; SpriteForge
   validates sprites and slots.
   **Project Go's part, slice 1 (2026-11-22, Project-Go #19): `ssmt-cli gene-carry`, a read-only report.**
