@@ -522,7 +522,7 @@ order then continue live testing followed by more roadmap work based on your rec
     path, the machine's folder for every data root and without `LOCALAPPDATA`, `running_game` refusing, a live run ending
     `refused`, a boot test and a runtime smoke refused, a paused queue, `{}` in status, and the CLI;
     `tests/test_java_matrix.py` `test_a_refused_variant_leaves_the_ledger_alone`.
-  - *Mutation check:* 8 mutants through `mutate_batch.py`, all caught (first version); the review fixes have their own batch.
+  - *Mutation check:* 8 mutants through `mutate_batch.py`, all caught (first version); the review fixes, 9 more, all caught.
 - 98.17 (S) **`rig-doctor` checks Prepatcher against the rig's build.** Stock 0.18.9 picks a table by
   `CombatEngine.getResults()`'s return type, and on Windows RC9 that is the Linux RC8 table (RC9NC-LIVE4 above). *Fix:*
   `rig-doctor` reads the agent jar's tables and the rig core's `CombatEngine` offline. It says which table the agent will
