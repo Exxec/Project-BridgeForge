@@ -618,7 +618,8 @@ order then continue live testing followed by more roadmap work based on your rec
   closed by the owner) is listed as not compared, so a failed scan never reads as findings dropped. On 98.8's own sweep files
   it prints "53 findings become 20 over 351 archives: 33 dropped, 0 new, in 3 archive(s)", the hand count. The
   `bridgeforge-pr` skill's step 4 now has the sweep for a scanner-check change: `done-audit` once with each checkout's code
-  on Test1, one after the other, then `findings-diff`. Tests: `tests/test_findings_diff.py`.
+  on Test1, one after the other, then `findings-diff`. Tests: `tests/test_findings_diff.py`. Mutation check: 17 mutants
+  through `mutate_batch.py`, all caught. Used on 98.8 the same day: its re-run sweep on Test1 compared equal.
 - *Machine-local skills* (each machine's `~/.claude/skills`, mirrored by `memory-mirror`, not this repository):
   - `live-run`: the bounded idle gate, the input recorder, the run `.cmd` generator, the post-run checks and the pause
     procedure;

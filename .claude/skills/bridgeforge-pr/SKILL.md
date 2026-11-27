@@ -80,7 +80,9 @@ A check that passes its tests can still drop real findings, or add new ones, acr
    with `PYTHONPATH` set to that folder (a worktree otherwise imports the main checkout's code):
    `<repo>\.venv\Scripts\python.exe -m bridgeforge done-audit --done "<repo>\Done" --queue "<repo>\In operation" --vanilla-core @target`.
    Each run rewrites `Done\DONE_AUDIT.json`: copy it aside after each. Its checkpoint does not record the code, so after an
-   interrupted run, delete `Done\DONE_AUDIT.partial.jsonl` before starting the other checkout's run.
+   interrupted run, delete `Done\DONE_AUDIT.partial.jsonl` before starting the other checkout's run. Set `JAVA_HOME` to the
+   main checkout's `In operation\_rig\jdk-*` for the worktree's run: `find_jdk` looks in the checkout's own rig first, a
+   worktree has none, and without a JDK the jar checks are skipped and every jar finding reads as dropped (2026-11-27).
 3. `bridgeforge findings-diff main.json branch.json --id <the check's id>` lists, per archive, the findings dropped and the
    new ones. An archive one run could not audit is listed as not compared.
 4. In the PR body, give the totals line and a reason for every dropped finding. Read every new one before merging.
