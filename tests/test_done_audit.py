@@ -65,6 +65,54 @@ class DoneAuditTests(unittest.TestCase):
         with mock.patch("subprocess.run", side_effect=OSError("no git")):  # code_identity imports subprocess when called
             self.assertIsNone(audit.code_identity()["head"])
 
+    def test_an_accepted_finding_is_listed_and_marked(self) -> None:
+        from bridgeforge.baseline import accept_findings, finding_dict_baseline_key
+
+        with resolved_temp_dir() as root:
+            done, queue = root / "Done", root / "queue"
+            mod = done / "Mod" / "Mod"
+            _write(mod / "mod_info.json", '{"id": "m", "version": "1"}')
+            _write(mod / "data" / "plugins" / "P.java",
+                   "package data.plugins;\npublic class P {\n    void s(String n) { Global.getSector().getStarSystem(n).getPlanets(); }\n}\n")
+            first = done_audit(done, queue, quiet=True)["mods"][0]["findings"][0]
+            accept_findings(mod, [finding_dict_baseline_key(first)], reason="test")
+            record = done_audit(done, queue, quiet=True, all_findings=True)["mods"][0]
+        self.assertNotIn(first["id"], [h["id"] for h in record["findings"]])
+        listed = [h for h in record["all_findings"] if h["id"] == first["id"]]
+        self.assertEqual([h["accepted"] for h in listed], [True])
+
+    def test_an_interrupted_run_resumed_under_other_code_starts_over(self) -> None:
+        # Review, 2026-11-27: the checkpoint did not record the code, so a run resumed with the other checkout reused records.
+        from unittest import mock
+
+        from bridgeforge import done_audit as audit
+
+        with resolved_temp_dir() as root:
+            done, queue = root / "Done", root / "queue"
+            for name in ("A", "B"):
+                _write(done / name / name / "mod_info.json", f'{{"id": "{name.lower()}", "version": "1"}}')
+            calls: list[str] = []
+            real = audit.audit_one
+
+            def counting(folder, *args, **kwargs):
+                calls.append(folder.name)
+                if interrupt and len(calls) == 2:
+                    raise KeyboardInterrupt
+                return real(folder, *args, **kwargs)
+
+            interrupt = True
+            with mock.patch.object(audit, "audit_one", counting), \
+                    mock.patch.object(audit, "code_identity", return_value={"checkout": "main", "head": "a" * 40}):
+                with self.assertRaises(KeyboardInterrupt):
+                    done_audit(done, queue, quiet=True, all_findings=True)
+                self.assertTrue((done / audit.CHECKPOINT).is_file())
+            calls.clear()
+            interrupt = False
+            with mock.patch.object(audit, "audit_one", counting), \
+                    mock.patch.object(audit, "code_identity", return_value={"checkout": "branch", "head": "b" * 40}):
+                done_audit(done, queue, quiet=True, all_findings=True)
+        self.assertEqual(calls, ["A", "B"])  # A was audited again: its record came from the other code
+
     def test_an_archive_the_owner_closed_is_listed_not_audited(self) -> None:
         """ROADMAP-3 95.15: owner 2026-11-17, "nightcross armory has been superseded and can safely be ignored". `close` marks
         the archive (a dated section in workspace/REVIVAL_REPORT.md), and done-audit lists it without auditing it."""
