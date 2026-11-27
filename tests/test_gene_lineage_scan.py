@@ -89,16 +89,25 @@ class ScanTests(unittest.TestCase):
             shutil.rmtree(base / "In operation" / "Gone")
             checkpoint = root / "scan.partial.jsonl"
             first = ls.lineage_scan(plan_file, core, bank=bank, base=base, quiet=True, checkpoint_path=checkpoint)
-            with mock.patch("bridgeforge.genome.gene_set.walk", side_effect=AssertionError("described again")) as walk:
+            _copy(base, "Gone", "gonemod")  # back exactly as planned: the resume describes it, and only it
+            from bridgeforge.genome import gene_set
+
+            real, described = gene_set.walk, []
+
+            def walk(mod, *args, **kwargs):
+                described.append(Path(mod).parent.name)
+                return real(mod, *args, **kwargs)
+
+            with mock.patch("bridgeforge.genome.gene_set.walk", walk):
                 second = ls.lineage_scan(plan_file, core, bank=bank, base=base, quiet=True, checkpoint_path=checkpoint)
-            changed = _copy(base, "Gone", "gonemod")  # back, but not as planned
+            changed = base / "In operation" / "Gone" / "working"  # then changed: no longer the plan's copy
             (changed / "mod_info.json").write_text(json.dumps({"id": "gonemod", "version": "2.0"}), encoding="utf-8")
             third = ls.lineage_scan(plan_file, core, bank=bank, base=base, quiet=True)
         errors = {row["mod_id"]: row["error"] for row in first["candidates"]}
         self.assertEqual(errors["copymod"], None)
         self.assertIn("gone since the plan", errors["gonemod"])
-        walk.assert_not_called()  # copymod came from the checkpoint; gonemod failed before describing
-        self.assertEqual(second["counts"]["errors"], 1)
+        self.assertEqual(described, ["Gone"])  # copymod came from the checkpoint; the error was not kept, so it is retried
+        self.assertEqual(second["counts"]["errors"], 0)
         self.assertIn("changed since the plan", {r["mod_id"]: r["error"] for r in third["candidates"]}["gonemod"])
 
     def test_a_describe_that_fails_or_refuses_is_counted_and_the_scan_goes_on(self) -> None:
