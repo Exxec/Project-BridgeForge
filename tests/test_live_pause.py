@@ -84,6 +84,82 @@ class EnforcedTests(unittest.TestCase):
         self.assertTrue(lines[1].startswith("PAUSED since"))
         self.assertEqual(lines[2:], ["Live testing resumed.", "not paused"])
 
+    def test_status_says_paused_for_an_empty_record(self) -> None:
+        # refusal() refuses a flag holding {}; status said "not paused", so gate_once.sh went on (review, 2026-11-27)
+        with resolved_temp_dir() as folder, mock.patch.dict(os.environ, {pause.PAUSE_FILE_ENV: str(folder / "live-paused.json")}):
+            (folder / "live-paused.json").write_text("{}", encoding="utf-8")
+            out = io.StringIO()
+            with contextlib.redirect_stdout(out):
+                pause.run_cli(argparse.Namespace(live_action="status"))
+            self.assertIsNotNone(pause.refusal())
+        self.assertTrue(out.getvalue().startswith("PAUSED"))
+
+    def test_a_runtime_smoke_execute_is_refused(self) -> None:
+        import json
+
+        from bridgeforge import runtime
+
+        with resolved_temp_dir() as folder, self._paused(folder):
+            (folder / "runtime-profile.json").write_text(json.dumps({"scenarios": ["campaign-load"]}), encoding="utf-8")
+            with mock.patch.object(runtime, "workspace_paths"), \
+                    mock.patch.object(runtime.subprocess, "run", side_effect=AssertionError("a paused machine started a game")):
+                result = runtime.run_runtime_smoke(folder, execute=True)
+        self.assertEqual(result["status"], "REFUSED")
+        self.assertIn("live testing is paused", result["reason"])
+
+    def test_a_paused_queue_installs_nothing_and_keeps_its_checkpoint(self) -> None:
+        import json
+
+        from bridgeforge.live_queue import live_queue
+        from bridgeforge.run_manifest import CONFIG_RELATIVE
+
+        plan = {"groups": [{"group": 1, "members": [{"workspace": "A"}]}, {"group": 2, "members": [{"workspace": "B"}]}]}
+        played: list[str] = []
+        with resolved_temp_dir() as root:
+            (root / "rig" / CONFIG_RELATIVE).parent.mkdir(parents=True)
+            (root / "plan.json").write_text(json.dumps(plan), encoding="utf-8")
+            out = root / "out" / "lq.json"
+
+            def play(_rig, test_id):  # group 1 plays, then the owner pauses
+                played.append(test_id)
+                pause.pause("owner: Pause live testing.", state=root)
+                return mock.Mock(verdict="LIVE_STUCK", stage="combat-round-1", detail="d", log=None)
+
+            installed: list[int] = []
+            with mock.patch.dict(os.environ, {pause.PAUSE_FILE_ENV: str(root / "live-paused.json")}):
+                result = live_queue(root / "plan.json", root, root / "rig", out, play=play, install=lambda _p, n: installed.append(n),
+                                    judge=None, record=None, quiet=True, test_prefix="LQ")
+            kept = out.with_name("lq.partial.jsonl").read_text(encoding="utf-8")
+        self.assertEqual((played, installed), (["LQ-G1"], [1]))
+        self.assertEqual([r["live"]["stage"] for r in result["groups"]], ["combat-round-1", "refused"])
+        self.assertIn("live testing is paused", result["stopped"])
+        self.assertIn('"key": "G1:A"', kept)
+        self.assertNotIn('"key": "G2:', kept)  # a resumed queue plays group 2
+
+
+class MachineFlagTests(unittest.TestCase):
+    """The flag is the machine's, not a checkout's: the first version kept it in state_dir(), so a worktree or a run with
+    another BRIDGEFORGE_DATA_ROOT read a different flag and started the game (review, 2026-11-27)."""
+
+    def test_every_data_root_reads_the_one_flag(self) -> None:
+        with resolved_temp_dir() as local:
+            seen = set()
+            for root in ("A", "B"):
+                env = {"LOCALAPPDATA": str(local), "BRIDGEFORGE_DATA_ROOT": str(local / root)}
+                with mock.patch.dict(os.environ, env), mock.patch.dict(os.environ, {pause.PAUSE_FILE_ENV: ""}):
+                    seen.add(pause.pause_file())
+        self.assertEqual(seen, {local / "BridgeForge" / "live-paused.json"})
+
+    def test_without_local_app_data_the_user_state_folder(self) -> None:
+        with resolved_temp_dir() as xdg, mock.patch.dict(os.environ, {"LOCALAPPDATA": "", "XDG_STATE_HOME": str(xdg), pause.PAUSE_FILE_ENV: ""}):
+            self.assertEqual(pause.pause_file(), xdg / "bridgeforge" / "live-paused.json")
+        with mock.patch.dict(os.environ, {"LOCALAPPDATA": "", "XDG_STATE_HOME": "", pause.PAUSE_FILE_ENV: ""}):
+            self.assertEqual(pause.pause_file(), Path.home() / ".local" / "state" / "bridgeforge" / "live-paused.json")
+
+    def test_a_flag_that_cannot_be_checked_pauses(self) -> None:
+        with resolved_temp_dir() as state, mock.patch.object(Path, "stat", side_effect=PermissionError("denied")):
+            self.assertIn("cannot be checked", pause.refusal(state=state))
+
 
 if __name__ == "__main__":
     unittest.main()

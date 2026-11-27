@@ -213,6 +213,23 @@ class ParallelTests(unittest.TestCase):
             java_matrix.run_java_matrix(rig, ["m", "new_mod"], variants, repeats=1, ledger=ledger, skip_known=True)
             self.assertEqual(len(calls), 2)  # a new mod set boots on every variant
 
+    def test_a_refused_variant_leaves_the_ledger_alone(self):
+        # 98.16 review: a paused run wrote pass_rate 0.0 over the PASS that --skip-known reuses
+        def ok(rig, mods, timeout, log_name, bat_name, auto_click=False):
+            return self._ok(rig, mods, timeout, log_name, bat_name)
+
+        def refused(rig, mods, timeout, log_name, bat_name, auto_click=False):
+            return {"status": "REFUSED", "reason": "live testing is paused", "log": None, "elapsed_seconds": 0.0, "triage": None}
+
+        with resolved_temp_dir() as root, redirect_stderr(io.StringIO()):
+            rig, ledger, variants = _rig(root), root / "ledger.json", self._variants(2)
+            with mock.patch.object(boot_test, "run_boot_test", ok):
+                java_matrix.run_java_matrix(rig, ["m"], variants, repeats=1, ledger=ledger)
+            before = ledger.read_text(encoding="utf-8")
+            with mock.patch.object(boot_test, "run_boot_test", refused):
+                java_matrix.run_java_matrix(rig, ["m"], variants, repeats=1, ledger=ledger)
+            self.assertEqual(ledger.read_text(encoding="utf-8"), before)
+
     def test_cli_exposes_parallel_skip_known_and_instances(self):
         out = io.StringIO()
         with redirect_stdout(out), self.assertRaises(SystemExit):

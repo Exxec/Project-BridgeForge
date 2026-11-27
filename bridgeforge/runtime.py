@@ -56,6 +56,11 @@ def run_runtime_smoke(workspace: Path, execute: bool = False) -> dict:
     profile = json.loads(profile_path.read_text(encoding="utf-8"))
     if not execute:
         return {"status": "NOT_EXECUTED", "scenarios": profile.get("scenarios", []), "reason": "Pass --execute to explicitly launch the configured runtime profile."}
+    from bridgeforge.live.pause import refusal
+
+    refused = refusal()  # 98.16: --execute starts the game, so it obeys the pause like every other start (review)
+    if refused:
+        return {"status": "REFUSED", "scenarios": profile.get("scenarios", []), "reason": refused}
     staged_mod = Path(profile["staged_mod_directory"])
     if not staged_mod.is_dir() or _tree_sha256(staged_mod) != profile.get("staged_mod_tree_sha256"):
         result = {"status": "STALE_STAGED_MOD", "scenarios": profile.get("scenarios", []), "reason": "The staged working copy changed after this runtime profile was recorded; create a new profile before executing."}
