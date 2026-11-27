@@ -3778,11 +3778,18 @@ history as the closure benchmark, a cross-repository trace check, an early Java 
     only after the scan, which left a file that made `put` and `verify` fail (HIGH). It also compared an id-less banked
     root with itself, did not notice a plan older than the bank, dropped refused needs, walked and counted a root once per
     anchor, and resumed a scan made with another core's data. All fixed with tests.
-  - *Tests:* `tests/test_gene_lineage_scan.py` (23), over banks built by the real `put`: a full copy under another mod id
+  - *Second review, of the reworked module:*
+    - A resumed scan replayed a root changed or gone after its row was saved. The checkpoint key held the plan's
+      `mod_info.json` hash, which the plan's digest already fixes. It now holds the hash read at scan time, as
+      `gene bank alleles` keys its rows, so such a root is described again and fails the plan check, as in a fresh scan.
+    - The core's digest held content hashes without paths, so a renamed data file resumed. It now digests path and hash
+      (`bank_reports.vanilla_file_hashes`).
+    - The resume test compared counts that were 0 in both runs. It now compares the resumed report with a fresh one.
+  - *Tests:* `tests/test_gene_lineage_scan.py` (25), over banks built by the real `put`: a full copy under another mod id
     shares both its members, a copy whose ship file was edited shares exactly the unchanged CSV row, a plan with only the
     banked mod finds nothing, and the bank's files and `verify` are unchanged; plus id-less roots, a root with two anchors
-    (walked once), refused needs, each bucket and its order, a blob classified once, distinct counts, errors and resume,
-    every refusal, and the CLI.
+    (walked once), refused needs, each bucket and its order, a blob classified once, distinct counts, errors, resume
+    (equal to a fresh scan, and a root changed after its row was saved), every refusal, and the CLI.
   - *Mutation check:* 28 mutants of the reworked module; the first batch missed 5 (the walk-once skip, a blob two genes
     hold, trivial before vanilla, distinct bucket counts, a plan without anchors). A test now catches each; the re-run caught
     all 28.

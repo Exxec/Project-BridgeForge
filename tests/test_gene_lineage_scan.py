@@ -157,6 +157,7 @@ class ScanTests(unittest.TestCase):
 
             with mock.patch("bridgeforge.genome.gene_set.walk", walk):
                 second = _scan(plan_file, core, bank, base, checkpoint_path=checkpoint)
+            fresh = _scan(plan_file, core, bank, base)
             changed = base / "In operation" / "Gone" / "working"  # then changed: no longer the plan's copy
             (changed / "mod_info.json").write_text(json.dumps({"id": "gonemod", "version": "2.0"}), encoding="utf-8")
             third = _scan(plan_file, core, bank, base)
@@ -165,8 +166,24 @@ class ScanTests(unittest.TestCase):
         self.assertIn("gone since the plan", errors["gonemod"])
         self.assertEqual(described, ["Gone"])  # copymod came from the checkpoint; the error was not kept, so it is retried
         self.assertEqual(second["counts"]["errors"], 0)
-        self.assertEqual(second["counts"]["excluded"], first["counts"]["excluded"])  # resumed rows count the same
+        # Review: the resumed report is the fresh one, row for row (shared and counted apart included), not 0 == 0.
+        self.assertTrue({r["mod_id"]: r["shared"] for r in fresh["candidates"]}["copymod"])
+        self.assertEqual(second, fresh)
         self.assertIn("changed since the plan", {r["mod_id"]: r["error"] for r in third["candidates"]}["gonemod"])
+
+    def test_a_root_changed_after_its_row_was_saved_is_described_again_on_resume(self) -> None:
+        # Review: the checkpoint key held the plan's mod_info hash, so a saved row was replayed for a root changed since.
+        with resolved_temp_dir() as root:
+            base, core, bank, plan_file = _corpus(root, ("Copy", "copymod", None), ("Gone", "gonemod", None))
+            shutil.rmtree(base / "In operation" / "Gone")
+            checkpoint = root / "scan.partial.jsonl"
+            _scan(plan_file, core, bank, base, checkpoint_path=checkpoint)  # copymod saved; the error keeps the checkpoint
+            info = base / "In operation" / "Copy" / "working" / "mod_info.json"
+            info.write_text(json.dumps({"id": "copymod", "version": "2.0"}), encoding="utf-8")
+            resumed = _scan(plan_file, core, bank, base, checkpoint_path=checkpoint)
+            fresh = _scan(plan_file, core, bank, base)
+        self.assertIn("changed since the plan", {r["mod_id"]: r["error"] for r in resumed["candidates"]}["copymod"])
+        self.assertEqual(resumed, fresh)
 
     def test_a_changed_core_data_folder_restarts_the_scan(self) -> None:
         with resolved_temp_dir() as root:
@@ -177,6 +194,19 @@ class ScanTests(unittest.TestCase):
             with mock.patch("bridgeforge.genome.gene_set.walk", side_effect=RuntimeError("described again")):
                 again = _scan(plan_file, core, bank, base, checkpoint_path=checkpoint)
         self.assertIn("described again", again["candidates"][0]["error"])  # not resumed from the old core's rows
+
+    def test_a_core_data_file_renamed_restarts_the_scan(self) -> None:
+        # Review: the header digested the core's content hashes without their paths, so a rename (or removing one of two
+        # files with the same content) resumed, though describe finds vanilla content by path.
+        with resolved_temp_dir() as root:
+            base, core, bank, plan_file = _corpus(root, ("Copy", "copymod", None))
+            checkpoint = root / "scan.partial.jsonl"
+            _scan(plan_file, core, bank, base, checkpoint_path=checkpoint)
+            moved = next(path for path in sorted((core / "data").rglob("*")) if path.is_file())
+            moved.rename(moved.with_name("renamed-" + moved.name))
+            with mock.patch("bridgeforge.genome.gene_set.walk", side_effect=RuntimeError("described again")):
+                again = _scan(plan_file, core, bank, base, checkpoint_path=checkpoint)
+        self.assertIn("described again", again["candidates"][0]["error"])
 
     def test_a_failing_describe_or_an_unreadable_mod_info_is_that_roots_error_only(self) -> None:
         from bridgeforge.genome import alleles, gene_set

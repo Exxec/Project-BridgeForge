@@ -31,7 +31,7 @@ from pathlib import Path
 
 from bridgeforge.genome.bank import Bank, BankError, checked_build
 from bridgeforge.genome.bank_reports import (_PARSE_LIMIT_BYTES, REPORT_SCHEMA_VERSION, _blob_bytes, _current_records, _holder,
-                                             _mod_key, _root_text, is_inside, is_trivial_value, vanilla_hashes)
+                                             _mod_key, _root_text, is_inside, is_trivial_value, vanilla_file_hashes)
 
 BUCKETS = ("donor_side", "same_mod", "trivial_value", "vanilla_file")
 
@@ -81,6 +81,18 @@ def candidates(plan_data: dict, anchor_mods: dict[str, set[str]]) -> list[tuple[
         if anchors:
             found.append((row, anchors))
     return found
+
+
+def _info_now(base: Path, row: dict) -> str | None:
+    """The hash of the root's mod_info.json as it is now, None when it is gone or unreadable. It keys the checkpoint, as
+    alleles keys its rows: a root changed or gone after its row was saved gets a new key, so it is described again and
+    fails the plan check, as in a fresh scan (review of slice 3b)."""
+    from bridgeforge.genome.alleles import MOD_INFO
+
+    try:
+        return hashlib.sha256((base / row["path"] / MOD_INFO).read_bytes()).hexdigest()
+    except OSError:
+        return None
 
 
 def _describe(base: Path, row: dict, anchors: list[str], vanilla_core: Path) -> tuple[dict[str, dict], dict[str, str], str | None]:
@@ -166,15 +178,17 @@ def lineage_scan(plan_file: Path, vanilla_core: Path, *, bank: Path | None = Non
     anchor_mods, members, donor, unreadable, builds = bank_side(target)
     base = Path(base or data_root())
     _check_inputs(plan_data, base, anchor_mods, builds, build)
-    vanilla = vanilla_hashes(Path(vanilla_core))
+    core_files = vanilla_file_hashes(Path(vanilla_core))
+    vanilla = set(core_files.values())
     items = candidates(plan_data, anchor_mods)
     rows = []
-    # The plan, the bank and the core's data go in as digests: any change must restart the scan, not resume it.
+    # The plan, the bank and the core's data files (path and hash: describe finds vanilla content by path) go in as
+    # digests: any change must restart the scan, not resume it.
     head = {"command": "gene bank lineage-scan", "plan": _digest(plan_data), "bank_root": _root_text(target), "build": build,
-            "vanilla": _digest(sorted(vanilla))}
+            "vanilla": _digest(sorted(core_files.items()))}
     with Checkpoint(checkpoint_path, head) as checkpoint:
         for number, (row, anchors) in enumerate(items, 1):
-            key = f"{row['path']}|{row.get('mod_info_sha256')}|{','.join(anchors)}"
+            key = f"{row['path']}|{_info_now(base, row)}|{','.join(anchors)}"
             saved, started = checkpoint.get(key), time.monotonic()
             resumed = saved is not None
             if saved is None:
