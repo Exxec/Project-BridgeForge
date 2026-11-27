@@ -2825,6 +2825,7 @@ per-mod verdicts for a group's run log
 | `log` | - | the run's stdout log (bf-test launch) or the rig's starsector.log |
 | `--rig` RIG | - | - |
 | `--queue` QUEUE | - | - |
+| `--config` FILE | - | judge with this probe config instead of the run's own (which the run keeps beside its manifest, 93.29) |
 | `--json` | - | - |
 
 ## archaeology

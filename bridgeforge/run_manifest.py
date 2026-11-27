@@ -314,15 +314,18 @@ def prepare_run(rig: Path, run_id: str, kind: str, *, targets: list[str], expect
     manifest_id = hashlib.sha256(_canonical(body)).hexdigest()
     manifest = {**body, "manifest_id": manifest_id, "created_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
                 "created_epoch": time.time()}
+    recorded_config = body["runtime"].get("probe_config_sha256")
     if existing.is_file():
         previous = read_manifest(rig, run_id)
         if previous["manifest_id"] != manifest_id:
             raise ManifestError(f"run id {run_id} already has a different manifest; use a new run id")
+        if not run_config_path(rig, run_id).is_file():  # the same manifest id means the same config hash
+            keep_run_config(rig, run_id, recorded_config)
         write_run_file(rig, run_id, manifest_id)
         return previous
     (rig / "logs").mkdir(parents=True, exist_ok=True)
+    keep_run_config(rig, run_id, recorded_config)  # before the manifest: a run never has a manifest without its config copy
     atomic_write_json(existing, manifest)
-    keep_run_config(rig, run_id)
     write_run_file(rig, run_id, manifest_id)  # the probe echoes this id as its first line
     atomic_write_json(rig / "logs" / OWNER_FILE, {"run_id": run_id, "manifest_id": manifest_id, "since": manifest["created_at"]})
     return manifest
@@ -335,39 +338,59 @@ def run_config_path(rig: Path, run_id: str) -> Path:
     return Path(rig) / "logs" / f"{run_id}{RUN_CONFIG_SUFFIX}"
 
 
-def keep_run_config(rig: Path, run_id: str) -> Path | None:
-    """A byte copy of the probe config the run starts with, beside its manifest (ROADMAP-3 93.29): `probe-group report` reads
-    this, not the rig's current config, which the next `install` replaces. The manifest's `probe_config_sha256` is its hash."""
+def keep_run_config(rig: Path, run_id: str, expected_sha256: str | None) -> Path | None:
+    """A byte copy of the probe config the run starts with, beside its manifest (ROADMAP-3 93.29): `probe-group report` and
+    `record` read this, not the rig's current config, which the next `install` replaces. `expected_sha256` is the hash the
+    manifest records; a config that changed after it was hashed is refused rather than kept (review, 2026-11-27)."""
     from .safeio import atomic_write_bytes
 
     config = Path(rig) / CONFIG_RELATIVE
-    if not config.is_file():
+    if expected_sha256 is None or not config.is_file():
         return None
-    return atomic_write_bytes(run_config_path(rig, run_id), config.read_bytes())
+    data = config.read_bytes()
+    if hashlib.sha256(data).hexdigest() != expected_sha256:
+        raise ManifestError(f"the probe config changed while run {run_id} was being prepared; prepare it again")
+    return atomic_write_bytes(run_config_path(rig, run_id), data)
 
 
-def config_for_run(rig: Path, run_id: str) -> tuple[bytes, str]:
-    """(the probe config bytes a run started with, where they came from). The run's own copy when its hash is the manifest's;
-    for a run from before 93.29 (no copy), the rig's current config only while its hash is still the one recorded at launch.
-    Without a manifest (a run from before the manifests, or a log from elsewhere) the current config, said so. Raises
-    ManifestError when the run's config can no longer be found: 2026-11-17, group 3's report after `install 4` named Tania
-    instead of KoC (93.29)."""
+def run_inputs(rig: Path, run_id: str) -> dict:
+    """What a past run started with, for judging it: {"config": the probe config's bytes, "source": where they came from,
+    "enabled": the run's enabled mod ids from its manifest, or None without one}.
+
+    The config is the run's own copy when its hash is the manifest's; for a run from before 93.29 (no copy), the rig's
+    current config only while its hash is still the one recorded at launch. Without a manifest (a run from before the
+    manifests, or a log from elsewhere) the current config, said so. A manifest that exists but cannot be trusted refuses,
+    as does a run whose config is gone: 2026-11-17, group 3's report after `install 4` named Tania instead of KoC (93.29)."""
     rig = Path(rig)
     current = rig / CONFIG_RELATIVE
     try:
-        manifest = read_manifest(rig, run_id)
+        absent = not manifest_path(rig, check_run_id(run_id)).is_file()
     except ManifestError:
+        absent = True  # an id prepare_run refuses never had a manifest
+    if absent:
         if not current.is_file():
-            raise ManifestError(f"no manifest for run {run_id} and no probe config in the rig") from None
-        return current.read_bytes(), "the rig's current probe config (this run has no manifest)"
+            raise ManifestError(f"no manifest for run {run_id} and no probe config in the rig")
+        return {"config": current.read_bytes(), "source": "the rig's current probe config (this run has no manifest)", "enabled": None}
+    manifest = read_manifest(rig, run_id)  # one that exists but cannot be trusted refuses (ManifestError)
+    enabled = [entry["id"] for entry in manifest.get("enabled") or [] if isinstance(entry, dict) and isinstance(entry.get("id"), str)]
     recorded = (manifest.get("runtime") or {}).get("probe_config_sha256")
+    if recorded is None:
+        raise ManifestError(f"run {run_id} started with no probe config in the rig: there is nothing to judge it by")
     kept = run_config_path(rig, run_id)
     if kept.is_file() and _sha256_file(kept) == recorded:
-        return kept.read_bytes(), f"the run's own copy ({kept.name})"
-    if current.is_file() and recorded and _sha256_file(current) == recorded:
-        return current.read_bytes(), "the rig's current probe config, unchanged since the run started"
+        return {"config": kept.read_bytes(), "source": f"the run's own copy ({kept.name})", "enabled": enabled}
+    if current.is_file() and _sha256_file(current) == recorded:
+        return {"config": current.read_bytes(), "source": "the rig's current probe config, unchanged since the run started",
+                "enabled": enabled}
     raise ManifestError(f"the rig's probe config changed since run {run_id} started and no copy of the run's own was kept: "
-                        "re-install that group's config (probe-group install N) or run it again")
+                        "give that config with `probe-group report --config FILE`, re-install that group's config "
+                        "(probe-group install N, with the options it ran with), or run it again")
+
+
+def run_id_of_log(log: Path) -> str:
+    """The run id a `<run id>.stdout.log` names (any case of the suffix); any other name is returned whole."""
+    name = Path(log).name
+    return name[:-len(".stdout.log")] if name.lower().endswith(".stdout.log") else name
 
 
 def read_manifest(rig: Path, run_id: str) -> dict:
