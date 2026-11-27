@@ -207,6 +207,22 @@ four", "Finish on RC7, re-bank later" (the gene bank), and "Live testing is ok f
     XStream are not the game's.
   - *Next:* mirror to Test1's rig with the same script, then a vanilla smoke and one group run when live testing resumes.
     Test1's memory may need a smaller heap than the owner's 10 GB.
+  **Proven on White_Legion 2026-11-27** (owner: "yes accept then run live testing on white legion. When complete re-run the last
+  few revived mods under combination of J28, FR, Prepatcher"; then "we can probably take less care with J28 runs and just run
+  everything together in batches then dig deeper if issues arise"):
+  - WLJ28VAN-B, vanilla plus the probe: LIVE_DONE. The manifest says Java 28, Prepatcher was CLEAN with 63 patches on 41
+    classes, and the console log config let the harness see the main menu.
+  - J28A-SR, Zorg V18+bf.11 and UAF 0.8.4c1: LIVE_DONE with two combat rounds, and the save-reload LIVE_DONE through
+    Mikohime's XStream 1.4.21 fork. Only `systems` differs (RC8-41). Report: zorg PASS; uaf only its accepted weapon lines.
+  - J28B-SR, Station Augments bf.3 and Neutrino bf.3: LIVE_DONE, the reload too (only `systems` differs). Report: both PASS;
+    3 of 32 Neutrino hulls were undeployed, as on Test1.
+  - J28BATCH-SR, all four mods together: LIVE_STUCK at combat round 2, after the main menu, the campaign, the save and round
+    1. The battle did not start after the Play click, nor after its one retry, though the screenshot shows the probe mission
+    selected with its order of battle loaded. Round 2's normal maps loaded in about 2 s at 366.7 s; the game sat at the
+    mission screen from 264 s. *Cause open* (an unstarted round-2 click) until its action timeline is compared with
+    J28A-SR's passing round 2. It is not a J28 crash: no exception, no Fatal.
+  - The J28 runs are never recorded: Mikohime's Janino and XStream are not the game's, so they are another class of
+    evidence.
 - 98.5 **Done 2026-11-25.** **Repoint the 0.98.5a rigs.** `_rig-0985a`'s `starsector-core` links to RC9 (RC9's launcher,
   `vmparams` and `jre` equal RC7's); `rig-doctor` isolation and launcher_prefs PASS. `_rig-genes` stays on RC7: the gene
   bank is on RC7 until 98.6.
@@ -729,7 +745,84 @@ order then continue live testing followed by more roadmap work based on your rec
   fragments so both machines could write them, but `archive` writes them where it runs, and nothing commits them from
   Test1. They are committed by this item's PR, copied byte for byte (`release-notes --check` lists all 18 as pending).
   - *Open:* make the gap visible. For example, `hygiene` could report untracked record fragments, and `archive` could end
-    by naming the files to commit. Queued; not built., re-queued without gates (owner 2026-11-17: "Park S4. Stop treating S2 and S3 as gates.
+    by naming the files to commit. Queued; not built.
+- 98.22 **Live testing on White_Legion, 2026-11-27.** The owner, in order:
+  - "yes accept then run live testing on white legion. When complete re-run the last few revived mods under combination of
+    J28, FR, Prepatcher";
+  - "We can resize as needed to match test1";
+  - "Please archive once complete and continue roadmap work. We'll have to keep live testing on white legion for today and
+    sync everything including generated files back to test1 as we go".
+
+  White_Legion is the owner's own desktop; Test1 stayed paused.
+  - *The rig* (`In operation/_rig-0985a` on White_Legion, the core a junction to the RC9 install):
+    - libraries copied from the owner's RC8 install; LazyLib, MagicLib, LunaLib, Nexerelin and AshLib are byte-identical
+      to Test1's rig, and GraphicsLib is 1.12.4 (Test1 has 1.12.3);
+    - Test1's JDK 25 copied and hash-checked (431 files), and Test1's launcher files copied byte for byte;
+    - 98.21's Mikohime launcher;
+    - rig-doctor's saves and core baselines written first.
+  - *Guards, each checked after every run:*
+    - the owner's game preferences were snapshotted, except the licence key, which was never read, and compared;
+    - the install's saves and core matched their baselines;
+    - no game java was left running;
+    - captures showed the game's window only: 93.24, merged as #267 before the first run.
+  - *Screen:* 2560x1600 at 150 %. The harness is DPI-aware and the 1920x1440 client fits with its top at y=60, so nothing
+    was resized.
+  - *Runs on JDK 25 + Fast Rendering 1.0.3 + Prepatcher 0.18.9 with the RC9 table (63 patches on 41 classes every time):*
+    - WLVAN-A, the probe alone: Fatal at load. The probe's mission icon, vanilla art that is never committed, was missing
+      from White_Legion's probe release. It was copied from the core as `install_release` does.
+    - WLVAN-B, the probe alone: LIVE_DONE.
+    - ZORGBF11-LIVE, Zorg V18+bf.11 (below): LIVE_DONE, report PASS. Its save holds ring bands under `zorg_rings`,
+      `zorg_rings_module` and `zorg_rings_ships`, and none under `rings2`-`rings4`. Recorded LIVE_VALIDATED on White_Legion,
+      after the group was re-staged as launched. The workspace was synced to Test1 (970 files, hash-checked), where
+      `archive --refresh` archived it. That needed one `audit-explain` for `settings.json`, the three keys, checked against
+      the bf.10 copy. bf.10 moved to `Done/_replaced-2026-11-27/`.
+    - UAF084C1-LIVE, UAF 0.8.4c1 without Nexerelin: LIVE_DONE, two combat rounds. Its 12 probe acceptances for 0.8.4c were
+      carried: same subjects, files unchanged, both rulings quoted. `record --accept` then stopped on four class-sweep FAILs:
+      `data.groundbattles.uaf_*` extend Nexerelin's `AbilityPlugin`. They load when Nexerelin is present (the J28 batch with
+      Nexerelin has no UAF class-sweep FAIL), so they are setup-dependent. *This waits for the owner.*
+    - *A slip, undone:* while listing those FAILs, `record` was run again without `--accept`, and it marked the workspace
+      LIVE_VALIDATED without the acceptance checks. That section was removed from `REVIVAL_REPORT.md` the same minute; a
+      copy is kept. The workspace reads READY_FOR_LIVE_TEST and was synced to Test1 in that state.
+  - *J28 runs:* see 98.21.
+  - *Synced to Test1:* the two workspaces, as above, each earlier Test1 copy moved to `In operation/_aside-20261127/`;
+    every run file of the day in `bridgeforge-state/wl-live-20261127/` (104 files, hash-checked); and Zorg's changelog
+    fragments, by this PR.
+  - *Zorg V18+bf.11* (owner: "revive zorg then give zorg a different, more specific texture key for its rings inside of
+    settings.json"):
+    - Ironclads also registers `misc` `rings2` (its value is vanilla `rings_ice0`), so with both enabled one mod's ring bands
+      took the other's texture.
+    - `settings.json` now registers `zorg_rings`, `zorg_rings_module` and `zorg_rings_ships`.
+    - `ZorgGen.class` has no source and names the keys only as three String constants before `addRingBand`. Those
+      constant-pool entries were rewritten in place; `javap` before and after differs only in those strings.
+    - Retargeted to RC9. The owner accepted `procgen-call-argument-suspect` as authored ("yes accept"): the author's corona
+      -10000 and radius 0, live-validated in bf.10.
+    - Not tested: with Ironclads enabled, and saves made before bf.11. Their ring bands keep the old keys, because
+      `RingBandAPI` has no setter for a band's key.
+- 98.23 **Findings of the White_Legion day, and the owner's ruling.** Owner: "Move 93.3 to standard rather than park it. ...
+  The rest can be added but unless you deem it beneficial we can defer for when G5 starts." Advisor-recommended now (a-g),
+  the rest deferred to G5:
+  - (a) The harness changes the owner's `continue` preference (the last save) to the rig's save on every run. 93.28 restores
+    only what it pins, so snapshot every value except the licence key, and restore them.
+  - (b) A probe installed on a fresh machine lacks the mission icon (WLVAN-A's Fatal). Installing the probe should copy it
+    from the rig's core.
+  - (c) No clean vanilla proof run: `rig-up` needs a workspace mod, and an earlier `rig-up`'s recorded target refused the
+    next run (WLJ28VAN-A). Add `rig-up --vanilla`.
+  - (d) A re-intaked upstream version loses its probe acceptances. A carry command would bring the baseline and the probe
+    acceptances from the earlier workspace, for byte-identical files only, with the owner's ruling quoted.
+  - (e) After `bump-version`, `revive --draft-report` refused to replace the old report. It should keep a copy and redraft.
+    `bump-version` should also move a name's `[BF rN]` tag.
+  - (f) 98.20's visibility check.
+  - (g) Live runs on White_Legion in the `live-run` skill: the local gate (ignoring VS Code's java), the preference snapshot
+    and restore, and rig-doctor after each run.
+  - *Deferred to G5:*
+    - a probe check that every ring band and every graphics key resolves to its mod's own file;
+    - a static check for graphics keys two mods share;
+    - a bytecode string-constant rule kind;
+    - workspace bundles (93.18);
+    - `--client-top auto`;
+    - a per-launcher check that the log reaches the console;
+    - a progress-aware combat-start wait with faster Play retries. Estimating the time from the batch's size would not have
+      caught the J28 stall: its loading took seconds., re-queued without gates (owner 2026-11-17: "Park S4. Stop treating S2 and S3 as gates.
 Check S series implementation plan and if applicable add remaining items to roadmap queue").**
 **Approved; queued after items 95 and 96.** From docs/S_SERIES_IMPLEMENTATION_PLAN.md's "what remains" table (status check
 2026-10-26). Each is now an ordinary item: no S-series acceptance waits on it, and it waits on nothing in the S series.
@@ -3986,6 +4079,9 @@ fixes of 93.28. 93.26-93.35 are that day's findings.
   the folders and junction, write launchers, record the core's build in `rig_up_state.json`, never touch an existing rig.
   **Owner 2026-11-22:** parked ("For everything else I will follow your recommendations."): one working rig; parked until a
   new machine or game build.
+  **Owner 2026-11-27: "Move 93.3 to standard rather than park it."** Queued again. A second rig was built by hand that day,
+  White_Legion's `_rig-0985a`: libraries hash-checked against Test1's, the JDK copied with a manifest, the launchers copied,
+  Mikohime set up by `setup_j28_miko.py`, and rig-doctor's baselines written. That is the command's specification.
 - 93.4 **Every rig states its build and refuses the wrong one.** Test1's `_rig` pointed at RC8 while the target was 0.98.5a, and
   `C:\Games\Starsector-0.98.5a-RC3` turned out to be RC3 (92.40). `rig-doctor`, `probe-group install|smoke|live` print the build
   the rig's core reports and refuse when it is not the target build (override with a flag and a reason).
