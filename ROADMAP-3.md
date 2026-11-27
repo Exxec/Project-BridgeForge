@@ -321,6 +321,48 @@ Found during 98.4's runs (2026-11-26), queued the same way:
     the scripts. Nothing is on Test1 yet.
   - *For the owner:* whether to accept the tie-break, and which jar the RC9 rig runs (the stock one loads the wrong
     table there).
+  **Owner 2026-11-26 (after "Live testing open"): "RC9 jar, proof run first", tie-break accepted.**
+  - *Stock 0.18.9 on RC9, live:* not fail-open. RC9NC-LIVE4 (22:03; a leftover idle gate launched it during the pause)
+    loaded the Linux RC8 table and applied `rulesLiteralParser` to `campaign.rules.Rules`. The game died at start-up with
+    `NoSuchMethodError ScriptStore.Ó00000(String)`. Never recorded.
+  - *The swap:* the rig jar is installed on Test1's `_rig-0985a`, and the stock jar and its old log are kept in
+    `_addons\prepatcher-0.18.9-stock-agent\`.
+  - *The proof run, RC9PP-PROOF1* (vanilla + probe, FR + the rig jar, behind the idle gate with the recorder): LIVE_DONE.
+    - Prepatcher's log: 120 lines, all INFO; 63 patches applied to 40 classes, obfuscated ones among them; no warning or
+      error.
+    - The game's log: no Fatal or linkage error. Its four ERROR lines also appear in earlier RC9 runs without a working
+      Prepatcher.
+    - This meets the Done criterion above. Diagnostic, never recorded.
+
+Found during the runs of 2026-11-26 evening, and the owner's go-ahead the same night ("Queue and implement in your preferred
+order then continue live testing followed by more roadmap work based on your recommended order"). Order: 98.16, 98.17,
+98.15, then the machine-local `live-run` skill, 98.18, 98.13, 98.19, and the `prepatcher-table` skill.
+- 98.15 (S) **RC8-25's LunaLib rule names one GraphicsLib version.** `probe_group.lunalib_rule` enables LunaLib by itself
+  only when GraphicsLib's version starts with `1.12.1`. The rig now has GraphicsLib 1.12.3, whose `ShaderLib.init` still
+  needs `lunalib.lunaSettings.LunaSettingsListener`. RC9NC-LIVE5 (Neutrino, LunaLib not enabled) died at start-up with that
+  `NoClassDefFoundError`, from `NCModPlugin.onApplicationLoad`. *Fix:* decide from GraphicsLib's listed jars, whether they
+  reference `lunalib/lunaSettings/`, not from the version.
+- 98.16 (S) **A pause the code enforces.** The owner paused live testing at about 20:05, but an idle gate already in the
+  background kept polling, and launched RC9NC-LIVE4 at 22:03 when Test1 went idle. *Fix:* `bridgeforge live pause [--reason]`
+  and `live resume` keep a flag in `bridgeforge-state/`. `probe-group live`, `smoke`, `live-queue` and `duel`, and the
+  save-reload run, refuse to start while it is set, so a stray gate cannot launch anything.
+- 98.17 (S) **`rig-doctor` checks Prepatcher against the rig's build.** Stock 0.18.9 picks a table by
+  `CombatEngine.getResults()`'s return type, and on Windows RC9 that is the Linux RC8 table (RC9NC-LIVE4 above). *Fix:*
+  `rig-doctor` reads the agent jar's tables and the rig core's `CombatEngine` offline. It says which table the agent will
+  load, and fails when that table does not describe the core: one or more of the classes the table maps must be missing
+  from the core. Each run's manifest also records the agent jar's SHA-256.
+- 98.18 (S) **Every live result carries a Prepatcher summary:** patches applied, warnings, errors, rollbacks and the agent
+  version, read from `mods/StarsectorPrepatcher/logs/prepatcher.log` for the run's time window. The proof run above needed
+  that check by hand.
+- 98.19 (S) **`findings-diff`: one check over `Done/`, old code against new.** `findings-diff A.json B.json` compares two
+  runs of `finding-stats`-style per-archive finding lists and prints what was dropped and what appeared, per archive. The
+  `bridgeforge-pr` skill runs it for any change to a scanner check. 98.8's hand-made sweep (53 findings become 20, nothing
+  new) is the model.
+- *Machine-local skills* (each machine's `~/.claude/skills`, mirrored by `memory-mirror`, not this repository):
+  - `live-run`: the bounded idle gate, the input recorder, the run `.cmd` generator, the post-run checks and the pause
+    procedure;
+  - `prepatcher-table`: rebuild Prepatcher's name table and rig jar for a new game build, with the scored control, the
+    needed-set check, Prepatcher's own test and the proof run.
 
 **97. The S series' remaining work, re-queued without gates (owner 2026-11-17: "Park S4. Stop treating S2 and S3 as gates.
 Check S series implementation plan and if applicable add remaining items to roadmap queue").**
