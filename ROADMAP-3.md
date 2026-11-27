@@ -245,6 +245,7 @@ Found during 98.4's runs (2026-11-26), queued the same way:
     - `tests/test_live_run.py` `test_a_menu_that_reads_with_extra_bands_is_not_clicked_and_the_run_stops`;
     - `tests/test_save_fingerprint.py` `test_continue_on_a_misread_or_save_less_menu_clicks_nothing`;
     - `tests/test_duel_run.py` `test_a_misread_main_menu_plays_no_duel`.
+  - *Mutation check:* 11 mutants, all caught. *Full suite:* 3583 tests, OK (skipped=13); hermeticity PASS. Not yet run live.
   - *Still open:*
     - confirming the mission list is up before the row click (`screen_read.list_rows` reads the list's thumbnails; whether
       the Load Game screen reads differently needs a screenshot of each, which the next refusal will give);
