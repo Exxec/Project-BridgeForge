@@ -562,7 +562,7 @@ order then continue live testing followed by more roadmap work based on your rec
     match, the canonical build, a shipped table the detector does not name, the four cases where the detector throws, a
     jar without the detector and a core without CombatEngine, the first of two rows, no agent, `rig-doctor` running it,
     the manifest's hash, and an older manifest without the key.
-  - *Mutation check:* 9 mutants through `mutate_batch.py`, all caught (first version); the review fixes have their own batch.
+  - *Mutation check:* 9 mutants through `mutate_batch.py`, all caught (first version); the review fixes, 11 more, all caught.
 - 98.18 (S) **Every live result carries a Prepatcher summary:** patches applied, warnings, errors, rollbacks and the agent
   version, read from `mods/StarsectorPrepatcher/logs/prepatcher.log` for the run's time window. The proof run above needed
   that check by hand.
