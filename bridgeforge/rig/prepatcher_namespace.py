@@ -6,12 +6,19 @@ whose row maps the canonical type to that native type. On Windows 0.98.5a-RC9 th
 0.98.5a-RC8 table (RC9 returns `combat/B/D`, that table's native name). In RC9NC-LIVE4 (2026-11-26) it then rewrote
 `campaign.rules.Rules` with a method name RC9 lacks, and the game died at start-up with NoSuchMethodError.
 
-This replays the detection: the tables the detector names (string constants of its class), the getResults match, and the
-`getCombatMap()` tie-break when the detector carries one (the rig jar of 98.14 does). Then it checks that the chosen table
-describes the core: every class it maps must exist there.
+This replays the detection: the tables the detector lists (the table ids among its class's string constants; in both real
+jars they are exactly the shipped tables plus the canonical id), the getResults match, and the `getCombatMap()` tie-break when
+the detector carries one (the rig jar of 98.14 does). Where the real detector throws, the replay says so: a listed table the
+jar lacks, a listed table with no getResults row, a tied table with no getCombatMap row, or a CombatEngine with two
+no-argument methods of one name (review, 2026-11-27; the agent then fails open and the game runs unpatched). Then it checks
+that the chosen table describes the core: every class it maps must exist there. It checks class names only, not the
+members the table also maps; between the real tables and cores that is enough to tell the right table from a wrong one.
+
+It reads the agent jar at its usual place in the rig, not the `-javaagent` a launcher names.
 """
 from __future__ import annotations
 
+import re
 import zipfile
 from pathlib import Path
 
@@ -24,39 +31,64 @@ ENGINE = "com/fs/starfarer/combat/CombatEngine.class"
 CANONICAL_RESULT = "com/fs/starfarer/combat/Object/String"
 CANONICAL_COMBAT_MAP = "com/fs/starfarer/combat/A/B"
 IDENTITY = "windows-0.98a-RC8"  # the canonical namespace: no table
+TABLE_ID = re.compile(r"(?:windows|linux|mac|macos)-[0-9][0-9A-Za-z.]*-RC[0-9]+")
 CORE_JARS = ("starfarer_obf.jar", "fs.common_obf.jar", "fs.sound_obf.jar", "starfarer.api.jar")
 SHOWN = 5  # missing class names quoted in a FAIL
 
 
-def _tables(agent: zipfile.ZipFile) -> tuple[dict[str, dict[str, str]], bool]:
-    """({table id: {canonical class: native class}} for the tables the detector names, whether it breaks ties)."""
-    detector = read_class(agent, DETECTOR) or b""
-    tables: dict[str, dict[str, str]] = {}
-    for entry in agent.namelist():
-        if not (entry.startswith(TABLE_PREFIX) and entry.endswith(".tsv")):
+class AgentUnreadable(ValueError):
+    """The agent jar has no detector this replay can read."""
+
+
+def _detector(agent: zipfile.ZipFile) -> tuple[set[str], bool]:
+    """(the table ids the detector lists, whether it breaks ties with getCombatMap)."""
+    from bridgeforge.scan.scan_classfile import _parse_class_file
+
+    if DETECTOR not in agent.namelist():
+        raise AgentUnreadable(f"the agent jar has no {DETECTOR}")
+    info = _parse_class_file(read_class(agent, DETECTOR) or b"")
+    if info is None:
+        raise AgentUnreadable(f"{DETECTOR} is not a readable class file")
+    listed = {text for text in info.string_constants if TABLE_ID.fullmatch(text)} - {IDENTITY}
+    return listed, "getCombatMap" in info.utf8_values
+
+
+def _rows(text: str) -> dict[str, str]:
+    """A table's class rows. As the agent reads them: the native name is the rest of the line, and the first row wins."""
+    rows: dict[str, str] = {}
+    for line in text.splitlines():
+        if line.startswith("C\t"):
+            parts = line.split("\t", 2)
+            if len(parts) == 3:
+                rows.setdefault(parts[1], parts[2])
+    return rows
+
+
+def _tables(agent: zipfile.ZipFile) -> tuple[dict[str, dict[str, str]], list[str], bool]:
+    """({table id: {canonical class: native class}} for the listed tables the jar ships, the listed ids it lacks, tie-break)."""
+    listed, tie_break = _detector(agent)
+    names = set(agent.namelist())
+    tables, absent = {}, []
+    for table_id in sorted(listed):
+        entry = f"{TABLE_PREFIX}{table_id}.tsv"
+        if entry not in names:
+            absent.append(table_id)
             continue
-        table_id = entry[len(TABLE_PREFIX):-len(".tsv")]
-        if table_id.encode("utf-8") not in detector:
-            continue  # shipped, but not in the detector's TABLES list
-        rows = {}
-        for line in read_limited(agent, entry).decode("utf-8", "replace").splitlines():
-            if line.startswith("C\t"):
-                parts = line.split("\t")
-                if len(parts) >= 3:
-                    rows[parts[1]] = parts[2]
-        tables[table_id] = rows
-    return tables, b"getCombatMap" in detector
+        tables[table_id] = _rows(read_limited(agent, entry).decode("utf-8", "replace"))
+    return tables, absent, tie_break
 
 
-def _engine_getters(core: Path) -> dict[str, str]:
-    """{method name: descriptor} of CombatEngine's no-argument methods (from the core's starfarer_obf.jar)."""
+def _engine_getters(core: Path) -> dict[str, list[str]]:
+    """{method name: [descriptor, ...]} of CombatEngine's no-argument methods (from the core's starfarer_obf.jar)."""
     from bridgeforge.scan.scan_classfile import _parse_class_file
 
     with zipfile.ZipFile(core / "starfarer_obf.jar") as jar:
-        info = _parse_class_file(read_class(jar, ENGINE) or b"")
-    if info is None:
-        return {}
-    return {name: descriptor for name, descriptor, _public in info.methods if descriptor.startswith("()")}
+        info = _parse_class_file(read_class(jar, ENGINE) or b"") if ENGINE in jar.namelist() else None
+    getters: dict[str, list[str]] = {}
+    for name, descriptor, _public in info.methods if info is not None else []:
+        if descriptor.startswith("()"):
+            getters.setdefault(name, []).append(descriptor)
+    return getters
 
 
 def _core_classes(core: Path) -> set[str]:
@@ -68,34 +100,53 @@ def _core_classes(core: Path) -> set[str]:
     return names
 
 
+def _throws(tables: dict[str, dict[str, str]], absent: list[str], getters: dict[str, list[str]]) -> str | None:
+    """Why the real detector throws before it matches anything, or None."""
+    if absent:
+        return f"it lists table(s) {', '.join(absent)} that the agent jar lacks"
+    unmatched = [table_id for table_id, rows in sorted(tables.items()) if CANONICAL_RESULT not in rows]
+    if unmatched:
+        return f"table(s) {', '.join(unmatched)} have no row for {CANONICAL_RESULT}"
+    doubled = [name for name in ("getResults", "getCombatMap") if len(getters.get(name, [])) > 1]
+    if doubled:
+        return f"CombatEngine has more than one no-argument {' and '.join(doubled)}"
+    return None
+
+
 def predicted_table(agent_jar: Path, core: Path) -> dict:
-    """{"matches": [...], "tie_break": bool, "table": the one the agent will load or None, "missing": [...], "mapped": n}."""
+    """{"matches", "tie_break", "table" (the one the agent will load, or None), "missing", "mapped", "get_results", "throws"}."""
     with zipfile.ZipFile(agent_jar) as agent:
-        tables, tie_break = _tables(agent)
+        tables, absent, tie_break = _tables(agent)
     getters = _engine_getters(core)
-    result = getters.get("getResults")
+    result = (getters.get("getResults") or [None])[0]
+    found = {"matches": [], "tie_break": tie_break, "table": None, "missing": [], "mapped": 0, "get_results": result,
+             "throws": _throws(tables, absent, getters)}
+    if found["throws"]:
+        return found
     matches = [IDENTITY] if result == f"()L{CANONICAL_RESULT};" else []
-    matches += [table_id for table_id, rows in sorted(tables.items()) if rows.get(CANONICAL_RESULT) and result == f"()L{rows[CANONICAL_RESULT]};"]
+    matches += [table_id for table_id, rows in sorted(tables.items()) if result == f"()L{rows[CANONICAL_RESULT]};"]
     if len(matches) > 1 and tie_break:
-        combat = getters.get("getCombatMap")
+        lacking = [table_id for table_id in matches if table_id != IDENTITY and CANONICAL_COMBAT_MAP not in tables[table_id]]
+        if lacking:
+            found.update(matches=matches, throws=f"tied table(s) {', '.join(lacking)} have no row for {CANONICAL_COMBAT_MAP}")
+            return found
+        combat = (getters.get("getCombatMap") or [None])[0]
         matches = [table_id for table_id in matches
-                   if combat == f"()L{CANONICAL_COMBAT_MAP if table_id == IDENTITY else tables[table_id].get(CANONICAL_COMBAT_MAP)};"]
-    chosen = matches[0] if len(matches) == 1 else None
-    missing: list[str] = []
-    mapped = 0
-    if chosen is not None and chosen != IDENTITY:
+                   if combat == f"()L{CANONICAL_COMBAT_MAP if table_id == IDENTITY else tables[table_id][CANONICAL_COMBAT_MAP]};"]
+    found["matches"] = matches
+    found["table"] = matches[0] if len(matches) == 1 else None
+    if found["table"] is not None and found["table"] != IDENTITY:
         classes = _core_classes(core)
-        natives = sorted(set(tables[chosen].values()))
-        mapped = len(natives)
-        missing = [name for name in natives if name not in classes]
-    return {"matches": matches, "tie_break": tie_break, "table": chosen, "missing": missing, "mapped": mapped,
-            "get_results": result}
+        natives = sorted(set(tables[found["table"]].values()))
+        found["mapped"] = len(natives)
+        found["missing"] = [name for name in natives if name not in classes]
+    return found
 
 
 def check(runtime_dir: Path) -> dict[str, object]:
-    """rig-doctor's `prepatcher_namespace` check: PASS when the agent will load a table that describes the core (or the core is
-    the canonical build), FAIL when the table it will load names classes the core lacks, WARN when it matches no table or
-    several (it then fails open and the game runs unpatched), SKIPPED without the agent."""
+    """rig-doctor's `prepatcher_namespace` check: PASS when the agent will load a table whose classes all exist in the core (or
+    the core is the canonical build), FAIL when the table it will load names classes the core lacks, WARN when its detector
+    throws or matches no table or several (the agent then fails open and the game runs unpatched), SKIPPED without the agent."""
     def result(status: str, detail: str) -> dict[str, object]:
         return {"name": "prepatcher_namespace", "status": status, "detail": detail}
 
@@ -107,8 +158,11 @@ def check(runtime_dir: Path) -> dict[str, object]:
         return result("WARN", "the rig's core has no starfarer_obf.jar to read CombatEngine from")
     try:
         found = predicted_table(agent, core)
-    except (OSError, zipfile.BadZipFile, ValueError) as exc:
+    except (OSError, zipfile.BadZipFile, ValueError, KeyError) as exc:  # AgentUnreadable is a ValueError
         return result("WARN", f"could not read the agent or the core: {exc}")
+    if found["throws"]:
+        return result("WARN", f"the agent's detector would throw: {found['throws']}. The agent then fails open and the game runs "
+                              "unpatched")
     if found["table"] is None:
         what = "no table" if not found["matches"] else f"{len(found['matches'])} tables ({', '.join(found['matches'])})"
         return result("WARN", f"the agent matches {what} for CombatEngine.getResults() {found['get_results']}: it fails open and the "
@@ -118,6 +172,8 @@ def check(runtime_dir: Path) -> dict[str, object]:
     if found["missing"]:
         shown = ", ".join(found["missing"][:SHOWN]) + (" ..." if len(found["missing"]) > SHOWN else "")
         return result("FAIL", f"the agent will load table {found['table']}, which names {len(found['missing'])} of its {found['mapped']} "
-                              f"classes this core lacks ({shown}): its patches would call members that do not exist (RC9NC-LIVE4 "
-                              "died at start-up this way). Install an agent with this build's table (ROADMAP-3 98.14).")
-    return result("PASS", f"the agent will load table {found['table']}; all {found['mapped']} classes it maps exist in the core")
+                              f"classes this core lacks ({shown}): it is another build's table, so its patches would target the "
+                              "wrong classes and members (RC9NC-LIVE4 died at start-up this way). Install an agent with this "
+                              "build's table (ROADMAP-3 98.14).")
+    return result("PASS", f"the agent will load table {found['table']}; all {found['mapped']} classes it maps exist in the core "
+                          "(the members it maps are not checked)")

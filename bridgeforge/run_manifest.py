@@ -366,6 +366,11 @@ def staged_drift(rig: Path, manifest: dict, launcher: Path | None = None) -> lis
     for key, value in runtime_hashes(rig, chosen).items():
         if key == "java_executable":
             continue
+        if key not in manifest["runtime"]:
+            # A key added after the manifest was written (prepatcher_agent_sha256, 98.17): an older run never recorded it, and
+            # reading it as drift refused every such run's record (review, 2026-11-27). Current manifests always carry each key,
+            # None when its file is absent, so a file that appears after launch is still drift.
+            continue
         if value != manifest["runtime"].get(key):
             problems.append(f"runtime configuration {key} changed since launch")
     return problems
