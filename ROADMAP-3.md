@@ -803,6 +803,18 @@ order then continue live testing followed by more roadmap work based on your rec
   the rest deferred to G5:
   - (a) The harness changes the owner's `continue` preference (the last save) to the rig's save on every run. 93.28 restores
     only what it pins, so snapshot every value except the licence key, and restore them.
+    **Done 2026-11-27.**
+    - `rig_prefs.pref_names` lists the value names with `RegEnumValueW` and no data buffer, so no value is read.
+      `winreg.EnumValue` would return each value's data, the licence key's too. The White_Legion run script of the same day
+      used it: the key was loaded into memory, never printed, written or compared. That script was corrected before any
+      further run.
+    - `owner_prefs` reads every other value by name.
+    - `pinned_launcher_prefs` gives back any value the run changed, added or removed, besides the pinned ones, also after an
+      error. The licence key is never read, compared or written.
+    - Tests: `tests/test_rig_prefs.py`:
+      - `OwnerPrefsTests`: the run's `continue`, an added and a removed value come back; the licence key is never read or
+        written; the same after an error;
+      - `PrefNamesTests`: the names of a real test key are listed while value reads are made to fail.
   - (b) A probe installed on a fresh machine lacks the mission icon (WLVAN-A's Fatal). Installing the probe should copy it
     from the rig's core.
   - (c) No clean vanilla proof run: `rig-up` needs a workspace mod, and an earlier `rig-up`'s recorded target refused the

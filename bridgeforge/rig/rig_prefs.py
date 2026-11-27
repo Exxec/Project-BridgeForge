@@ -44,6 +44,37 @@ def has_pref(name: str, key_path: str = PREFS_KEY) -> bool | None:
         return False
 
 
+def pref_names(key_path: str = PREFS_KEY) -> list[str] | None:
+    """The value names under the key, listed without any value's data (`RegEnumValueW` with no data buffer): the licence key
+    shares this key and is never read (owner rule 2026-11-17); `winreg.EnumValue` would return its data. None off Windows,
+    [] without the key. `key_path` (under HKEY_CURRENT_USER) is for tests."""
+    if sys.platform != "win32":
+        return None
+    import ctypes
+    import winreg
+
+    enum = ctypes.windll.advapi32.RegEnumValueW
+    enum.argtypes = [ctypes.c_void_p, ctypes.c_ulong, ctypes.c_wchar_p, ctypes.POINTER(ctypes.c_ulong), ctypes.c_void_p,
+                     ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p]
+    enum.restype = ctypes.c_long
+    names: list[str] = []
+    try:
+        with winreg.OpenKey(winreg.HKEY_CURRENT_USER, key_path) as key:
+            while True:
+                buffer, size = ctypes.create_unicode_buffer(16384), ctypes.c_ulong(16384)  # a value name has at most 16383 characters
+                if enum(key.handle, len(names), buffer, ctypes.byref(size), None, None, None, None) != 0:
+                    break
+                names.append(buffer.value)
+    except FileNotFoundError:
+        return []
+    return names
+
+
+def owner_prefs() -> dict[str, str | None]:
+    """Every value of the shared preferences except the licence key, each read by name (ROADMAP-3 98.23 a)."""
+    return read_prefs(tuple(name for name in pref_names() or [] if name.lower() != LICENCE_KEY.lower()))
+
+
 def read_prefs(names=tuple(PINNED)) -> dict[str, str | None]:
     if sys.platform != "win32":
         return {}
@@ -80,11 +111,22 @@ def write_prefs(values: dict[str, str | None]) -> None:
 
 @contextlib.contextmanager
 def pinned_launcher_prefs(values: dict[str, str] | None = None):
-    """Set the rig's launcher values for the run and restore the owner's exactly (including absent ones), even on error."""
+    """Set the rig's launcher values for the run and restore the owner's exactly (including absent ones), even on error.
+
+    The game also writes other values into this store, which every install on the machine shares: on White_Legion, the owner's
+    own desktop, each run moved `continue` (the owner's last save) to the rig's save (2026-11-27, ROADMAP-3 98.23 a). So every
+    other value is taken before the run and any the run changed, added or removed is given back. The licence key is never
+    read, compared or written."""
     wanted = dict(values or PINNED)
     before = read_prefs(tuple(wanted))
+    others = owner_prefs()
     write_prefs(wanted)
     try:
         yield before
     finally:
         write_prefs(before)
+        after = owner_prefs()
+        changed = {name: others.get(name) for name in sorted(set(others) | set(after))
+                   if name not in wanted and name.lower() != LICENCE_KEY.lower() and others.get(name) != after.get(name)}
+        if changed:
+            write_prefs(changed)
