@@ -12,6 +12,7 @@ from bridgeforge.locks import who_locks
 from bridgeforge.project_board import layout_findings
 from bridgeforge.probe.probe_mod_build import RELEASE_RELATIVE
 from bridgeforge.reference_rigs import verify_reference_rig_manifest
+from bridgeforge.rig.prepatcher_namespace import check as prepatcher_namespace_check
 from bridgeforge.scan.scanner import _base_game_version, _load_lenient_json_file
 from bridgeforge.zipsafe import MAX_CLASS_BYTES, read_limited
 
@@ -575,6 +576,7 @@ def rig_doctor(
             _check_real_install_saves_untouched(repo_root, real_install, saves_baseline, write_saves_baseline),
             _check_core_integrity(runtime_dir, repo_root, core_baseline, write_core_baseline),
             _check_launcher_prefs(),
+            prepatcher_namespace_check(runtime_dir),  # the table the Prepatcher agent will load fits this core (98.17)
         ]
 
     checks.append(_check_environment(runtime_dir, repo_root))

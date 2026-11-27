@@ -262,9 +262,12 @@ def runtime_hashes(rig: Path, launcher: Path | None) -> dict:
     enabled = rig / "mods" / "enabled_mods.json"
     config = rig / CONFIG_RELATIVE
     files, java = _launcher_files(rig, launcher)
+    # Which Prepatcher agent ran: the stock 0.18.9 jar crashed RC9 at start-up, the rig jar of 98.14 does not (98.17).
+    agent = rig / "mods" / "StarsectorPrepatcher" / "agent" / "StarsectorPrepatcherAgent.jar"
     return {"enabled_mods_sha256": _sha256_file(enabled) if enabled.is_file() else None,
             "probe_config_sha256": _sha256_file(config) if config.is_file() else None,
-            "launcher_files": files, "java_executable": java, "java_version": _java_version(rig, launcher, java)}
+            "launcher_files": files, "java_executable": java, "java_version": _java_version(rig, launcher, java),
+            "prepatcher_agent_sha256": _sha256_file(agent) if agent.is_file() else None}
 
 
 @_rig_hash_cache
@@ -362,6 +365,11 @@ def staged_drift(rig: Path, manifest: dict, launcher: Path | None = None) -> lis
     chosen = launcher or (rig / launcher_names[0] if launcher_names else None)
     for key, value in runtime_hashes(rig, chosen).items():
         if key == "java_executable":
+            continue
+        if key not in manifest["runtime"]:
+            # A key added after the manifest was written (prepatcher_agent_sha256, 98.17): an older run never recorded it, and
+            # reading it as drift refused every such run's record (review, 2026-11-27). Current manifests always carry each key,
+            # None when its file is absent, so a file that appears after launch is still drift.
             continue
         if value != manifest["runtime"].get(key):
             problems.append(f"runtime configuration {key} changed since launch")

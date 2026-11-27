@@ -528,6 +528,41 @@ order then continue live testing followed by more roadmap work based on your rec
   `rig-doctor` reads the agent jar's tables and the rig core's `CombatEngine` offline. It says which table the agent will
   load, and fails when that table does not describe the core: one or more of the classes the table maps must be missing
   from the core. Each run's manifest also records the agent jar's SHA-256.
+  **Done 2026-11-26.**
+  - *The check:* `bridgeforge/rig/prepatcher_namespace.py`; `rig-doctor` runs it as `prepatcher_namespace`. It replays the
+    agent's detection offline:
+    - the tables are those the detector lists: the table ids among its class's string constants (in both real jars,
+      exactly the shipped `.tsv` files plus the canonical id);
+    - a table matches when it maps canonical `combat/Object/String` to `CombatEngine.getResults()`'s type;
+    - a tie is broken by `getCombatMap()` only when the detector carries that tie-break (the rig jar of 98.14 does);
+    - a table's class rows are read as the agent reads them: the native name is the rest of the line, the first row wins.
+  - *Its verdicts:*
+    - PASS: the chosen table's classes all exist in the core's jars, or the core is the canonical build;
+    - FAIL: the chosen table names classes the core lacks: it is another build's table;
+    - WARN: the real detector would throw (a listed table the jar lacks, a listed table with no getResults row, a tied
+      table with no getCombatMap row, two no-argument methods of one name), or no table matches, or several do: the agent
+      fails open and the game runs unpatched. Also WARN: a jar without the detector, or a core without CombatEngine;
+    - SKIPPED: the rig has no agent.
+  - *The manifest:* `run_manifest.runtime_hashes` adds `prepatcher_agent_sha256`, so every run records which agent ran.
+    `staged_drift` skips a key a manifest does not have, so a run launched before this can still be recorded; current
+    manifests carry the key (None without a jar), so a jar added after launch is still drift.
+  - *What it does not check:* the member rows (M, F) of the table, and the `-javaagent` a launcher names (it reads the
+    jar at its usual place). A table with every member name wrong still passes. Between the real tables and cores the
+    class check is enough to tell the right table from a wrong one.
+  - *Acceptance against the real jars* (White_Legion):
+    - stock 0.18.9 on RC9 picks `linux-0.98.5a-RC8`, with 1304 of its 2962 classes missing: FAIL, the shape of
+      RC9NC-LIVE4;
+    - the rig jar on RC9 breaks the tie to `windows-0.98.5a-RC9`, with none missing: PASS;
+    - both jars pick their own table on RC8, and match nothing on RC3 (the agent fails open there, as seen with 0.18.8).
+    - The independent review ran the real `GameNamespaceDetector` from each jar on JDK 25 against RC9, 0.98.5a-RC8,
+      canonical RC8 and RC3: the replay agrees in all 8 pairings. It also found a crash on a jar without the detector,
+      PASS where the real detector throws (a listed table removed), and every pre-98.17 run reading as drifted. All three
+      are fixed, and the review's jars give WARN, WARN and no drift now (2026-11-27).
+  - *Tests:* `tests/test_prepatcher_namespace.py` (16): the stock-on-RC9 FAIL, the tie broken, a tie left unbroken, no
+    match, the canonical build, a shipped table the detector does not name, the four cases where the detector throws, a
+    jar without the detector and a core without CombatEngine, the first of two rows, no agent, `rig-doctor` running it,
+    the manifest's hash, and an older manifest without the key.
+  - *Mutation check:* 9 mutants through `mutate_batch.py`, all caught (first version); the review fixes, 11 more, all caught.
 - 98.18 (S) **Every live result carries a Prepatcher summary:** patches applied, warnings, errors, rollbacks and the agent
   version, read from `mods/StarsectorPrepatcher/logs/prepatcher.log` for the run's time window. The proof run above needed
   that check by hand.
