@@ -3967,6 +3967,28 @@ fixes of 93.28. 93.26-93.35 are that day's findings.
   `install 4` named Tania instead of KoC (2026-11-17). Keep the config, or its hash, with the run manifest and read that.
   **Closed 2026-11-19 (roadmap review): superseded by 95.4.**
   **Reopened 2026-11-23 (owner, roadmap reassessment): LIVE-001 is not fixed.** probe-group report still reads the rig's current probe config, not the run's own: `cmd_probe_group._probe_report` loads `<rig>/saves/common/<CONFIG_FILE>` (checked 2026-11-23). `live` and `record` bind the run manifest; `report` does not.
+  **Done 2026-11-27.**
+  - *The run keeps its config:* `run_manifest.prepare_run` writes a byte copy of the probe config each run starts with,
+    `logs/<run>.probe-config.data`, before the manifest, and refuses a config that changed after it was hashed (the
+    manifest's `probe_config_sha256` is the copy's hash). A repeat prepare of the same manifest writes a missing copy.
+  - *Report and record read it:* `probe-group report` and `probe-group record` judge a run through
+    `run_manifest.run_inputs`: the run's own config, and its enabled mod ids from the manifest (which `group_report` uses to
+    attribute mod-load failures and optional integrations), not the rig's current ones. The run id is the log's name, any
+    case of `.stdout.log`, so a reload's log finds the reload's copy. Both print, and put in their JSON, which config they
+    read.
+  - *Fallbacks:* a run from before this (no copy) reads the rig's current config only while its hash is still the one
+    recorded at launch; a log with no manifest reads the current config and says so. They refuse, naming the remedies
+    (`report --config FILE`, a re-install with the group's options, or a new run), when the run's config is gone, when the
+    run started with none, and when its manifest exists but cannot be trusted. `report --config FILE` judges with a given
+    config.
+  - *Seen again 2026-11-26:* the `live-run` skill's post-run report of RC9NC-LIVE6 (Neutrino) read Station Augments' group
+    and printed "PASS niko_stationAugments".
+  - *Review (2026-11-27):* `record` without `--accept` (the next step `live` prints) still judged with the current config
+    and, after the next install, wrote LIVE_VALIDATED into the next group's reports; the report read the current enabled
+    list; an untrusted manifest fell back silently; `--json` did not say which config; the copy could be missing after a
+    failure or a repeat prepare. All fixed. Not covered: the log is matched to its run by file name, and the mods' own
+    folders are read as they are now.
+  - *Tests:* `tests/test_run_config.py`. Mutation check: 13 mutants through `mutate_batch.py`, all caught.
 - 93.30 **Scenario testbed (owner design 2026-11-17).** Hidden mission factions whose fleets the code builds by hand (Tania's Blood
   Trail and Frost Fire: `createEmptyFleet` then `addFleetMember("tania_blood_stork_main_Death_Special")`, spawned by
   `tania_mission_unlocker_per_rep` at WELCOMING/FRIENDLY standing) cannot be exercised by `faction-fleet-gen`. Owner: "start a new

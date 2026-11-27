@@ -152,6 +152,8 @@ def add_parser(subcommands) -> None:
     group_report_cmd.add_argument("log", type=Path, help="the run's stdout log (bf-test launch) or the rig's starsector.log")
     group_report_cmd.add_argument("--rig", type=Path)
     group_report_cmd.add_argument("--queue", type=Path)
+    group_report_cmd.add_argument("--config", type=Path, metavar="FILE",
+                                  help="judge with this probe config instead of the run's own (which the run keeps beside its manifest, 93.29)")
     group_report_cmd.add_argument("--json", action="store_true")
 
 
@@ -409,12 +411,20 @@ def _probe_bisect(args: argparse.Namespace, queue: Path, rig: Path) -> dict | in
 
 def _probe_record(args: argparse.Namespace, queue: Path, rig: Path) -> dict | int:
     """`probe-group record`: its result, or an exit code when it stops early."""
-    from bridgeforge.probe.probe_config import CONFIG_FILE
     from bridgeforge.probe.probe_record import record_group
-    config = json.loads((rig / "saves" / "common" / CONFIG_FILE).read_text(encoding="utf-8"))
+    from bridgeforge.run_manifest import ManifestError, run_inputs
+
+    try:  # the run's own probe config and enabled list, not the next group's (93.29 review: it recorded the next group)
+        inputs = run_inputs(rig, args.test_id)
+        config = json.loads(inputs["config"].decode("utf-8"))
+    except (ManifestError, ValueError) as exc:
+        print(f"bridgeforge: {exc}", file=sys.stderr)
+        return 2
     result = record_group(rig / "logs" / f"{args.test_id}.stdout.log", config, queue, rig, test_id=args.test_id, archive=args.archive, refresh=args.refresh,
-                          accept=args.accept, note=args.note, observe_exit=args.observe_exit)
+                          accept=args.accept, note=args.note, observe_exit=args.observe_exit, enabled=inputs["enabled"])
+    result["probe_config_source"] = inputs["source"]
     if not args.json:
+        print(f"probe config: {inputs['source']}")
         if result.get("stopped"):
             print(f"STOPPED, not everything recorded: {result['stopped']}")
         print(f"Recorded LIVE_VALIDATED ({result['probe_version']}): {', '.join(result['recorded']) or 'none'}")
@@ -434,11 +444,23 @@ def _probe_record(args: argparse.Namespace, queue: Path, rig: Path) -> dict | in
 
 def _probe_report(args: argparse.Namespace, queue: Path, rig: Path) -> dict | int:
     """`probe-group report` (any other sub-command): its result."""
-    from bridgeforge.probe.probe_record import group_report
-    from bridgeforge.probe.probe_config import CONFIG_FILE
-    config = json.loads((rig / "saves" / "common" / CONFIG_FILE).read_text(encoding="utf-8"))
-    from bridgeforge.probe.probe_record import accepted_probe_findings
-    result = group_report(args.log, config, mods_dir=rig / "mods", accepted=accepted_probe_findings(queue, rig / "mods"))
+    from bridgeforge.probe.probe_record import accepted_probe_findings, group_report
+    from bridgeforge.run_manifest import ManifestError, run_id_of_log, run_inputs
+
+    try:  # the run's own probe config and enabled list, not whatever the rig holds now (93.29)
+        if getattr(args, "config", None) is not None:
+            inputs = {"config": Path(args.config).read_bytes(), "source": f"the config given with --config ({args.config})", "enabled": None}
+        else:
+            inputs = run_inputs(rig, run_id_of_log(args.log))
+        config = json.loads(inputs["config"].decode("utf-8"))
+    except (ManifestError, OSError, ValueError) as exc:
+        print(f"bridgeforge: {exc}", file=sys.stderr)
+        return 2
+    if not args.json:
+        print(f"probe config: {inputs['source']}")
+    result = group_report(args.log, config, mods_dir=rig / "mods", accepted=accepted_probe_findings(queue, rig / "mods"),
+                          enabled=inputs["enabled"])
+    result["probe_config_source"] = inputs["source"]
     if not args.json:
         print(f"FATAL={result['fatal']} MOD-ERROR={result['mod_errors']}; content-ids ran: {result['content_ids_ran']}")
         for mod_id, verdict in sorted(result["members"].items()):

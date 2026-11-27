@@ -133,7 +133,7 @@ def combat_undeployed(log_text: str, config: dict) -> dict | None:
 _MOD_LOAD_ERROR = re.compile(r"ModManager\s+-\s+Error loading mod from \[(?P<path>.+)\]\s*$")
 
 
-def mod_load_failures(log_text: str, mods_dir: Path | None) -> list[dict]:
+def mod_load_failures(log_text: str, mods_dir: Path | None, enabled: set[str] | None = None) -> list[dict]:
     """[{folder, mod_id (None when unknown), reason}] for each mod the game could not load. RC7 logs
     `ModManager - Error loading mod from [..\\mods\\<folder>]` and the reason on the next line, then plays on without it:
     P1B-CAR-20261120's gene carrier lacked `description` and the run, vanilla plus the probe, read PASS (2026-11-20). A mod
@@ -142,7 +142,7 @@ def mod_load_failures(log_text: str, mods_dir: Path | None) -> list[dict]:
     from bridgeforge.mod_files import read_mod_info
 
     lines, found = log_text.splitlines(), []
-    enabled = _enabled_mod_ids(mods_dir)
+    enabled = _enabled_mod_ids(mods_dir) if enabled is None else enabled  # a past run's own list, from its manifest (93.29)
     for i, line in enumerate(lines):
         match = _MOD_LOAD_ERROR.search(line)
         if not match:
@@ -159,7 +159,8 @@ def mod_load_failures(log_text: str, mods_dir: Path | None) -> list[dict]:
     return found
 
 
-def group_report(log: Path, config: dict, mods_dir: Path | None = None, accepted: dict[str, list[dict]] | None = None) -> dict:
+def group_report(log: Path, config: dict, mods_dir: Path | None = None, accepted: dict[str, list[dict]] | None = None,
+                 enabled: list[str] | None = None) -> dict:
     """One verdict per member: probe FAIL lines matched by the content id or faction they name, and crashes
     by the mod whose jar threw (log-triage attribution). Unmatched FAILs are reported for the group. `accepted` moves the
     named FAIL lines of a member to its `accepted` list (see accepted_probe_findings); they no longer fail it."""
@@ -173,7 +174,8 @@ def group_report(log: Path, config: dict, mods_dir: Path | None = None, accepted
                 owner.setdefault(item, mod_id)
     verdicts = {mod_id: {"failures": [], "crashes": []} for mod_id in members}
     unattributed, seen_content, filler_sides, optional_integrations, sweep_artefacts = [], False, [], [], []
-    enabled = _enabled_mod_ids(mods_dir)
+    # `enabled`: the run's own enabled ids (its manifest's, 93.29 review); without them, the rig's enabled_mods.json now
+    enabled = set(enabled) if enabled is not None else _enabled_mod_ids(mods_dir)
     log_text = Path(log).read_text(encoding="utf-8", errors="replace")
     for line in log_text.splitlines():
         match = _PROBE_LINE.search(line)
@@ -214,7 +216,7 @@ def group_report(log: Path, config: dict, mods_dir: Path | None = None, accepted
             continue
         (verdicts[mod_id]["failures"] if mod_id else unattributed).append(entry)
     # A member the game could not load fails, whatever else passed; another mod that did not load is the group's problem.
-    for failure in mod_load_failures(log_text, mods_dir):
+    for failure in mod_load_failures(log_text, mods_dir, enabled):
         entry = f"mod-load|{failure['folder']}|{failure['reason']}"
         (verdicts[failure["mod_id"]]["failures"] if failure["mod_id"] in verdicts else unattributed).append(entry)
     # 77.17: a shortfall between what the working copy defines and what the game loaded fails that member (excess is information).
@@ -314,7 +316,7 @@ def evaluate_member_scenarios(log: Path, workspaces: dict[str, Path]) -> dict[st
 def record_group(log: Path, config: dict, queue: Path, rig: Path, *, test_id: str, archive: bool = False,
                  done_dir: Path | None = None, policy_path: Path | None = None, today: str | None = None,
                  refresh: bool = False, accept: bool = False, note: str | None = None,
-                 observe_exit: bool = False) -> dict:
+                 observe_exit: bool = False, enabled: list[str] | None = None) -> dict:
     """After a group run: mark every PASS member LIVE_VALIDATED in its report; with `archive`, record the owner's
     standing local-only licence where none exists, archive it into Done/ and copy its zip to Done/'s top level
     (ROADMAP P15 item 31.1; replaces the session's record_group.py and shell loop)."""
@@ -326,7 +328,8 @@ def record_group(log: Path, config: dict, queue: Path, rig: Path, *, test_id: st
     from bridgeforge.release import apply_standing_licence
 
     today = today or date.today().isoformat()
-    report = group_report(log, config, mods_dir=Path(rig) / "mods", accepted=accepted_probe_findings(queue, Path(rig) / "mods"))
+    report = group_report(log, config, mods_dir=Path(rig) / "mods", accepted=accepted_probe_findings(queue, Path(rig) / "mods"),
+                          enabled=enabled)
     text = Path(log).read_text(encoding="utf-8", errors="replace")
     version = (re.search(r"BF-PROBE\|(\d+\.\d+\.\d+)\|", text) or [None, "?"])[1]
     workspaces = _workspaces_by_mod_id(queue, Path(rig) / "mods")
