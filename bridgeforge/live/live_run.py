@@ -703,10 +703,11 @@ def running_game(rig: Path, test_id: str, bat_name: str = "run-j25-direct.bat", 
     hands.alive = alive_and_click
     try:
         core_list = rig / "starsector-core" / "data" / "missions" / "mission_list.csv"
-        # 98.13: once a second, who has the desktop (no screenshot, no window title), from the launch to the end of the run.
-        from .input_recorder import recording
+        # 98.13: about once a second, who has the desktop (no screenshot, no window title), from the launch until the harness
+        # starts stopping the game (a natural exit's wait and the graceful close come after, in stop_game).
+        from .input_recorder import recording as record_desktop  # not this module's `recording`, the Hands wrapper
 
-        with recording(Path(f"{log}.input.csv"), lambda: game_pids(rig, process.pid)):
+        with record_desktop(Path(f"{log}.input.csv"), lambda: game_pids(rig, process.pid)):
             yield log, hands, (_mission_rows(str(core_list.parent.parent.parent)) or VANILLA_MISSION_ROWS)
     finally:
         try:

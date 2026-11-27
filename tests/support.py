@@ -15,6 +15,9 @@ os.environ.pop("BRIDGEFORGE_DATA_ROOT", None)
 # A machine where live testing is paused (bridgeforge-state/live-paused.json, ROADMAP-3 98.16) would refuse every fake game
 # the tests start; point the flag at a path in a fresh temporary folder instead, which no test creates unless it means to.
 os.environ["BRIDGEFORGE_LIVE_PAUSE_FILE"] = os.path.join(tempfile.mkdtemp(prefix="bf-suite-pause-"), "live-paused.json")
+# The input recorder (ROADMAP-3 98.13) samples the real desktop once a second around every fake game a test starts: keep it
+# off; its own tests pass a sampler explicitly, which the switch does not stop.
+os.environ["BRIDGEFORGE_INPUT_RECORDER"] = "off"
 
 # Registry guard (ROADMAP-3 96.5 C4, owner 2026-11-18). rig/rig_prefs.py writes HKCU\Software\JavaSoft\Prefs\com\fs\starfarer,
 # the key that also holds the Starsector licence key, and rig-doctor reads HKLM. Only each test's own patch kept them off
