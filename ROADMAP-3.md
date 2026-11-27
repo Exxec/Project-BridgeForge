@@ -272,6 +272,26 @@ Found during 98.4's runs (2026-11-26), queued the same way:
   - *Also:* the per-second input recorder used for 98.4 (cursor position, whether the game window is in front, the
     last-input tick; no screenshots or titles; kept with Station Augments' `scratch/rc9-remap/`) could become part of
     `probe-group live`. It shows whether a person touched the desktop during a run.
+- 98.14 (M) **StarsectorPrepatcher for RC9: build its name table ourselves, for the rig only.** Approved (owner 2026-11-26:
+  "Build an RC9 table ourselves", over asking the author or waiting). The licence is MIT plus the Commons Clause, so
+  modifying it for our own use is allowed; selling it is not.
+  - *Why it fails open on RC9:* Prepatcher 0.18.9 (2026-11-19, its last release; RC9 came 2026-11-25) writes its patches
+    against Windows 0.98a-RC8's obfuscated names and carries one table per other build translating them. It identifies the
+    build from `CombatEngine.getResults()`'s return type (`GameNamespaceDetector`), and RC9 matches no table. Missing names
+    fall back to themselves, so a partial table could patch the wrong class: the class map must be complete.
+  - *Measured* (read-only, 2026-11-26): the author's RC3 table, checked against the real RC3 jars, resolves 2961/2961
+    classes and over 99% of members, which validates the check. Against RC9, about half of the class names still exist,
+    and most of those were never obfuscated: RC9 is a fresh re-obfuscation of the 0.98.5a code (2962 classes).
+  - *Route:* match RC3 -> RC9 (both 0.98.5a, full bytecode on both sides; Test1 has RC3), then compose with the author's
+    canonical -> RC3 table (Prepatcher v0.18.8).
+    - Score the matcher first where truth exists: canonical -> RC3 against the author's table.
+    - Anchors: string constants and unobfuscated names; the Station Augments port's matching tools are a start.
+  - *Refuse to ship unless:*
+    - the class map is complete and one-to-one;
+    - every game name the built agent references is mapped and exists in RC9 with the mapped descriptor;
+    - Prepatcher's own namespace tests pass (read its build scripts before running them).
+  - *Deliverable:* a rig-only agent jar kept beside the stock 0.18.9 one, recorded as built, not proven. *Done* when a rig
+    run's Prepatcher log shows its patches applied, which waits for live testing to resume.
 
 **97. The S series' remaining work, re-queued without gates (owner 2026-11-17: "Park S4. Stop treating S2 and S3 as gates.
 Check S series implementation plan and if applicable add remaining items to roadmap queue").**
