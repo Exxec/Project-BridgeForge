@@ -10,6 +10,7 @@ plans by default and writes only with `--apply`. CLEAN is not live proof, which 
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import sys
 from collections import Counter
@@ -145,17 +146,67 @@ def retarget_plan(impact: dict, build: str) -> list[dict]:
     return rows
 
 
-def apply_retarget(row: dict, build: str, *, changelog: Path | None = None) -> dict:
+LISTED_CHANGES = 5  # changed files a retarget note names; the rest are counted
+
+
+def _file_digests(folder: Path) -> dict[str, str]:
+    """{path: SHA-256} of the files `archive` would ship from `folder` (`copy_drift._collect`: no reports, sources or build
+    folders), so a workspace and its archive are compared on the same files."""
+    from .copy_drift import _collect
+
+    found = {}
+    for relative, path in _collect(folder).items():
+        with path.open("rb") as handle:
+            found[relative] = hashlib.file_digest(handle, "sha256").hexdigest()
+    return found
+
+
+def changed_since_archive(workspace: Path, done_root: Path | None) -> list[str] | None:
+    """Files of `workspace/working` that differ from the mod's last archive, `<done_root>/<workspace name>` (ROADMAP-3 98.10):
+    added, removed or changed. None when there is no such archive, or it holds no shipped mod folder to compare with.
+
+    Neutrino Corporation and Station Augments were restored from Done/, their jars hand-ported to RC9, and then retargeted:
+    `target-impact` found nothing left to change, and the record said it found no change at all."""
+    from .workspace_tools import _shipped_folder
+
+    archive = Path(done_root) / Path(workspace).name if done_root is not None else None
+    if archive is None or not archive.is_dir():
+        return None
+    try:
+        shipped = _shipped_folder(archive)
+    except ValueError:
+        return None
+    mine, archived = _file_digests(Path(workspace) / "working"), _file_digests(shipped)
+    return sorted(path for path in set(mine) | set(archived) if mine.get(path) != archived.get(path))
+
+
+def retarget_note(old: str | None, build: str, changed: list[str] | None) -> str:
+    """The revival-report and MOD_CHANGELOG line of a retarget: what `target-impact` found, and what had already changed."""
+    head, tail = f"Retargeted to Starsector {build} (gameVersion {old} -> {build}): ", f" Not yet live-tested on {build}."
+    if changed:
+        shown = ", ".join(f"`{path}`" for path in changed[:LISTED_CHANGES])
+        more = f" and {len(changed) - LISTED_CHANGES} more" if len(changed) > LISTED_CHANGES else ""
+        return head + (f"{len(changed)} file(s) differ from the last archive ({shown}{more}), changed before this retarget; "
+                       "`target-impact` found nothing left to change." + tail)
+    if changed is None:
+        return head + ("`target-impact` found no API, linkage or data change affecting this mod (no archive with a mod folder to "
+                       "compare it with)." + tail)
+    return head + "`target-impact` found no API, linkage or data change affecting this mod." + tail
+
+
+def apply_retarget(row: dict, build: str, *, changelog: Path | None = None, done_root: Path | None = None) -> dict:
+    """Retarget one planned workspace. `done_root` (the CLI passes `<data root>/Done`) is where its last archive is looked up,
+    so the record names the files changed since then rather than claiming nothing changed (98.10)."""
     from .baseline_audit import audit_workspace
     from .fixers.mod_info import _fix_mod_info_game_version_inexact
     from .workspace_tools import bump_version
 
     working = Path(row["workspace"]) / "working"
     before = audit_workspace(Path(row["workspace"]))
+    changed = changed_since_archive(Path(row["workspace"]), done_root)  # before mod_info.json is rewritten below
     change = _fix_mod_info_game_version_inexact(working, {"target_game_version": build})[0]
     atomic_write_bytes(change.path, change.after)
-    note = (f"Retargeted to Starsector {build} (gameVersion {row['from']} -> {build}): `target-impact` found no API, "
-            f"linkage or data change affecting this mod. Not yet live-tested on {build}.")
+    note = retarget_note(row["from"], build, changed)
     try:
         result = bump_version(Path(row["workspace"]), note, changelog=changelog)
     except Exception:
@@ -164,16 +215,20 @@ def apply_retarget(row: dict, build: str, *, changelog: Path | None = None) -> d
         # original bytes undo that write too.
         atomic_write_bytes(change.path, change.before)
         raise
-    result["baseline_carried"] = _carry_baseline(working, before, build)
+    result["baseline_carried"] = _carry_baseline(working, before, build, changed)
+    result["changed_since_archive"] = changed
     return result
 
 
-def _carry_baseline(working: Path, before: dict, build: str) -> bool:
+def _carry_baseline(working: Path, before: dict, build: str, changed: list[str] | None = None) -> bool:
     """Keep accepted findings valid across a retarget (ROADMAP-3 item 95.10). A retarget changes only mod_info.json
     (gameVersion and the `+bf.N` version), so a baseline current before it is re-stamped at the new version, recording where
     it was carried from; each key keeps its own reason. A finding whose evidence the new build changes has a new key, so it
-    still comes back for a ruling. A baseline already stale before the retarget stays the owner's to re-justify."""
-    if before["status"] != "OK" or not before.get("baseline"):
+    still comes back for a ruling. A baseline already stale before the retarget stays the owner's to re-justify.
+
+    Nor is a baseline carried when files changed since the last archive (98.10): its acceptances may have been given for the
+    files before a hand port, and its version stamp cannot tell (review of 98.10). It goes stale, for `baseline-accept`."""
+    if before["status"] != "OK" or not before.get("baseline") or changed:
         return False
     from .baseline_audit import stamp_baseline
 
@@ -260,9 +315,11 @@ def _run_retarget(args, state: Path) -> int:
     rows = retarget_plan(json.loads(path.read_text(encoding="utf-8")), target["build"])
     todo = [r for r in rows if r["action"] == "retarget"]
     if args.apply:
+        from .paths import data_root
+
         for index, row in enumerate(todo, 1):
             try:
-                row["result"] = apply_retarget(row, target["build"])
+                row["result"] = apply_retarget(row, target["build"], done_root=data_root() / "Done")
             except (ValueError, OSError, FixerError) as exc:
                 row["action"], row["why"] = "failed", str(exc)
             report(index, len(todo), row["mod"], row.get("result", {}).get("new") or row["why"], None)

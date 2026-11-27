@@ -198,6 +198,91 @@ class CatalogueAndRetargetTests(unittest.TestCase):
         self.assertFalse(again["baseline_carried"])
         self.assertEqual((stale["status"], stale["stamped_version"]), ("STALE_VERSION", "0.9"))
 
+    def test_a_retarget_after_a_hand_port_names_what_changed_since_the_archive(self) -> None:
+        """98.10: Neutrino Corporation and Station Augments were restored from Done/, their jars hand-ported to RC9, then
+        retargeted, and the record said `target-impact` "found no API, linkage or data change affecting this mod"."""
+        import shutil
+
+        def retarget(edit) -> tuple[dict, str]:
+            with resolved_temp_dir() as root:
+                rows = retarget_plan(self._impact(root), "0.98.5a-RC3")
+                working = root / "Alpha" / "working"
+                (working / "jars").mkdir()
+                (working / "jars" / "alpha.jar").write_bytes(b"PK rc7 classes")
+                (working / "jars" / "old.jar").write_bytes(b"PK dropped by the port")
+                shutil.copytree(working, root / "Done" / "Alpha" / "Alpha")  # the archive the workspace came from
+                (working / "reports").mkdir()
+                (working / "reports" / "REVIVAL_REPORT.previous-build.md").write_text("restored report", encoding="utf-8")
+                edit(working)
+                changelog = root / "MOD_CHANGELOG.md"
+                result = apply_retarget(rows[0], "0.98.5a-RC3", changelog=changelog, done_root=root / "Done")
+                return result, merged_text(changelog)
+
+        def port(working: Path) -> None:
+            (working / "jars" / "alpha.jar").write_bytes(b"PK rc9 classes")  # changed
+            (working / "jars" / "old.jar").unlink()  # removed
+            (working / "data" / "config").mkdir(parents=True)
+            (working / "data" / "config" / "settings.json").write_text("{}", encoding="utf-8")  # added
+
+        def baseline(working: Path) -> None:
+            from bridgeforge.baseline_audit import stamp_baseline
+
+            path = working / "reports" / "baseline.json"
+            path.write_text(json.dumps({"findings": ["k|f|"], "reasons": {"k|f|": "owner 2026-11-01"}}), encoding="utf-8")
+            stamp_baseline(path, working, today="2026-11-01")
+
+        ported, ported_log = retarget(port)
+        untouched, untouched_log = retarget(lambda working: None)
+        # Acceptances given before a hand port may not hold for the ported files: the baseline is not carried (review of 98.10).
+        # The same current baseline on an untouched workspace is.
+        ported_baseline, _ = retarget(lambda working: (port(working), baseline(working)))
+        untouched_baseline, _ = retarget(baseline)
+        self.assertEqual((ported_baseline["baseline_carried"], untouched_baseline["baseline_carried"]), (False, True))
+        self.assertEqual(ported["changed_since_archive"], ["data/config/settings.json", "jars/alpha.jar", "jars/old.jar"])
+        self.assertIn("3 file(s) differ from the last archive (`data/config/settings.json`, `jars/alpha.jar`, `jars/old.jar`)",
+                      ported_log)
+        self.assertIn("found nothing left to change", ported_log)
+        self.assertNotIn("found no API", ported_log)
+        # The workspace's own reports are not part of what ships, so a restored workspace compares equal.
+        self.assertEqual(untouched["changed_since_archive"], [])
+        self.assertIn("found no API, linkage or data change affecting this mod. Not yet", untouched_log)
+
+    def test_retarget_apply_looks_for_archives_in_the_data_roots_done(self) -> None:
+        from bridgeforge import target_bump
+        from bridgeforge.paths import data_root
+
+        with resolved_temp_dir() as root:
+            state = root / "state"
+            set_target(state, _core(root, "new", "0.98.5a-RC3"))
+            impact = root / "TARGET_IMPACT.json"
+            impact.write_text(json.dumps(self._impact(root)), encoding="utf-8")
+            args = argparse.Namespace(command="retarget", impact=impact, apply=True, json=True)
+            with patch.object(target_bump, "state_dir", return_value=state), \
+                    patch.object(target_bump, "apply_retarget", return_value={"new": "1.0+bf.1"}) as applied, \
+                    contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(io.StringIO()):
+                self.assertEqual(target_bump.run_cli(args), 0)
+        self.assertEqual(applied.call_count, 1)
+        self.assertEqual(applied.call_args.kwargs["done_root"], data_root() / "Done")
+
+    def test_a_retarget_with_no_archive_says_it_was_not_compared(self) -> None:
+        from bridgeforge.target_bump import retarget_note
+
+        from bridgeforge.target_bump import changed_since_archive
+
+        with resolved_temp_dir() as root:
+            rows = retarget_plan(self._impact(root), "0.98.5a-RC3")
+            result = apply_retarget(rows[0], "0.98.5a-RC3", changelog=root / "MOD_CHANGELOG.md", done_root=root / "Done")
+            log = merged_text(root / "MOD_CHANGELOG.md")
+            (root / "Done" / "Alpha" / "notes").mkdir(parents=True)  # an Alpha folder in Done/ with no shipped mod folder
+            folderless = changed_since_archive(root / "Alpha", root / "Done")
+        self.assertIsNone(result["changed_since_archive"])
+        self.assertIn("(no archive with a mod folder to compare it with)", log)
+        self.assertIsNone(folderless)
+        many = retarget_note("0.98a-RC8", "0.98.5a-RC9", [f"data/f{n}.csv" for n in range(7)])
+        self.assertIn("7 file(s) differ", many)
+        self.assertIn("`data/f4.csv` and 2 more", many)
+        self.assertNotIn("f5", many)
+
     def test_a_retarget_whose_version_bump_fails_is_undone_and_planned_again(self) -> None:
         """Review 2026-11-17: the new gameVersion stayed written when bump_version failed (a locked MOD_CHANGELOG.md), so the next
         plan skipped the mod as "already <build>" and its version bump, report section and changelog line never happened."""

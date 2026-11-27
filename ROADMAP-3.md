@@ -240,6 +240,34 @@ Found during 98.4 (2026-11-25), added under the owner's standing instruction to 
   "`target-impact` found no API, linkage or data change affecting this mod" into the revival report and the changelog,
   although each jar was hand-patched first. `retarget` should take a note, or notice that the working jar differs from the
   last archive, so the record says what was ported. Until then, 98.4 above is the record `archive` must cite.
+  **Done 2026-11-26 (it notices; no note option).**
+  - *The comparison:* before it rewrites `mod_info.json`, `apply_retarget` compares the workspace with its last archive,
+    `Done/<workspace name>`. `changed_since_archive` uses the files `archive` would ship (`copy_drift._collect`: no
+    `reports/`, sources or build folders), so a freshly restored workspace compares equal. The CLI looks in
+    `<data root>/Done`.
+  - *The note* (`retarget_note`), in three cases:
+    - files differ: it names up to five, says they were "changed before this retarget", and says `target-impact` found
+      "nothing left to change";
+    - nothing differs: the old sentence;
+    - no archive, or one with no shipped mod folder: the old sentence plus "(no archive with a mod folder to compare it
+      with)".
+  - *The result:* it carries `changed_since_archive`.
+  - *Baselines:* when files differ, the accepted-findings baseline is no longer carried to the new version (95.10's
+    re-stamp said "changed only mod_info.json"). Its acceptances may have been given for the files before the hand port,
+    and the version stamp cannot tell, so it goes stale for `baseline-accept`. Found by the independent review the same day.
+  - *Neutrino and Station Augments:* their records from 98.4 are unchanged; 98.4 stays the record `archive` cites for them.
+  - *Acceptance* (read-only, Test1's real workspaces against `Done/`):
+    - Neutrino Corporation 1.8.9 lists `jars/NeutrinoJAR.jar`;
+    - Station Augments 2.4.3+bf.1 lists `jars/niko_stationAugments.jar`;
+    - both also list `mod_info.json`, which their retarget already rewrote (a retarget compares before that write);
+    - Armament Collection Station lists nothing and keeps the old sentence.
+  - *Tests* (`tests/test_target_bump.py`):
+    - `test_a_retarget_after_a_hand_port_names_what_changed_since_the_archive` (a changed, a removed and an added file; a
+      restored workspace with its own reports compares equal; a current baseline is carried only when nothing changed);
+    - `test_a_retarget_with_no_archive_says_it_was_not_compared` (also an archive folder with no mod folder, and the
+      five-file cap);
+    - `test_retarget_apply_looks_for_archives_in_the_data_roots_done`.
+  - *Mutation check:* 12 mutants, all caught.
 
 Found during 98.4's runs (2026-11-26), queued the same way:
 - 98.11 (S) **The main-menu reader can click the wrong button, and nothing checks that the mission list opened.**
