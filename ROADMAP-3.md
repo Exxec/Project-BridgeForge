@@ -215,6 +215,27 @@ Found during 98.4 (2026-11-25), added under the owner's standing instruction to 
   (`WHStartBarEventDialog`, `WHStrangeM2Cmd`, ...) are classes in its dependency Wide Horizons Core's jar, under the
   `ruleCommandPackages` entry `org.widehorizons.rulecmd`. The scanner looked only in the mod's own jars. Resolve rule
   commands through declared dependencies' jars and every `ruleCommandPackages` entry.
+  **Done 2026-11-26.**
+  - *How the game looks a command up* (javap of RC9's `com.fs.starfarer.campaign.rules.A`):
+    - its static initializer copies the merged settings' `ruleCommandPackages` entries as written; it adds
+      `com.fs.starfarer.api.impl.campaign.rulecmd` only when that key is missing (its `JSONException` handler);
+    - `getCommandClass` tries `loadClass(package + "." + command)` for each entry;
+    - otherwise it throws "Command [X] not found in packages".
+  - *The check:* `scan_references._rule_command_packages` gathers the entries of vanilla's, the mod's and every declared
+    dependency's `settings.json` verbatim, since lists add; the vanilla package is the fallback when none lists any. A
+    command now resolves when `<package>.<command>` is a class in a dependency's jar. The mod's own classes still resolve by
+    simple name, as before. The list is read only when the mod has rule commands and a dependency has classes.
+  - *Review* (independent, same day): the first docstring said the vanilla package is always added, and entries were
+    trimmed, which the game does not do; both fixed. Packages come from every copy of a dependency and classes from one,
+    as the existing helpers already do; left as is.
+  - *Acceptance* (Wide Horizons Content 1.5.1b's `mod_info.json`, `settings.json` and `rules.csv`, with Core 1.5.1b as the
+    provider, against RC9): main reports 4 MANUAL findings, one per `WH*` command; the branch reports none.
+  - *Tests:* `tests/test_dependency_resolution.py`
+    `test_a_rule_command_in_a_dependencys_jar_resolves_through_rule_command_packages`:
+    - a package listed by the mod, by the dependency, or by vanilla's settings only resolves;
+    - an unlisted package, and one listed with a leading space, stay reported;
+    - a full class name that is not a rule command is never looked up by its simple name.
+  - *Mutation check:* 9 mutants, all caught.
 - 98.10 (S) **`retarget` records "no change" after a hand port.** For Neutrino Corporation and Station Augments it wrote
   "`target-impact` found no API, linkage or data change affecting this mod" into the revival report and the changelog,
   although each jar was hand-patched first. `retarget` should take a note, or notice that the working jar differs from the

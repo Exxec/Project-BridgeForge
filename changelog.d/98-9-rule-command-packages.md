@@ -1,0 +1,1 @@
+- `data-class-reference-missing` resolves a `rules.csv` command in a declared dependency's jar under any package that vanilla's, the mod's or a dependency's `ruleCommandPackages` lists, as the game looks it up (Wide Horizons Content 1.5.1b: 4 commands in Wide Horizons Core's jar).
