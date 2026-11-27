@@ -68,6 +68,15 @@ class LauncherDecidesTests(unittest.TestCase):
         self.assertIn("loads no Prepatcher agent", prepatcher_log.describe(found))
         self.assertIsNone(nothing)
 
+    def test_an_agent_after_the_main_class_is_not_loaded(self) -> None:
+        # The JVM reads a -javaagent after the main class as an application argument (java-matrix --prepatcher, 2026-10-12).
+        with resolved_temp_dir() as root:
+            rig = _rig(root, ["starsector_prepatcher"], OLD + CLEAN)
+            bat = rig / "late.bat"
+            bat.write_text(f'"C:\\jdk\\bin\\java.exe" -Xmx4g -cp x com.fs.starfarer.StarfarerLauncher -javaagent:{AGENT}\n', encoding="utf-8")
+            self.assertEqual(prepatcher_log.launch_agents(bat), [])
+            self.assertEqual(prepatcher_log.summary(rig, SINCE, bat)["verdict"], "NOT_LOADED")
+
     def test_the_agents_log_is_its_mod_folders(self) -> None:
         with resolved_temp_dir() as root:
             self.assertEqual(prepatcher_log.agent_log(root, AGENT),
