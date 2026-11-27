@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import zipfile
+import zlib
 from pathlib import Path, PurePosixPath
 from ..analysis_reuse import parsed_facts
 from ..zipsafe import MAX_CLASS_BYTES, read_limited
@@ -429,7 +430,8 @@ def iter_class_files_in_jars(jars, unreadable: list[str] | None = None, max_entr
                         continue
                     try:
                         data = read_limited(archive, item, MAX_CLASS_BYTES)
-                    except (OSError, zipfile.BadZipFile, KeyError, NotImplementedError, RuntimeError) as exc:
+                    # zlib.error (a corrupt deflate stream) and EOFError (a truncated one) also end only this entry (98.15 review)
+                    except (OSError, zipfile.BadZipFile, KeyError, NotImplementedError, RuntimeError, zlib.error, EOFError) as exc:
                         if skipped_entries is not None:
                             skipped_entries.append(f"{jar}!{item.filename}: {exc}")
                         continue

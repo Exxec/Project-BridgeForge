@@ -89,6 +89,25 @@ class JarClassLimitTests(unittest.TestCase):
         self.assertIn("a/Big.class", skipped[0])
         self.assertIn("64 byte limit", skipped[0])
 
+    def test_a_corrupt_deflate_stream_is_skipped_and_the_jar_read_on(self) -> None:
+        """98.15 review (2026-11-27): a corrupt entry's zlib.error passed the walker's per-entry handler and crashed its caller."""
+        with resolved_temp_dir() as root:
+            jar = root / "mod.jar"
+            with zipfile.ZipFile(jar, "w", zipfile.ZIP_DEFLATED) as out:
+                out.writestr("a/Bad.class", b"\xca\xfe\xba\xbe" + b"lunalib " * 400)
+                out.writestr("a/Good.class", b"\xca\xfe\xba\xbe" + b"\x00" * 8)
+            data = bytearray(jar.read_bytes())
+            with zipfile.ZipFile(jar) as archive:
+                bad = archive.getinfo("a/Bad.class")
+            start = bad.header_offset + 30 + len(bad.filename.encode()) + len(bad.extra)
+            data[start:start + 16] = b"\xff" * 16
+            jar.write_bytes(bytes(data))
+            skipped: list[str] = []
+            members = [member for _jar, member, _data in scan_classfile.iter_class_files_in_jars([jar], skipped_entries=skipped)]
+        self.assertEqual(members, ["a/Good.class"])
+        self.assertEqual(len(skipped), 1)
+        self.assertIn("a/Bad.class", skipped[0])
+
     def test_verify_shadow_counts_a_jar_with_a_skipped_class_as_checked(self) -> None:
         """Review 2026-11-17: per-entry records in `unreadable` made `jars_checked` wrong, even negative."""
         from bridgeforge.verify_shadow import verify_shadow
