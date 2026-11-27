@@ -503,6 +503,7 @@ order then continue live testing followed by more roadmap work based on your rec
     RC9NC-LIVE5, and RC9NC-LIVE6 with LunaLib passed.
   - *Tests* (`tests/test_raw_intake_and_lunalib_rule.py`): 1.12.1 and 1.12.3 with the reference get LunaLib; a GraphicsLib
     without it stays advice only; an unlisted jar's reference is ignored.
+  - *Mutation check:* 4 mutants through `mutate_batch.py`, all caught.
 - 98.16 (S) **A pause the code enforces.** The owner paused live testing at about 20:05, but an idle gate already in the
   background kept polling, and launched RC9NC-LIVE4 at 22:03 when Test1 went idle. *Fix:* `bridgeforge live pause [--reason]`
   and `live resume` keep a flag on the machine. `probe-group live`, `smoke`, `live-queue` and `duel`, and the
