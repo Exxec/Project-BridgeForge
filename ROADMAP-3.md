@@ -635,8 +635,7 @@ order then continue live testing followed by more roadmap work based on your rec
     run's leftover file compare with itself; did not list an archive skipped in one run and absent from the other; and the
     skill's worktree command failed on `@target`. All fixed.
   - *Tests:* `tests/test_findings_diff.py`; `tests/test_done_audit.py`
-    `test_all_findings_lists_every_finding_and_the_run_names_its_code`. Mutation check: 17 mutants on the first version,
-    all caught; the review fixes have their own batch.
+    `test_all_findings_lists_every_finding_and_the_run_names_its_code`. Mutation check: 17 mutants on the first version, all caught; the review fixes, 12 more, all caught.
 - *Machine-local skills* (each machine's `~/.claude/skills`, mirrored by `memory-mirror`, not this repository):
   - `live-run`: the bounded idle gate, the input recorder, the run `.cmd` generator, the post-run checks and the pause
     procedure;
