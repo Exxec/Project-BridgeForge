@@ -17,6 +17,7 @@ hook"), "Patched <class> structurally", "... rolled back ...", "... failed open 
 """
 from __future__ import annotations
 
+import os
 import re
 from datetime import datetime, timezone
 from pathlib import Path
@@ -71,10 +72,12 @@ def launch_agents(launcher: Path) -> list[str] | None:
 
 
 def agent_log(rig: Path, agent: str) -> Path:
-    """The log of the agent jar `agent` names: <its mod folder>/logs/prepatcher.log."""
+    """The log of the agent jar `agent` names: <its mod folder>/logs/prepatcher.log. A relative agent is resolved from the rig's
+    `starsector-core` by the text, as Windows does (`..` leaves the junction for the rig): a POSIX lookup would follow the
+    link to the real core's parent, or fail where the folder does not exist (Ubuntu CI, 2026-11-27)."""
     jar = Path(agent.replace("\\", "/"))
     if not jar.is_absolute():
-        jar = Path(rig) / "starsector-core" / jar
+        jar = Path(os.path.normpath(Path(rig) / "starsector-core" / jar))
     return jar.parent.parent.joinpath(*LOG_PARTS)
 
 

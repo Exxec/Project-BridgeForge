@@ -79,8 +79,8 @@ class LauncherDecidesTests(unittest.TestCase):
 
     def test_the_agents_log_is_its_mod_folders(self) -> None:
         with resolved_temp_dir() as root:
-            self.assertEqual(prepatcher_log.agent_log(root, AGENT),
-                             root / "starsector-core" / "../mods/StarsectorPrepatcher" / "logs" / "prepatcher.log")
+            # resolved by the text, as Windows does: `..` leaves starsector-core for the rig (it need not exist)
+            self.assertEqual(prepatcher_log.agent_log(root, AGENT), root / "mods" / "StarsectorPrepatcher" / "logs" / "prepatcher.log")
             absolute = root / "elsewhere" / "PP" / "agent" / "StarsectorPrepatcherAgent.jar"
             self.assertEqual(prepatcher_log.agent_log(root, str(absolute)), root / "elsewhere" / "PP" / "logs" / "prepatcher.log")
 
