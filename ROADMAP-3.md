@@ -548,6 +548,7 @@ order then continue live testing followed by more roadmap work based on your rec
   - *Tests:* `tests/test_prepatcher_namespace.py` (9): the stock-on-RC9 FAIL, the tie broken, a tie left unbroken, no
     match, the canonical build, a shipped table the detector does not name, no agent, `rig-doctor` failing the rig, and
     the manifest's hash.
+  - *Mutation check:* 9 mutants through `mutate_batch.py`, all caught.
 - 98.18 (S) **Every live result carries a Prepatcher summary:** patches applied, warnings, errors, rollbacks and the agent
   version, read from `mods/StarsectorPrepatcher/logs/prepatcher.log` for the run's time window. The proof run above needed
   that check by hand.
