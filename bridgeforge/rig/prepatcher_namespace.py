@@ -91,13 +91,13 @@ def _engine_getters(core: Path) -> dict[str, list[str]]:
     return getters
 
 
-def _core_classes(core: Path) -> set[str]:
-    names: set[str] = set()
-    for jar_name in CORE_JARS:
-        if (core / jar_name).is_file():
-            with zipfile.ZipFile(core / jar_name) as jar:
-                names |= {entry[:-len(".class")] for entry in jar.namelist() if entry.endswith(".class")}
-    return names
+def _core_classes(core: Path, skipped: list[str]) -> set[str]:
+    """The core jars' class names, through the shared jar walker (0.25 s on RC9's 6559 classes). An entry it could not read
+    is named in `skipped`: its class may still exist, so a FAIL says so."""
+    from bridgeforge.scan.scan_classfile import iter_class_files_in_jars
+
+    jars = [core / jar_name for jar_name in CORE_JARS if (core / jar_name).is_file()]
+    return {member.removesuffix(".class") for _jar, member, _data in iter_class_files_in_jars(jars, skipped, skipped_entries=skipped)}
 
 
 def _throws(tables: dict[str, dict[str, str]], absent: list[str], getters: dict[str, list[str]]) -> str | None:
@@ -120,7 +120,7 @@ def predicted_table(agent_jar: Path, core: Path) -> dict:
     getters = _engine_getters(core)
     result = (getters.get("getResults") or [None])[0]
     found = {"matches": [], "tie_break": tie_break, "table": None, "missing": [], "mapped": 0, "get_results": result,
-             "throws": _throws(tables, absent, getters)}
+             "throws": _throws(tables, absent, getters), "unread": []}
     if found["throws"]:
         return found
     matches = [IDENTITY] if result == f"()L{CANONICAL_RESULT};" else []
@@ -136,7 +136,7 @@ def predicted_table(agent_jar: Path, core: Path) -> dict:
     found["matches"] = matches
     found["table"] = matches[0] if len(matches) == 1 else None
     if found["table"] is not None and found["table"] != IDENTITY:
-        classes = _core_classes(core)
+        classes = _core_classes(core, found["unread"])
         natives = sorted(set(tables[found["table"]].values()))
         found["mapped"] = len(natives)
         found["missing"] = [name for name in natives if name not in classes]
@@ -171,9 +171,11 @@ def check(runtime_dir: Path) -> dict[str, object]:
         return result("PASS", "the core is the canonical build (Windows 0.98a-RC8): no table needed")
     if found["missing"]:
         shown = ", ".join(found["missing"][:SHOWN]) + (" ..." if len(found["missing"]) > SHOWN else "")
+        unread = (f" ({len(found['unread'])} core jar or class entries could not be read, so some of these may exist)"
+                  if found["unread"] else "")
         return result("FAIL", f"the agent will load table {found['table']}, which names {len(found['missing'])} of its {found['mapped']} "
-                              f"classes this core lacks ({shown}): it is another build's table, so its patches would target the "
-                              "wrong classes and members (RC9NC-LIVE4 died at start-up this way). Install an agent with this "
+                              f"classes this core lacks ({shown}){unread}: it is another build's table, so its patches would target "
+                              "the wrong classes and members (RC9NC-LIVE4 died at start-up this way). Install an agent with this "
                               "build's table (ROADMAP-3 98.14).")
     return result("PASS", f"the agent will load table {found['table']}; all {found['mapped']} classes it maps exist in the core "
                           "(the members it maps are not checked)")
