@@ -30,6 +30,41 @@ class DoneAuditTests(unittest.TestCase):
         self.assertIn("re-archive it", report)
         self.assertFalse(checkpoint_left)
 
+    def test_all_findings_lists_every_finding_and_the_run_names_its_code(self) -> None:
+        """ROADMAP-3 98.19 review: findings-diff over done-audit compared only crash-class, MANUAL and UNKNOWN findings, and two
+        runs could not be told apart. --all-findings lists every finding (accepted ones marked); the result and the checkpoint
+        header name the checkout and its HEAD, so a resumed run under other code starts over."""
+        import json
+        from unittest import mock
+
+        from bridgeforge import done_audit as audit
+
+        with resolved_temp_dir() as root:
+            done, queue = root / "Done", root / "queue"
+            _write(done / "Mod" / "Mod" / "mod_info.json", '{"id": "m", "version": "1",}')  # a trailing comma: a REVIEW finding
+            _write(done / "Mod" / "Mod" / "data" / "plugins" / "P.java",
+                   "package data.plugins;\npublic class P {\n    void s(String n) { Global.getSector().getStarSystem(n).getPlanets(); }\n}\n")
+            plain = done_audit(done, queue, quiet=True)
+            every = done_audit(done, queue, quiet=True, all_findings=True)
+            # an interrupted run under other code: its checkpoint is not reused
+            stale = {"done": str(done.resolve()), "queue": str(queue.resolve()), "vanilla_core": None, "all_findings": True,
+                     "code": {"checkout": "elsewhere", "head": "0" * 40}}
+            cached = {"mod": "Mod", "status": "CLEAN", "stale": None, "findings": [], "all_findings": []}
+            (done / audit.CHECKPOINT).write_text(json.dumps(stale) + "\n" + json.dumps({"key": "Mod", "value": cached}) + "\n",
+                                                 encoding="utf-8")
+            resumed = done_audit(done, queue, quiet=True, all_findings=True)
+        record = every["mods"][0]
+        kept = {h["id"] for h in record["findings"]}
+        listed = {h["id"] for h in record["all_findings"]}
+        self.assertNotIn("all_findings", plain["mods"][0])
+        self.assertTrue(kept < listed, (kept, listed))  # every kept finding is listed, and more besides
+        self.assertTrue(all("accepted" in h for h in record["all_findings"]))
+        self.assertEqual((plain["all_findings"], every["all_findings"]), (False, True))
+        self.assertEqual(set(every["code"]), {"checkout", "head"})
+        self.assertNotEqual(resumed["mods"][0]["all_findings"], [])  # the other code's cached record was not reused
+        with mock.patch("subprocess.run", side_effect=OSError("no git")):  # code_identity imports subprocess when called
+            self.assertIsNone(audit.code_identity()["head"])
+
     def test_an_archive_the_owner_closed_is_listed_not_audited(self) -> None:
         """ROADMAP-3 95.15: owner 2026-11-17, "nightcross armory has been superseded and can safely be ignored". `close` marks
         the archive (a dated section in workspace/REVIVAL_REPORT.md), and done-audit lists it without auditing it."""

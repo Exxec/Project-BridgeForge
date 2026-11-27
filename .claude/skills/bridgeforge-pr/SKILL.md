@@ -72,19 +72,27 @@ self-tests are expected.)
 
 ### A change to a scanner check: the archive, old code against new
 
-A check that passes its tests can still drop real findings, or add new ones, across the 184 archives in Test1's `Done/`
-(98.8: 53 `settings-key-missing` findings became 20 and each dropped one had to be explained). Measure it before review:
+A check that passes its tests can still drop real findings, or add new ones, across the archives in Test1's `Done/` (98.8:
+53 `settings-key-missing` findings became 20, and each dropped one had to be explained; that sweep ran the one check over
+351 mod folders with a script, before `findings-diff` existed). Measure it before review:
 1. On Test1, put main and the branch side by side: `git fetch origin <branch>` and `git worktree add <dir> origin/<branch>`
    (push the branch first, no PR needed yet).
-2. Run `done-audit` once with each checkout's code, one after the other, never at the same time. From the checkout's folder,
-   with `PYTHONPATH` set to that folder (a worktree otherwise imports the main checkout's code):
-   `<repo>\.venv\Scripts\python.exe -m bridgeforge done-audit --done "<repo>\Done" --queue "<repo>\In operation" --vanilla-core @target`.
-   Each run rewrites `Done\DONE_AUDIT.json`: copy it aside after each. Its checkpoint does not record the code, so after an
-   interrupted run, delete `Done\DONE_AUDIT.partial.jsonl` before starting the other checkout's run. Set `JAVA_HOME` to the
-   main checkout's `In operation\_rig\jdk-*` for the worktree's run: `find_jdk` looks in the checkout's own rig first, a
-   worktree has none, and without a JDK the jar checks are skipped and every jar finding reads as dropped (2026-11-27).
+2. Run `done-audit --all-findings` once with each checkout's code, one after the other, never at the same time:
+   `<repo>\.venv\Scripts\python.exe -m bridgeforge done-audit --all-findings --done "<repo>\Done" --queue "<repo>\In operation" --vanilla-core @target`.
+   - Without `--all-findings` a record keeps only the crash-class, MANUAL and UNKNOWN findings the baseline does not accept,
+     about a third of the check ids: a change to any other check compares nothing.
+   - For the worktree's run, start in the worktree with `PYTHONPATH` set to it (otherwise the main checkout's code runs) and
+     `BRIDGEFORGE_DATA_ROOT` set to `<repo>`. A worktree otherwise takes itself for the data root: `@target` fails ("no
+     target set"), and `find_jdk` finds no rig JDK, so every jar check is skipped (seen 2026-11-27).
+   - Before each run, move `Done\DONE_AUDIT.json` away, and check that the run exits 0. A run that crashes writes no new
+     file, so the other run's would be compared with itself (`findings-diff` refuses two files from the same checkout and
+     HEAD, which the JSON records). Copy the new file aside after each run.
+   - Run the branch first and main last, so `Done\DONE_AUDIT.md` ends as main's audit. The checkpoint records the code, so an
+     interrupted run resumed under the other checkout starts over.
 3. `bridgeforge findings-diff main.json branch.json --id <the check's id>` lists, per archive, the findings dropped and the
-   new ones. An archive one run could not audit is listed as not compared.
+   new ones, counting identical findings one by one. An archive either run could not audit is listed as not compared. It
+   exits 1 when the inputs come from the same code, an `--id` appears in neither input (a typo, or a filtered run), or no
+   archive is in both.
 4. In the PR body, give the totals line and a reason for every dropped finding. Read every new one before merging.
 
 ## 5. Review before pushing

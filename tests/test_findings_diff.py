@@ -92,7 +92,9 @@ class DiffTests(unittest.TestCase):
 
     def test_render_states_the_totals_and_each_change(self) -> None:
         text = findings_diff.render(self._diff(BEFORE, AFTER))
-        self.assertTrue(text.startswith("4 findings become 3 over 3 archives: 2 dropped, 1 new, in 3 archive(s)."))
+        self.assertIn("\n4 findings become 3 over 3 archives: 2 dropped, 1 new, in 3 archive(s).\n", text)
+        self.assertTrue(text.startswith("before: done-audit (crash-class, MANUAL and UNKNOWN findings only)\n"))
+        self.assertIn("run done-audit with --all-findings to compare every check", text)
         self.assertIn("Alpha: -1 +0\n  - check-a jars/a.jar: key:k2", text)
         self.assertIn("not compared: Broken (before: audited; after: ERROR)", text)
         self.assertIn("in one run only (only before): Gone", text)
@@ -104,13 +106,51 @@ class DiffTests(unittest.TestCase):
         self.assertEqual(len(result["changes"][0]["dropped"]), many)
         self.assertIn("and 3 more (--json lists all)", findings_diff.render(result))
 
+    # Review, 2026-11-27.
+    def test_all_findings_are_compared_when_done_audit_kept_them(self) -> None:
+        # Without --all-findings a record keeps only crash-class, MANUAL and UNKNOWN findings: a REVIEW check compared nothing.
+        review = {"id": "check-r", "classification": "REVIEW", "file": "data/x.json", "evidence": ["trailing comma"], "accepted": False}
+        before = {**_audit([{"mod": "A", "status": "CLEAN", "findings": [], "all_findings": [review, review]}]), "all_findings": True}
+        after = {**_audit([{"mod": "A", "status": "CLEAN", "findings": [], "all_findings": [review]}]), "all_findings": True}
+        result = self._diff(before, after, {"check-r"})
+        self.assertEqual((result["findings_before"], result["dropped"], result["unknown_ids"]), (2, 1, []))
+        self.assertEqual(result["inputs"]["before"]["kind"], "done-audit --all-findings")
+        self.assertNotIn("--all-findings to compare", findings_diff.render(result))
+
+    def test_identical_findings_are_counted_not_merged(self) -> None:
+        # Sunrider's SRVows.java holds nine identical hard-coded-campaign-entity-reference findings: one dropped must show.
+        same = _finding("check-a", "data/SRVows.java", "Corvus")
+        before = _audit([{"mod": "S", "status": "FINDINGS", "findings": [same] * 9}])
+        after = _audit([{"mod": "S", "status": "FINDINGS", "findings": [same] * 8}])
+        result = self._diff(before, after)
+        self.assertEqual((result["findings_before"], result["findings_after"], result["dropped"]), (9, 8, 1))
+
+    def test_an_archive_skipped_in_one_run_and_missing_from_the_other_is_listed(self) -> None:
+        before = _audit([{"mod": "Lost", "status": "ERROR", "findings": []}, {"mod": "A", "status": "CLEAN", "findings": []}])
+        result = self._diff(before, _audit([{"mod": "A", "status": "CLEAN", "findings": []}]))
+        self.assertEqual(result["not_compared"], [{"archive": "Lost", "before": "ERROR", "after": None}])
+
+    def test_problems_same_code_unknown_id_and_nothing_compared(self) -> None:
+        code = {"checkout": "C:/repo", "head": "a" * 40}
+        before = {**_audit([{"mod": "A", "status": "CLEAN", "findings": []}]), "code": code}
+        result = self._diff(before, {**before, "code": dict(code)}, {"chek-a"})
+        found = findings_diff.problems(result)
+        self.assertEqual(len(found), 2)
+        self.assertIn("same code (C:/repo at aaaaaaaaaaaa)", found[0])
+        self.assertIn("no finding with id chek-a in either input: a typo, or an id done-audit keeps only with --all-findings", found[1])
+        other = {**before, "code": {"checkout": "C:/repo", "head": "b" * 40}}
+        self.assertEqual(findings_diff.problems(self._diff(before, other)), [])
+        self.assertEqual(findings_diff.problems(self._diff({}, {})), ["no archive is in both inputs"])
+
 
 class InputTests(unittest.TestCase):
     def test_unusable_inputs_are_refused(self) -> None:
         with resolved_temp_dir() as root:
             good = _write(root, "good.json", BEFORE)
             for name, data in (("list.json", [1, 2]), ("scalars.json", {"A": 3}), ("nomod.json", _audit([{"status": "CLEAN"}])),
-                               ("thing.json", {"A": [{"id": "x"}, 5]})):
+                               ("thing.json", {"A": [{"id": "x"}, 5]}),
+                               ("number.json", _audit([{"mod": "A", "status": "FINDINGS", "findings": 5}])),
+                               ("dict.json", _audit([{"mod": "A", "status": "FINDINGS", "findings": {"id": "x"}}]))):
                 with self.subTest(name), self.assertRaises(findings_diff.FindingsFileError):
                     findings_diff.diff(good, _write(root, name, data))
             (root / "bad.json").write_text("{not json", encoding="utf-8")
@@ -126,6 +166,11 @@ class InputTests(unittest.TestCase):
             with contextlib.redirect_stdout(out):
                 self.assertEqual(findings_diff.run_cli(args), 0)
             self.assertEqual(json.loads(out.getvalue())["dropped"], 2)
+            args.ids = ["chek-a"]  # a typo: printed, then exit 1
+            with contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(io.StringIO()) as err:
+                self.assertEqual(findings_diff.run_cli(args), 1)
+            self.assertIn("no finding with id chek-a", err.getvalue())
+            args.ids = None
             args.after = root / "missing.json"
             with contextlib.redirect_stderr(io.StringIO()) as err:
                 self.assertEqual(findings_diff.run_cli(args), 2)

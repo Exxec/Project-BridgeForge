@@ -121,6 +121,7 @@ def add_parser(subcommands) -> None:
     done_audit_cmd.add_argument("--done", type=Path, help="default: <repo>/Done")
     done_audit_cmd.add_argument("--queue", type=Path, help="default: <repo>/In operation")
     done_audit_cmd.add_argument("--vanilla-core", type=Path)
+    done_audit_cmd.add_argument("--all-findings", action="store_true", help="also list every finding per archive, accepted ones marked, for findings-diff (ROADMAP-3 98.19)")
     done_audit_cmd.add_argument("--quiet", action="store_true", help="no per-mod progress lines")
     done_audit_cmd.add_argument("--json", action="store_true")
     done_audit_cmd.add_argument("--content-parity", action="store_true", help="instead compare each shipped zip with its original/ (77.18): MISSING, SHADOW_REMOVAL, RENAMED, JUNK, SOURCE_OMITTED per mod and a verdict (writes CONTENT_PARITY.md/.json)")
@@ -509,7 +510,8 @@ def _run_done_audit(args: argparse.Namespace) -> int:
         else:
             print("Counts: " + ", ".join(f"{k} {v}" for k, v in result["counts"].items()) + f". Report: {Path(out) / PARITY_MD}")
         return 0
-    result = done_audit(done, args.queue or REPO_ROOT / "In operation", vanilla_core=args.vanilla_core, quiet=args.quiet)
+    result = done_audit(done, args.queue or REPO_ROOT / "In operation", vanilla_core=args.vanilla_core, quiet=args.quiet,
+                        all_findings=args.all_findings)
     if args.json:
         print(json.dumps(result, indent=2, ensure_ascii=False))
     else:
