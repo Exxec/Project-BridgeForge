@@ -235,6 +235,27 @@ class ReadsUnderACatchTests(unittest.TestCase):
                                     "savedKey", "finExcKey", "errOnlyKey", "iseKey", "cfKey", "siblingKey", "switchKey", "k2",
                                     "nameKey"})
 
+    def test_a_switchs_case_lines_are_not_instructions(self) -> None:
+        # javap prints a switch's cases as `<key>: <target>`. A case key equal to the handler's offset must not be taken for the
+        # handler: the walk would start at the switch's own `return` instead of the handler's athrow.
+        listing = _method(f"""
+ 0: iload_0
+ 1: lookupswitch  {{ // 1
+              41: 28
+         default: 30
+    }}
+28: fconst_0
+29: freturn
+30: {_GET}
+33: ldc           #46                 // String switchKey2
+35: {_READ}
+40: freturn
+41: astore_1
+42: aload_1
+43: athrow
+""", "30    40    41   Class java/lang/Throwable")
+        self.assertEqual(javap_reads(listing), [("getFloat", "switchKey2")])
+
     def test_a_handler_that_loops_is_undecided(self) -> None:
         looping = _TO_DAYS.replace("17: fload_0\n18: ldc           #214                // float 10.0f\n20: fdiv\n21: freturn",
                                    "17: goto          16")
@@ -376,6 +397,7 @@ class SettingsWritesTests(unittest.TestCase):
         self.assertEqual(loose_script_class("Data/scripts/Plugin.java", "package data.scripts;"), "data.scripts.Plugin")
         self.assertIsNone(loose_script_class("src/p/Plugin.java", "package p;"))  # a bundled source tree
         self.assertIsNone(loose_script_class("jars/src/p/Plugin.java", "package p;"))
+        self.assertIsNone(loose_script_class("scripts/Foo.java", "package scripts;"))  # outside data/: not counted
         self.assertIsNone(loose_script_class("data/scripts/Plugin.java", "class Plugin {}"))  # no package: not loadable by name
         # The package must match the folders: the script loader finds data.scripts.Gen at data/scripts/Gen.java only.
         self.assertIsNone(loose_script_class("data/scripts/world/Gen.java", "package data.scripts;"))
