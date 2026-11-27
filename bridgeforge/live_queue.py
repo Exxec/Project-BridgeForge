@@ -22,6 +22,7 @@ from datetime import date
 from pathlib import Path
 from typing import Callable
 
+from .live.pause import refusal
 from .progress import Checkpoint, report
 from .safeio import atomic_write_text
 
@@ -90,22 +91,35 @@ def live_queue(plan_path: Path, queue: Path, rig: Path, out: Path, *, groups: li
             started = time.monotonic()
             test_id = f"{prefix}-G{group['group']}"
             row: dict = {"group": group["group"], "members": _members(group), "test_id": test_id}
-            try:
-                _run_group(row, plan, group["group"], rig, test_id, bat, archive, play, install, judge, record)
-            except Exception as exc:  # one broken group never stops the queue; it is never recorded
-                row["error"] = f"{type(exc).__name__}: {exc}"
+            refused = refusal()
+            if refused:  # paused (98.16): the group is not installed either
+                row["live"] = {"verdict": "LIVE_STUCK", "stage": "refused", "detail": refused, "log": None}
+            else:
+                try:
+                    _run_group(row, plan, group["group"], rig, test_id, bat, archive, play, install, judge, record)
+                except Exception as exc:  # one broken group never stops the queue; it is never recorded
+                    row["error"] = f"{type(exc).__name__}: {exc}"
             row["summary"] = _summary(row)
             rows.append(row)
+            if (row.get("live") or {}).get("stage") == "refused":
+                # Not checkpointed, so a resumed queue plays it once live testing is back; the rest wait too (review, 2026-11-27).
+                if not quiet:
+                    report(index, len(chosen), f"group {group['group']}", f"{row['summary']}: live testing is paused, queue stopped", None)
+                break
             checkpoint.add(key, row)
             if not quiet:
                 report(index, len(chosen), f"group {group['group']}", row["summary"], time.monotonic() - started)
     finally:
         checkpoint.close()
+    paused = bool(rows) and (rows[-1].get("live") or {}).get("stage") == "refused"
     result = {"mode": "PROBE_GROUP_LIVE_QUEUE", "date": f"{date.today():%Y-%m-%d}", "archive": archive, "groups": rows,
               "attention": [r for r in rows if _needs_a_look(r, archive)]}
+    if paused:
+        result["stopped"] = "live testing is paused: run the same command again after `live resume` to play the rest"
     out.parent.mkdir(parents=True, exist_ok=True)
     atomic_write_text(out, json.dumps(result, indent=2, ensure_ascii=False))
-    checkpoint.finish()
+    if not paused:  # a paused queue keeps its checkpoint, so the groups it played are not played again
+        checkpoint.finish()
     return result
 
 

@@ -496,8 +496,33 @@ order then continue live testing followed by more roadmap work based on your rec
   reference `lunalib/lunaSettings/`, not from the version.
 - 98.16 (S) **A pause the code enforces.** The owner paused live testing at about 20:05, but an idle gate already in the
   background kept polling, and launched RC9NC-LIVE4 at 22:03 when Test1 went idle. *Fix:* `bridgeforge live pause [--reason]`
-  and `live resume` keep a flag in `bridgeforge-state/`. `probe-group live`, `smoke`, `live-queue` and `duel`, and the
+  and `live resume` keep a flag on the machine. `probe-group live`, `smoke`, `live-queue` and `duel`, and the
   save-reload run, refuse to start while it is set, so a stray gate cannot launch anything.
+  **Done 2026-11-26.**
+  - *The flag:* `bridgeforge/live/pause.py`. `live pause [--reason]`, `live resume` and `live status` keep
+    `live-paused.json` in the user's local application data (`%LOCALAPPDATA%\BridgeForge`; elsewhere
+    `$XDG_STATE_HOME/bridgeforge` or `~/.local/state/bridgeforge`) on the machine that runs the game, so the pause goes on
+    Test1 and every checkout and data root there reads it. A flag that cannot be read or checked still counts as paused.
+  - *Where it is enforced:* the two places a game starts.
+    - `live_run.running_game` raises `GameRefused` before it looks at the rig, which covers the live, save-reload and
+      duel runs and the gene boots (they run as `probe-group live`).
+    - `boot_test.run_boot_test` returns REFUSED, which covers smoke runs and java-matrix.
+    - `runtime-smoke --execute` returns REFUSED before it starts the profile's executable.
+    - `live-queue` checks before each group: a refused group is not installed or checkpointed, the queue stops, and its
+      checkpoint stays, so the same command plays the rest after `live resume`. java-matrix keeps a variant whose every run
+      was refused out of its ledger, so it cannot replace a PASS that `--skip-known` reuses.
+    - The refusal names the reason and the time.
+  - *The suite:* `tests/support.py` points the flag at a temporary path (`BRIDGEFORGE_LIVE_PAUSE_FILE`), so a paused
+    machine's real flag cannot fail the tests that start a fake game.
+  - *Review (2026-11-27):* the first version kept the flag in `state_dir()`, so a worktree or a run with another
+    `BRIDGEFORGE_DATA_ROOT` read a different flag and would have started the game. It also left `runtime-smoke --execute`
+    unchecked, said "not paused" in `live status` for a flag holding `{}` (which refuses), read a failing check as no flag,
+    installed every queued group while refused, and let refused variants overwrite java-matrix's ledger. All fixed.
+  - *Tests:* `tests/test_live_pause.py` (13): pause and resume, an unreadable flag, one that cannot be checked, the suite's
+    path, the machine's folder for every data root and without `LOCALAPPDATA`, `running_game` refusing, a live run ending
+    `refused`, a boot test and a runtime smoke refused, a paused queue, `{}` in status, and the CLI;
+    `tests/test_java_matrix.py` `test_a_refused_variant_leaves_the_ledger_alone`.
+  - *Mutation check:* 8 mutants through `mutate_batch.py`, all caught (first version); the review fixes, 9 more, all caught.
 - 98.17 (S) **`rig-doctor` checks Prepatcher against the rig's build.** Stock 0.18.9 picks a table by
   `CombatEngine.getResults()`'s return type, and on Windows RC9 that is the Linux RC8 table (RC9NC-LIVE4 above). *Fix:*
   `rig-doctor` reads the agent jar's tables and the rig core's `CombatEngine` offline. It says which table the agent will

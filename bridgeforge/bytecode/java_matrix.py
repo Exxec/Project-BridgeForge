@@ -589,7 +589,8 @@ def run_java_matrix(rig: Path, mods: list[str], variants: list[dict], repeats: i
         data = load_ledger(ledger)
         stamp = time.strftime("%Y-%m-%d")
         for variant, m in zip(variants, matrix):
-            if m["runs"]:
+            # A variant whose every run was REFUSED (paused, 98.16) never booted: it must not replace a PASS that --skip-known reuses.
+            if m["runs"] and any(status != "REFUSED" for status in m["statuses"]):
                 data[_mods_key(variant, mods)] = {"pass_rate": m["pass_rate"], "runs": m["runs"], "date": stamp, "parallel": parallel}
         Path(ledger).parent.mkdir(parents=True, exist_ok=True)
         Path(ledger).write_text(json.dumps(data, indent=2, sort_keys=True), encoding="utf-8")
