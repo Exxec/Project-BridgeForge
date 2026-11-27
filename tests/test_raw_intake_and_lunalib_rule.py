@@ -89,9 +89,21 @@ class RenameRetryTests(unittest.TestCase):
 
 
 class LunaLibRuleTests(unittest.TestCase):
-    def _mods(self, root: Path, graphicslib_version: str) -> tuple[Path, dict[str, str]]:
+    def _mods(self, root: Path, graphicslib_version: str, references_lunalib: bool = True) -> tuple[Path, dict[str, str]]:
+        import zipfile
+
         mods = root / "mods"
-        _write(mods / "GraphicsLib" / "mod_info.json", json.dumps({"id": "shaderLib", "version": graphicslib_version}))
+        _write(mods / "GraphicsLib" / "mod_info.json",
+               json.dumps({"id": "shaderLib", "version": graphicslib_version, "jars": ["jars/Graphics.jar"]}))
+        (mods / "GraphicsLib" / "jars").mkdir(parents=True)
+        # GraphicsLib 1.12.1 and 1.12.3 both ship GraphicsLibSettingsListener, which names lunalib/lunaSettings/ (98.15).
+        body = b"\xca\xfe\xba\xbe lunalib/lunaSettings/LunaSettingsListener" if references_lunalib else b"\xca\xfe\xba\xbe org/dark/x"
+        with zipfile.ZipFile(mods / "GraphicsLib" / "jars" / "Graphics.jar", "w") as jar:
+            jar.writestr("org/dark/shaders/util/GraphicsLibSettingsListener.class", body)
+            jar.writestr("org/dark/shaders/util/ShaderLib.class", b"\xca\xfe\xba\xbe")
+        # A jar mod_info.json does not list is never loaded: a reference there does not count.
+        with zipfile.ZipFile(mods / "GraphicsLib" / "jars" / "old.jar", "w") as jar:
+            jar.writestr("a/B.class", b"\xca\xfe\xba\xbe lunalib/lunaSettings/LunaSettingsListener")
         _write(mods / "LunaLib" / "mod_info.json", json.dumps({"id": "lunalib", "version": "2.0.5"}))
         return mods, {"shaderLib": "GraphicsLib", "lunalib": "LunaLib"}
 
@@ -103,6 +115,14 @@ class LunaLibRuleTests(unittest.TestCase):
         self.assertIn("RC8-25", why)
         self.assertIsNone(advice)
 
+    def test_any_graphicslib_whose_jar_references_lunalib_gets_it(self) -> None:
+        # 98.15, RC9NC-LIVE5: GraphicsLib 1.12.3 also needs LunaLib; the rule named 1.12.1 only, and the game died at start-up.
+        with resolved_temp_dir() as root:
+            mods, installed = self._mods(root, "1.12.3")
+            enable, why, _advice = lunalib_rule(["shaderLib"], installed, mods)
+        self.assertTrue(enable)
+        self.assertIn("1.12.3", why)
+
     def test_no_lunalib_opts_out_and_keeps_the_advice(self) -> None:
         with resolved_temp_dir() as root:
             mods, installed = self._mods(root, "1.12.1")
@@ -111,9 +131,9 @@ class LunaLibRuleTests(unittest.TestCase):
         self.assertIn("--no-lunalib", why)
         self.assertIn("--with-lunalib", advice)
 
-    def test_other_versions_stay_advice_only_until_with_lunalib_is_given(self) -> None:
+    def test_a_graphicslib_without_the_reference_stays_advice_only_until_with_lunalib_is_given(self) -> None:
         with resolved_temp_dir() as root:
-            mods, installed = self._mods(root, "1.7.0")
+            mods, installed = self._mods(root, "1.12.1", references_lunalib=False)
             plain = lunalib_rule(["shaderLib"], installed, mods)
             forced = lunalib_rule(["shaderLib"], installed, mods, with_lunalib=True)
         self.assertEqual(plain[0], False)

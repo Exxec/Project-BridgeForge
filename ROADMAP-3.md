@@ -494,6 +494,15 @@ order then continue live testing followed by more roadmap work based on your rec
   needs `lunalib.lunaSettings.LunaSettingsListener`. RC9NC-LIVE5 (Neutrino, LunaLib not enabled) died at start-up with that
   `NoClassDefFoundError`, from `NCModPlugin.onApplicationLoad`. *Fix:* decide from GraphicsLib's listed jars, whether they
   reference `lunalib/lunaSettings/`, not from the version.
+  **Done 2026-11-26.**
+  - *The rule:* `probe_group.graphicslib_needs_lunalib` reads the jars GraphicsLib's `mod_info.json` lists. LunaLib is enabled
+    by itself when one of their classes names `lunalib/lunaSettings/`, whatever the version. A jar the manifest does not list
+    does not count. `--with-lunalib` and `--no-lunalib` keep their meaning.
+  - *Evidence:* GraphicsLib 1.12.3's `Graphics.jar` (the owner's RC8 install, read-only) holds `GraphicsLibSettings` and
+    `GraphicsLibSettingsListener`, which name that package. RC8-25 in `docs/RC8_BEHAVIOUR.md` now records 1.12.3 and
+    RC9NC-LIVE5, and RC9NC-LIVE6 with LunaLib passed.
+  - *Tests* (`tests/test_raw_intake_and_lunalib_rule.py`): 1.12.1 and 1.12.3 with the reference get LunaLib; a GraphicsLib
+    without it stays advice only; an unlisted jar's reference is ignored.
 - 98.16 (S) **A pause the code enforces.** The owner paused live testing at about 20:05, but an idle gate already in the
   background kept polling, and launched RC9NC-LIVE4 at 22:03 when Test1 went idle. *Fix:* `bridgeforge live pause [--reason]`
   and `live resume` keep a flag on the machine. `probe-group live`, `smoke`, `live-queue` and `duel`, and the

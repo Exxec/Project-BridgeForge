@@ -530,7 +530,7 @@ def _add_probe_mission_to_replacing_members(rig: Path, members: dict[str, Path])
 
 
 def lunalib_advice(enabled: list[str], installed: dict[str, str]) -> str | None:
-    """GraphicsLib 1.12.1 enabled without LunaLib while the rig has LunaLib: RC8-25 says a mod that calls ShaderLib.init then
+    """GraphicsLib enabled without LunaLib while the rig has LunaLib: RC8-25 says a mod that calls ShaderLib.init then
     dies with NoClassDefFoundError lunalib/... under Fast Rendering. Advice only: adding an undeclared library to a group would
     hide a real dependency gap, so the owner decides (`--with-lunalib`)."""
     if "shaderLib" in enabled and "lunalib" not in enabled and "lunalib" in installed:
@@ -541,15 +541,36 @@ def lunalib_advice(enabled: list[str], installed: dict[str, str]) -> str | None:
 
 LUNALIB_ID = "lunalib"
 GRAPHICSLIB_ID = "shaderLib"
-LUNALIB_RULE_VERSION = "1.12.1"
+LUNALIB_REFERENCE = b"lunalib/lunaSettings/"
+
+
+def graphicslib_needs_lunalib(graphicslib: Path) -> bool:
+    """Whether a class in GraphicsLib's listed jars references LunaLib's settings classes. 1.12.1 and 1.12.3 both do
+    (GraphicsLibSettings, GraphicsLibSettingsListener); a version number said nothing about 1.12.3 (98.15, RC9NC-LIVE5)."""
+    import zipfile
+
+    from bridgeforge.zipsafe import read_class
+
+    for entry in _mod_info(graphicslib).get("jars") or []:
+        jar = Path(graphicslib) / str(entry)
+        if not jar.is_file():
+            continue
+        try:
+            with zipfile.ZipFile(jar) as archive:
+                if any(name.endswith(".class") and LUNALIB_REFERENCE in (read_class(archive, name) or b"") for name in archive.namelist()):
+                    return True
+        except (OSError, zipfile.BadZipFile):
+            continue
+    return False
 
 
 def lunalib_rule(enabled: list[str], installed: dict[str, str], mods_dir: Path, *, with_lunalib: bool = False,
                  no_lunalib: bool = False) -> tuple[bool, str | None, str | None]:
-    """(enable LunaLib?, why, advice). Install rule RC8-25 (ROADMAP 60f): GraphicsLib 1.12.1's ShaderLib.init references LunaLib
-    classes and the unattended runs use Fast Rendering, so when GraphicsLib 1.12.1 is enabled and the rig has LunaLib, LunaLib is
-    enabled automatically ("auto"). `--with-lunalib` keeps its meaning (enable it whenever GraphicsLib is on without it, any
-    version: "forced"); `--no-lunalib` opts out, for a run meant to show the dependency gap. Otherwise only the advice remains."""
+    """(enable LunaLib?, why, advice). Install rule RC8-25 (ROADMAP 60f): GraphicsLib's ShaderLib.init reaches LunaLib classes and
+    the unattended runs use Fast Rendering, so when an enabled GraphicsLib's jar references LunaLib's settings classes and the rig
+    has LunaLib, LunaLib is enabled automatically ("auto"). Until 98.15 the rule named GraphicsLib 1.12.1 only, and 1.12.3 died at
+    start-up (RC9NC-LIVE5). `--with-lunalib` keeps its meaning (enable it whenever GraphicsLib is on without it: "forced");
+    `--no-lunalib` opts out, for a run meant to show the dependency gap. Otherwise only the advice remains."""
     if with_lunalib and no_lunalib:
         raise ProbeGroupError("--with-lunalib and --no-lunalib contradict each other.")
     advice = lunalib_advice(enabled, installed)
@@ -561,9 +582,10 @@ def lunalib_rule(enabled: list[str], installed: dict[str, str], mods_dir: Path, 
         return True, "forced (--with-lunalib)", None
     from bridgeforge.archive import _version_text
 
-    version = _version_text(_mod_info(Path(mods_dir) / installed[GRAPHICSLIB_ID]).get("version"))
-    if version.startswith(LUNALIB_RULE_VERSION):
-        return True, f"auto: GraphicsLib {version} needs LunaLib under Fast Rendering (RC8-25)", None
+    graphicslib = Path(mods_dir) / installed[GRAPHICSLIB_ID]
+    version = _version_text(_mod_info(graphicslib).get("version"))
+    if graphicslib_needs_lunalib(graphicslib):
+        return True, f"auto: GraphicsLib {version}'s jar references LunaLib's settings classes; it needs LunaLib under Fast Rendering (RC8-25)", None
     return False, None, advice
 
 
