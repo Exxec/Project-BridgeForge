@@ -3816,8 +3816,18 @@ history as the closure benchmark, a cross-repository trace check, an early Java 
     acceptance), and B is reconsidered only if that join proves too thin. RevenantLib's copy of its G3 portion does not
     mention the atlas, so it is unchanged.
 
-  **94.G3 Done 2026-11-27: its Accept is met** ("the bank holds the pilots and every allele of them in the corpus; licence
-  state per gene; rebuildable from sources").
+  **94.G3 Done 2026-11-27 in BridgeForge: its Accept is met** ("the bank holds the pilots and every allele of them in the
+  corpus; licence state per gene; rebuildable from sources"). **RevenantLib's G3 part is open** (corrected the same day,
+  read-only check of `Exxec/RevenantLib`): its ROADMAP item 1 (94.G3, 94.G5; GD-3) is "approved ... not yet implemented".
+  - *Overdue under D3:* the gene-contract pin (`bridgeforge-pins/gene-contract.sha256`, `bridgeforge gene contract` prints
+    `1345f51a...`) and its conformance test, due "when this item's first phase, BridgeForge 94.G3, starts" (2026-11-23).
+    Neither is in the repository. Project Go's P9 is the worked example.
+  - *Its acceptance spans G3 and G5:* one gene from a vanished author's mod folded through a gene package, with provenance
+    and credit recorded and `revenantlib-check` passing. It needs a carrier (G5) and a gene RevenantLib may distribute
+    (GD-2, GD-3).
+  - The evidence of the check below is filed, local only, in `bridgeforge-state/genes/g3-accept-20261127/` on both
+    machines. Besides the 12 copies the plan banked, each pilot also has a release-named folder in Test1's `Done/`; the
+    installed copies are byte-identical to those 4, so they add no allele.
   - *The pilots and their alleles:* the bank holds the 12 pilot copies in `Done/` (slice 2b: ROOT `0f1c4f9c...`, 415
     records). Beyond `Done/`, a read-only check the same day (the advisor: 3b skips a mod's own copies, so it says nothing
     about whether they are banked):
