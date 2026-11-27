@@ -122,6 +122,11 @@ Never edit Done/ in place.
 - The owner withdrew the 2026-09-29 rule that dropped these weapons and wings. `variant-weapon-slot-missing` (a weapon in a
   slot the hull lacks) was re-approved as a standing fixer the same day ("Re-approve it"): that is a Fatal when the ship is
   drawn (RC8-17).
+- `csv-row-extra-columns` (trailing cells, a space before a quoted field) and `csv-missing-design-type-column`: accept as
+  authored. The game ignores cells past the header, reads the quoted field correctly, and shows "Common" without the
+  column (RC8-62). Their standing approvals were withdrawn on 2026-11-27 (owner: "I will follow your recommendations").
+  `csv-fullwidth-number` stays a standing fix, because full-width digits read as 0 (RC8-61). So does `data-file-not-utf8`:
+  in JSON the byte becomes U+FFFD (RC8-60).
 - Record each acceptance per workspace with `escalation accept "<ws>" <finding> --reason`, quoting the rule. Do not use the
   queue-wide `escalation rule --accept`: it writes into every escalated mod's baseline.
 - Mods that are active upstream are skipped (AoTD, 2026-11-17). Abandoned mods are ported, however hard the port.
