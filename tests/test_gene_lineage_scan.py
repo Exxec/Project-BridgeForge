@@ -109,6 +109,28 @@ class ScanTests(unittest.TestCase):
         self.assertEqual((counts["candidate_roots"], counts["candidate_anchors"], counts["roots_sharing"]), (1, 2, 1))
         self.assertEqual(counts["shared_blobs"], len({blob["sha256"] for blob in row["shared"]}))
 
+    def test_an_anchor_an_earlier_walk_of_the_root_reached_is_not_walked_again(self) -> None:
+        # Review: a root with several banked anchors was walked once per anchor.
+        from bridgeforge.genome import gene_set
+
+        real, walked = gene_set.walk, []
+
+        def walk(mod, anchor, *args, **kwargs):  # the first walk reaches both anchors, as a closure through a need would
+            walked.append(anchor)
+            genes, refused = {}, {}
+            for each in ("hull:fx_other", "hull:fx_ship"):
+                found, why = real(mod, each, *args, **kwargs)
+                genes.update(found)
+                refused.update(why)
+            return genes, refused
+
+        with resolved_temp_dir() as root:
+            base, core, bank, plan_file = _corpus(root, ("Copy", "copymod", None), anchors=("hull:fx_ship", "hull:fx_other"))
+            with mock.patch("bridgeforge.genome.gene_set.walk", walk):
+                report = _scan(plan_file, core, bank, base)
+        self.assertEqual(len(walked), 1)
+        self.assertEqual({blob["gene"] for blob in report["candidates"][0]["shared"]}, {"hull:fx_other", "hull:fx_ship"})
+
     def test_a_refused_need_is_recorded(self) -> None:
         with resolved_temp_dir() as root:
             base, core, bank, plan_file = _corpus(root, ("Copy", "copymod", None))
@@ -233,6 +255,17 @@ class RefusalTests(unittest.TestCase):
             with self.assertRaises(BankError):
                 ls.load_plan(root / "missing.json")
 
+    def test_a_plan_that_lists_no_anchors_is_refused(self) -> None:
+        # Without its anchors, a plan cannot show it looked for every anchor the bank holds.
+        with resolved_temp_dir() as root:
+            _base_folder, _core, _bank, plan_file = _corpus(root)
+            data = json.loads(plan_file.read_text(encoding="utf-8"))
+            del data["anchors"]
+            plan_file.write_text(json.dumps(data), encoding="utf-8")
+            with self.assertRaises(BankError) as refused:
+                ls.load_plan(plan_file)
+        self.assertIn("lists no anchors", str(refused.exception))
+
 
 class ClassifyTests(unittest.TestCase):
     """Each blob is counted in one bucket, in the documented order, never reported as shared."""
@@ -266,6 +299,29 @@ class ClassifyTests(unittest.TestCase):
         # The candidate's own banked blob is an allele first, whatever its size (the documented order).
         shared, buckets = self._classify({"data/n.json": b"5"}, holder_mod="other", candidate_mod="other")
         self.assertEqual((len(buckets["same_mod"]), len(buckets["trivial_value"])), (1, 0))
+
+    def test_trivial_comes_before_vanilla(self) -> None:
+        _shared, buckets = self._classify({"data/n.json": b"5"}, vanilla={hashlib.sha256(b"5").hexdigest()})
+        self.assertEqual((len(buckets["trivial_value"]), buckets["vanilla_file"]), (1, []))
+
+    def test_a_blob_two_of_the_roots_genes_hold_is_classified_once(self) -> None:
+        with resolved_temp_dir() as root:
+            fake = FakeBank(root)
+            fake.record("banked", "hull:a_ship", members={"data/a.json": LONG_TEXT, "data/n.json": b"5"})
+            bank = fake.finish()
+            _anchors, members, donor, _unreadable, _builds = ls.bank_side(bank)
+            held = [{"path": p, "sha256": hashlib.sha256(d).hexdigest()} for p, d in (("data/a.json", LONG_TEXT), ("data/n.json", b"5"))]
+            shared, buckets = ls._classify(bank, {"hull:b_ship": {"members": held}, "hull:c_ship": {"members": held}}, "other",
+                                           members, donor, set())
+        self.assertEqual(([s["gene"] for s in shared], len(buckets["trivial_value"])), (["hull:b_ship"], 1))
+
+    def test_counts_are_of_distinct_blobs_across_rows(self) -> None:
+        # A blob two candidate roots hold is one blob, shared or counted apart (the module docstring).
+        row = {"path": "In operation/A/working", "mod_id": "a", "anchors": ["hull:a_ship"], "error": None, "anchors_refused": {},
+               "needs_refused": {}, "shared": [{"sha256": "s1"}], "counted_apart": {"trivial_value": ["t1"], "same_mod": ["m1"]}}
+        counts = ls._counts({"roots": [{}, {}], "summary": {}}, [row, dict(row, path="In operation/B/working", mod_id="b")], 0)
+        self.assertEqual((counts["shared_blobs"], counts["excluded"]["trivial_value"], counts["excluded"]["same_mod"]), (1, 1, 1))
+        self.assertEqual((counts["roots_sharing"], counts["mod_ids_sharing"]), (2, 2))
 
 
 class CliTests(unittest.TestCase):
