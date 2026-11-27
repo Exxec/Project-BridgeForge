@@ -548,18 +548,22 @@ def graphicslib_needs_lunalib(graphicslib: Path) -> bool:
     """Whether a class in GraphicsLib's listed jars references LunaLib's settings classes. 1.12.1 and 1.12.3 both do
     (GraphicsLibSettings, GraphicsLibSettingsListener); a version number said nothing about 1.12.3 (98.15, RC9NC-LIVE5)."""
     import zipfile
+    import zlib
 
     from bridgeforge.zipsafe import read_class
 
-    for entry in _mod_info(graphicslib).get("jars") or []:
-        jar = Path(graphicslib) / str(entry)
+    entries = _mod_info(graphicslib).get("jars")
+    for entry in entries if isinstance(entries, list) else []:
+        jar = Path(graphicslib) / str(entry).replace("\\", "/")  # mod_info.json may write Windows separators
         if not jar.is_file():
             continue
         try:
             with zipfile.ZipFile(jar) as archive:
                 if any(name.endswith(".class") and LUNALIB_REFERENCE in (read_class(archive, name) or b"") for name in archive.namelist()):
                     return True
-        except (OSError, zipfile.BadZipFile):
+        # A corrupt entry raises zlib.error, a truncated one EOFError, an unknown method NotImplementedError and an encrypted one
+        # RuntimeError: all crashed probe-group install and rig-up (review, 2026-11-27). Such a jar is read as no reference.
+        except (OSError, zipfile.BadZipFile, zlib.error, EOFError, NotImplementedError, RuntimeError):
             continue
     return False
 

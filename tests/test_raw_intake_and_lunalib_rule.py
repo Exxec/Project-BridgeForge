@@ -147,6 +147,33 @@ class LunaLibRuleTests(unittest.TestCase):
             self.assertEqual(lunalib_rule(["demo"], installed, mods), (False, None, None))
             self.assertEqual(lunalib_rule(["shaderLib", "lunalib"], installed, mods), (False, None, None))
 
+    def test_a_corrupt_jar_a_string_jar_list_and_windows_separators(self) -> None:
+        # Review, 2026-11-27: a corrupt deflate stream raised zlib.error out of lunalib_rule and crashed probe-group install.
+        import zipfile
+
+        from bridgeforge.probe.probe_group import graphicslib_needs_lunalib
+
+        with resolved_temp_dir() as root:
+            mods, _installed = self._mods(root, "1.12.3")
+            graphicslib = mods / "GraphicsLib"
+            info = graphicslib / "mod_info.json"
+            info.write_text(json.dumps({"id": "shaderLib", "version": "1.12.3", "jars": ["jars\\Graphics.jar"]}), encoding="utf-8")
+            backslash = graphicslib_needs_lunalib(graphicslib)
+            info.write_text(json.dumps({"id": "shaderLib", "version": "1.12.3", "jars": "jars/Graphics.jar"}), encoding="utf-8")
+            as_string = graphicslib_needs_lunalib(graphicslib)
+            corrupt = graphicslib / "jars" / "Broken.jar"
+            with zipfile.ZipFile(corrupt, "w", zipfile.ZIP_DEFLATED) as jar:
+                jar.writestr("a/B.class", b"\xca\xfe\xba\xbe" + b"lunalib/lunaSettings/ " * 400)
+            data = bytearray(corrupt.read_bytes())
+            with zipfile.ZipFile(corrupt) as jar:
+                entry = jar.infolist()[0]
+            start = entry.header_offset + 30 + len(entry.filename.encode()) + len(entry.extra)
+            data[start:start + 16] = b"\xff" * 16
+            corrupt.write_bytes(bytes(data))
+            info.write_text(json.dumps({"id": "shaderLib", "version": "1.12.3", "jars": ["jars/Broken.jar"]}), encoding="utf-8")
+            broken = graphicslib_needs_lunalib(graphicslib)
+        self.assertEqual((backslash, as_string, broken), (True, False, False))
+
     def test_contradicting_flags_are_refused(self) -> None:
         with resolved_temp_dir() as root:
             mods, installed = self._mods(root, "1.12.1")
