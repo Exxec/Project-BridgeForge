@@ -1,0 +1,1 @@
+- **Vayra's Sector** 3.2.1+bf.1: RC7 port: PersonBountyEventData.reportSuccess() became reportSuccess(int); both bounty intels now pass getLevel()+1 (ROADMAP-3 95.14 rule), keeping RC8 progression

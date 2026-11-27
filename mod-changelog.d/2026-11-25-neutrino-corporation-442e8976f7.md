@@ -1,0 +1,1 @@
+- **Neutrino Corporation** 1.8.9+bf.2: Retargeted to Starsector 0.98.5a-RC9 (gameVersion 0.98.5a-RC7 -> 0.98.5a-RC9): `target-impact` found no API, linkage or data change affecting this mod. Not yet live-tested on 0.98.5a-RC9.

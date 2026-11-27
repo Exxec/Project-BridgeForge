@@ -152,6 +152,61 @@ four", "Finish on RC7, re-bank later" (the gene bank), and "Live testing is ok f
   - *United Aurora Federation:* the author released 0.8.4c1, which declares 0.98.5a-RC9. The archive (0.8.4c,
     live-validated 2026-11-17) is CLEAN on RC9. UAF's own master version file names 0.8.4c1 as the latest release (it
     still says starsectorVersion 0.98a-RC5). UAF is active, so it is not revived.
+  - *Owner 2026-11-27,* answering "Archive Station Augments bf.3?" and "Wide Horizons 1.5.1b and UAF 0.8.4c1: take the
+    upstream updates?": "Yes, yes". Same message: "J28 setup on white legion for now then later we can mirror to test1 as
+    usually white legion is updated sooner. Pause live testing temporarily but continue everything else at your
+    recommended order." Live testing was paused on both machines (`live pause`, 98.16) and checked: no gate loop, no
+    BridgeForge task, no java on Test1.
+  - **Station Augments 2.4.3+bf.3 archived 2026-11-27** from RC9SA-SR2-0985a-20261126 (`probe-group record --accept
+    --archive --refresh --observe-exit`): New Game, save, reload after 3 days, both halves LIVE_DONE, report PASS, on the
+    RC9 rig with the libraries of 2026-11-26. The run predates 93.29, so it binds only to the rig's current probe config:
+    SA's group was re-installed exactly as the run had it (`install 1 --plan PLAN-962e.json --also-enable
+    starsector_prepatcher --save-reload-after-days 3`), and the config hash matched the run's manifest (`41dc3083...`).
+    The shield-shunt port is proven for ships (RC9SA-SHUNT; its control failed as expected); station modules are unproven,
+    and the note says so. bf.2 moved to `Done/_replaced-2026-11-27/`.
+  - **Wide Horizons 1.5.1b in `Done/` 2026-11-27,** as a plain upstream copy like the ones before it (WH is maintained upstream,
+    so it is not revived). The Core and Content folders come from the intakes' `original/`, not `working/`, which `revive
+    --apply` had changed. Both are byte-identical to the owner's installed 1.5.1b (41 and 186 files). The four raw copies of
+    1.5.0 and 1.5.1a, which break on RC9 (98.2), moved unchanged to `Done/_replaced-2026-11-27/`, with a README.
+  - **United Aurora Federation 0.8.4c1: not swapped in yet.** The archive (0.8.4c) is live-validated and CLEAN on RC9, so it
+    stays in `Done/` until 0.8.4c1 passes a live run. Compared file by file (2026-11-27), 0.8.4c1 is 0.8.4c plus player
+    portraits in `player.faction`, a version bump in `mod_info.json` and `uaf.version`, and 16 junk files intake strips. It
+    still has both problems the 0.8.4c revival fixed with approved fixers. One is the curly quote in a `rules.csv` dialog
+    cell (`rules-csv-curly-quote-unreadable`). The other is `UAFGen.java` importing Nexerelin's `SectorManager`
+    (`nexerelin-corvus-mode-import`; every loose script compiles at startup, so it fails without Nexerelin). Next: stage
+    0.8.4c1 as a workspace with the same fixes, then a live run when live testing resumes, then `--archive --refresh`.
+- 98.21 (S) **Mikohime Java 28 on White_Legion's rig: built, not proven.** Owner 2026-11-27: "J28 setup on white legion for
+  now then later we can mirror to test1 as usually white legion is updated sooner". The owner's RC8 install runs Mikohime
+  Unofficial Configurator v0.8.1 with jdk-28+24 (`28-beta+24-ea`). Neither of its documents names a game version, and its
+  last entry (2026-10-15) predates 0.98.5a.
+  - *Built,* by the machine-local `bridgeforge-state/live-wrappers/setup_j28_miko.py`:
+    - White_Legion's `In operation/_rig-0985a`, whose `starsector-core` is a junction to the RC9 install.
+    - The JDK copied to `In operation/_rig/jdk-28+24` (422 files, SHA-256 manifest beside it).
+    - Prepatcher 0.18.9 with the RC9 rig jar (98.14); the stock agent is in `_addons/`.
+    - Fast Rendering 1.0.3 and its resource-cache agent in `fast_rendering/`.
+    - Mikohime's files from its zip in `mikohime/`. They match the owner's install file for file, apart from the
+      configurator's own files and the optional OpenAL add-on, whose installed DLL equals the zip's.
+    - `run-j28-miko.bat`, which is never the default.
+  - *The arguments are the owner's `Miko_Simple.txt`,* changed only where a path would reach the read-only install through
+    the junction:
+    - logs to `../logs`, and `-XX:ErrorFile` there too;
+    - `fr.jar` and the cache agent from `../fast_rendering`, and the cache in `../fr-resource-cache`.
+    RC8's and RC9's stock classpaths are identical, so Mikohime's jar swaps carry over unchanged: Janino and
+    commons-compiler 3.0.12, jcraft-jorbis, log4j 3 with disruptor, its XStream 1.4.21 fork, and its own lwjgl, jinput,
+    lwjgl_util, jaxb and txw2, with matching natives.
+  - *One deliberate difference:* the rig's log config goes to the console and the file, at the game's own levels. The
+    owner's "Reduced" config logs to a file only and silences the loading and rules loggers, but the harness reads the game's
+    console output.
+  - *Checked:*
+    - JDK 28 accepts every argument (`java @args -version`, the agents left out; exit 0, none refused);
+    - every file the arguments name exists;
+    - no `--enable-preview` (88.24);
+    - `rig-doctor`: isolation, licence-key presence and the Prepatcher RC9 table PASS. It fails only for the missing
+      `enabled_mods.json` and probe: no group is installed yet.
+  - *Not proven:* live testing is paused. Its runs are a different class of evidence from the game's own launcher: Janino and
+    XStream are not the game's.
+  - *Next:* mirror to Test1's rig with the same script, then a vanilla smoke and one group run when live testing resumes.
+    Test1's memory may need a smaller heap than the owner's 10 GB.
 - 98.5 **Done 2026-11-25.** **Repoint the 0.98.5a rigs.** `_rig-0985a`'s `starsector-core` links to RC9 (RC9's launcher,
   `vmparams` and `jre` equal RC7's); `rig-doctor` isolation and launcher_prefs PASS. `_rig-genes` stays on RC7: the gene
   bank is on RC7 until 98.6.
@@ -667,8 +722,14 @@ order then continue live testing followed by more roadmap work based on your rec
     procedure;
   - `prepatcher-table`: rebuild Prepatcher's name table and rig jar for a new game build, with the scored control, the
     needed-set check, Prepatcher's own test and the proof run.
-
-**97. The S series' remaining work, re-queued without gates (owner 2026-11-17: "Park S4. Stop treating S2 and S3 as gates.
+- 98.20 (S) **Archive records written on Test1 never reached the repository.** Found 2026-11-27 after Station Augments'
+  archive: Test1's checkout held 17 `mod-changelog.d/` fragments (2026-11-19 to 2026-11-27: Broken Star, Kadur Remnant,
+  Neutrino Corporation, Station Augments, Vayra's Sector, YunruCore) and one `release_policy.d/` licence decision
+  (Station Augments, 2026-11-19), all untracked. None was in main or in `MOD_CHANGELOG.md`. 96.5 A7 made these records
+  fragments so both machines could write them, but `archive` writes them where it runs, and nothing commits them from
+  Test1. They are committed by this item's PR, copied byte for byte (`release-notes --check` lists all 18 as pending).
+  - *Open:* make the gap visible. For example, `hygiene` could report untracked record fragments, and `archive` could end
+    by naming the files to commit. Queued; not built., re-queued without gates (owner 2026-11-17: "Park S4. Stop treating S2 and S3 as gates.
 Check S series implementation plan and if applicable add remaining items to roadmap queue").**
 **Approved; queued after items 95 and 96.** From docs/S_SERIES_IMPLEMENTATION_PLAN.md's "what remains" table (status check
 2026-10-26). Each is now an ordinary item: no S-series acceptance waits on it, and it waits on nothing in the S series.
@@ -3821,7 +3882,14 @@ history as the closure benchmark, a cross-repository trace check, an early Java 
   read-only check of `Exxec/RevenantLib`): its ROADMAP item 1 (94.G3, 94.G5; GD-3) is "approved ... not yet implemented".
   - *Overdue under D3:* the gene-contract pin (`bridgeforge-pins/gene-contract.sha256`, `bridgeforge gene contract` prints
     `1345f51a...`) and its conformance test, due "when this item's first phase, BridgeForge 94.G3, starts" (2026-11-23).
-    Neither is in the repository. Project Go's P9 is the worked example.
+    Neither was in the repository. Project Go's P9 is the worked example. **Done the same day, RevenantLib #8 (merged
+    4fd0918):**
+    - the pin;
+    - `fixtures/gene-contract/`, the same git tree as BridgeForge's `docs/contracts/gene` (`7a253936...`);
+    - a Python reader of the contract's rules;
+    - `tests/test_gene_contract.py`, which judges every published fixture against `CONTRACT.json`'s verdicts and fails
+      on a drifted pin or copy. A changed pin was shown to fail.
+    CI passed on Ubuntu and Windows. The fold-in acceptance below stays open until G5.
   - *Its acceptance spans G3 and G5:* one gene from a vanished author's mod folded through a gene package, with provenance
     and credit recorded and `revenantlib-check` passing. It needs a carrier (G5) and a gene RevenantLib may distribute
     (GD-2, GD-3).
