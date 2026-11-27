@@ -114,4 +114,19 @@ Never edit Done/ in place.
 - Keep CSV rows that have no file and that nothing uses; ignore their warnings ("keep them and ignore warning if it doesn't
   affect anything").
 - Over-budget variants that the reference build shares: accept as authored (ruling option 2).
+- A weapon larger than its slot (`variant-weapon-slot-mismatch`): accept as authored, never fix ("Keep as authored", 2026-11-27).
+  RC9 keeps such a weapon in the loaded variant, the built ship and combat, and it fires (RC8-56). The owner withdrew the
+  2026-09-29 rule that dropped these weapons, and its three standing fixer approvals. Missing slots
+  (`variant-weapon-slot-missing`) and too many wings (`variant-wings-exceed-bays`) stay the owner's decision for each mod.
+  Record each one with `escalation accept "<ws>" variant-weapon-slot-mismatch --reason`, quoting the rule.
 - Mods that are active upstream are skipped (AoTD, 2026-11-17). Abandoned mods are ported, however hard the port.
+- A probe `class-sweep` FAIL whose missing class belongs to another mod is setup-dependent and accepted ("UAF/nex is accepted
+  since it initially declares it as required. This can be set rule for everything else.", 2026-11-27) when:
+  - that mod was not enabled in the run;
+  - the mod under test declares or integrates with it (a `mod_info` dependency, its config, an author note);
+  - the class loads in a run where that mod is enabled.
+
+  Record each class and `all-classes` in `working/reports/probe_accepted.json` with `check: class-sweep`, quoting the rule.
+- Record and archive may run on White_Legion as long as the result is synced to Test1, which holds the main `Done/` ("You can
+  keep archives on white legion as long as they get synced to test1", 2026-11-27). Sync the recorded workspace, hash-checked,
+  then `archive --refresh` there. Commit any changelog or licence fragment either machine writes (98.20).

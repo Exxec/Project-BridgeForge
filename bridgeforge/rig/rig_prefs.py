@@ -8,9 +8,11 @@ Windows only; elsewhere nothing is changed.
 from __future__ import annotations
 
 import contextlib
+import contextvars
 import sys
 
 PREFS_KEY = r"Software\JavaSoft\Prefs\com\fs\starfarer"
+ERROR_NO_MORE_ITEMS = 259  # RegEnumValueW past the last value; any other non-zero code is an error, not the end of the list
 RIG_RESOLUTION = "1920x1440"  # the window every click fraction in live_run was measured in (1920x1440 physical, 2026-10-11)
 PINNED = {"resolution": RIG_RESOLUTION, "fullscreen": "false"}
 # Java's Windows preferences store each capital as "/" plus the letter, so canSkipTutorial is the registry value
@@ -42,6 +44,43 @@ def has_pref(name: str, key_path: str = PREFS_KEY) -> bool | None:
             return query(key.handle, name, None, None, None, ctypes.byref(size)) == 0
     except FileNotFoundError:
         return False
+
+
+def pref_names(key_path: str = PREFS_KEY) -> list[str] | None:
+    """The value names under the key, listed without any value's data (`RegEnumValueW` with no data buffer): the licence key
+    shares this key and is never read (owner rule 2026-11-17); `winreg.EnumValue` would return its data. None off Windows,
+    [] without the key. `key_path` (under HKEY_CURRENT_USER) is for tests.
+
+    A listing error raises OSError: a short list taken as complete would make the restore delete every owner value it missed
+    (review of #269)."""
+    if sys.platform != "win32":
+        return None
+    import ctypes
+    import winreg
+
+    enum = ctypes.windll.advapi32.RegEnumValueW
+    enum.argtypes = [ctypes.c_void_p, ctypes.c_ulong, ctypes.c_wchar_p, ctypes.POINTER(ctypes.c_ulong), ctypes.c_void_p,
+                     ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p]
+    enum.restype = ctypes.c_long
+    names: list[str] = []
+    try:
+        with winreg.OpenKey(winreg.HKEY_CURRENT_USER, key_path) as key:
+            while True:
+                buffer, size = ctypes.create_unicode_buffer(16384), ctypes.c_ulong(16384)  # a value name has at most 16383 characters
+                code = enum(key.handle, len(names), buffer, ctypes.byref(size), None, None, None, None)
+                if code == ERROR_NO_MORE_ITEMS:
+                    break
+                if code != 0:
+                    raise OSError(f"listing the preference names failed (RegEnumValueW {code}) after {len(names)} name(s)")
+                names.append(buffer.value)
+    except FileNotFoundError:
+        return []
+    return names
+
+
+def owner_prefs() -> dict[str, str | None]:
+    """Every value of the shared preferences except the licence key, each read by name (ROADMAP-3 98.23 a)."""
+    return read_prefs(tuple(name for name in pref_names() or [] if name.lower() != LICENCE_KEY.lower()))
 
 
 def read_prefs(names=tuple(PINNED)) -> dict[str, str | None]:
@@ -78,13 +117,56 @@ def write_prefs(values: dict[str, str | None]) -> None:
                 winreg.SetValueEx(key, name, 0, winreg.REG_SZ, value)
 
 
+# Set while owner_prefs_kept holds the owner's values for several launches: each launch then gives back only what it pinned.
+_KEPT: contextvars.ContextVar[bool] = contextvars.ContextVar("owner_prefs_kept", default=False)
+
+
+def _give_back(others: dict[str, str | None], wanted: dict[str, str]) -> None:
+    """Write back every value of `others` (the owner's, taken before) that now differs, is new or is gone, except the pinned
+    names (`wanted`, restored apart) and the licence key, which is never read, compared or written."""
+    after = owner_prefs()
+    changed = {name: others.get(name) for name in sorted(set(others) | set(after))
+               if name not in wanted and name.lower() != LICENCE_KEY.lower() and others.get(name) != after.get(name)}
+    if changed:
+        write_prefs(changed)
+
+
+@contextlib.contextmanager
+def owner_prefs_kept():
+    """Take the owner's values once for several launches and give them back after the last, even on error.
+
+    A save-reload run starts the game twice: the first launch saves, which moves `continue` to the rig's save, and the reload
+    clicks Continue, which loads the last save the game wrote (RC8-29), the one `continue` records. Given back between the two,
+    `continue` names the owner's save, which the rig does not have (review of #269; the in-game link is inferred, and a
+    save-reload run proves it). Inside, each pinned_launcher_prefs restores only its pinned values. Nested, the outermost one
+    gives back."""
+    if _KEPT.get():
+        yield
+        return
+    others = owner_prefs()
+    token = _KEPT.set(True)
+    try:
+        yield
+    finally:
+        _KEPT.reset(token)
+        _give_back(others, {})
+
+
 @contextlib.contextmanager
 def pinned_launcher_prefs(values: dict[str, str] | None = None):
-    """Set the rig's launcher values for the run and restore the owner's exactly (including absent ones), even on error."""
+    """Set the rig's launcher values for the run and restore the owner's exactly (including absent ones), even on error.
+
+    The game also writes other values into this store, which every install on the machine shares: on White_Legion, the owner's
+    own desktop, each run moved `continue` (the owner's last save) to the rig's save (2026-11-27, ROADMAP-3 98.23 a). So every
+    other value is taken before the run and any the run changed, added or removed is given back, unless owner_prefs_kept
+    holds them for a later launch. The licence key is never read, compared or written."""
     wanted = dict(values or PINNED)
     before = read_prefs(tuple(wanted))
+    others = None if _KEPT.get() else owner_prefs()
     write_prefs(wanted)
     try:
         yield before
     finally:
         write_prefs(before)
+        if others is not None:
+            _give_back(others, wanted)

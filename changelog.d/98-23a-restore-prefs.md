@@ -1,0 +1,1 @@
+- A live run gives back every game preference it changed in the store all installs share (the owner's last save among them), not only the ones it pins; the licence key is never read (ROADMAP-3 98.23 a).
