@@ -152,6 +152,18 @@ four", "Finish on RC7, re-bank later" (the gene bank), and "Live testing is ok f
   - *United Aurora Federation:* the author released 0.8.4c1, which declares 0.98.5a-RC9. The archive (0.8.4c,
     live-validated 2026-11-17) is CLEAN on RC9. UAF's own master version file names 0.8.4c1 as the latest release (it
     still says starsectorVersion 0.98a-RC5). UAF is active, so it is not revived.
+  - *Owner 2026-11-27,* answering "Archive Station Augments bf.3?" and "Wide Horizons 1.5.1b and UAF 0.8.4c1: take the
+    upstream updates?": "Yes, yes". Same message: "J28 setup on white legion for now then later we can mirror to test1 as
+    usually white legion is updated sooner. Pause live testing temporarily but continue everything else at your
+    recommended order." Live testing was paused on both machines (`live pause`, 98.16) and checked: no gate loop, no
+    BridgeForge task, no java on Test1.
+  - **Station Augments 2.4.3+bf.3 archived 2026-11-27** from RC9SA-SR2-0985a-20261126 (`probe-group record --accept
+    --archive --refresh --observe-exit`): New Game, save, reload after 3 days, both halves LIVE_DONE, report PASS, on the
+    RC9 rig with the libraries of 2026-11-26. The run predates 93.29, so it binds only to the rig's current probe config:
+    SA's group was re-installed exactly as the run had it (`install 1 --plan PLAN-962e.json --also-enable
+    starsector_prepatcher --save-reload-after-days 3`), and the config hash matched the run's manifest (`41dc3083...`).
+    The shield-shunt port is proven for ships (RC9SA-SHUNT; its control failed as expected); station modules are unproven,
+    and the note says so. bf.2 moved to `Done/_replaced-2026-11-27/`.
 - 98.5 **Done 2026-11-25.** **Repoint the 0.98.5a rigs.** `_rig-0985a`'s `starsector-core` links to RC9 (RC9's launcher,
   `vmparams` and `jre` equal RC7's); `rig-doctor` isolation and launcher_prefs PASS. `_rig-genes` stays on RC7: the gene
   bank is on RC7 until 98.6.
@@ -667,8 +679,14 @@ order then continue live testing followed by more roadmap work based on your rec
     procedure;
   - `prepatcher-table`: rebuild Prepatcher's name table and rig jar for a new game build, with the scored control, the
     needed-set check, Prepatcher's own test and the proof run.
-
-**97. The S series' remaining work, re-queued without gates (owner 2026-11-17: "Park S4. Stop treating S2 and S3 as gates.
+- 98.20 (S) **Archive records written on Test1 never reached the repository.** Found 2026-11-27 after Station Augments'
+  archive: Test1's checkout held 17 `mod-changelog.d/` fragments (2026-11-19 to 2026-11-27: Broken Star, Kadur Remnant,
+  Neutrino Corporation, Station Augments, Vayra's Sector, YunruCore) and one `release_policy.d/` licence decision
+  (Station Augments, 2026-11-19), all untracked. None was in main or in `MOD_CHANGELOG.md`. 96.5 A7 made these records
+  fragments so both machines could write them, but `archive` writes them where it runs, and nothing commits them from
+  Test1. They are committed by this item's PR, copied byte for byte (`release-notes --check` lists all 18 as pending).
+  - *Open:* make the gap visible. For example, `hygiene` could report untracked record fragments, and `archive` could end
+    by naming the files to commit. Queued; not built., re-queued without gates (owner 2026-11-17: "Park S4. Stop treating S2 and S3 as gates.
 Check S series implementation plan and if applicable add remaining items to roadmap queue").**
 **Approved; queued after items 95 and 96.** From docs/S_SERIES_IMPLEMENTATION_PLAN.md's "what remains" table (status check
 2026-10-26). Each is now an ordinary item: no S-series acceptance waits on it, and it waits on nothing in the S series.

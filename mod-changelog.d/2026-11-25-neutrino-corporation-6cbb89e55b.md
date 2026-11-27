@@ -1,0 +1,1 @@
+- **Neutrino Corporation** 1.8.9+bf.3: Ported to Starsector 0.98.5a-RC9: RC9 renamed the obfuscated combat.systems.return back to combat.systems.F (same members; javap of both cores, 2026-11-25). The RC7 port two constants in Neutrino_FighterDroneSystemAI were reversed; the class is now byte for byte the author original. target-impact RC7 -> RC9: CLEAN (ROADMAP-3 98.4).
