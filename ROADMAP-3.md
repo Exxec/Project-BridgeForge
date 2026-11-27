@@ -585,6 +585,28 @@ order then continue live testing followed by more roadmap work based on your rec
 - 98.18 (S) **Every live result carries a Prepatcher summary:** patches applied, warnings, errors, rollbacks and the agent
   version, read from `mods/StarsectorPrepatcher/logs/prepatcher.log` for the run's time window. The proof run above needed
   that check by hand.
+  **Done 2026-11-27.**
+  - *The summary:* `live/prepatcher_log.py` reads the log lines stamped since the launch began (the agent writes UTC stamps
+    and opens the file truncated, so a log holds one start), so an earlier start's log never passes for this one.
+    `LiveResult.prepatcher` holds the verdict, the version, patches applied and their classes, warnings, errors, rollbacks,
+    fail-opens and up to five problem lines. The wording counted is the agent jar's own (a line starting "APPLIED ",
+    "Patched ... structurally", "rolled back", "failed open"; checked 2026-11-27).
+  - *Verdicts:* CLEAN (an agent start and patches applied), WARNINGS, PROBLEMS, NO_START, NOTHING_APPLIED, NO_LOG (no line
+    in the window: the agent did not start), NOT_LOADED (enabled in the mod list, but the launcher's java line loads no
+    Prepatcher agent), UNREADABLE (the log, or the summary itself, failed; the run keeps its verdict).
+  - *Where the agent is:* the launcher's java line decides (`-javaagent` before the main class), not `enabled_mods.json`,
+    which the agent never reads and `probe-group install` rewrites; the log is the agent jar's mod folder's (a relative
+    agent is relative to `starsector-core`). A launcher that cannot be read falls back to the mod list.
+  - *Where it is attached:* `live_run`, `reload_run` and the duel run; a run that started no game (refused,
+    LAUNCH_NO_PROCESS) carries none. `probe-group live` prints one line per launch (the first launch's labelled when a
+    reload follows) and keeps both in its JSON; `live-queue` keeps it in each row.
+  - *Review (2026-11-27):* the first version decided by the mod list (a group installed without `--also-enable
+    starsector_prepatcher` was patched but summarised as absent), printed the first launch's line under a failed reload's
+    verdict, called a start that applied nothing CLEAN, missed APPLIED lines without " to <class>" (64 of RC9SA-SR2's 65),
+    summarised a launch with no process, let a failing summary throw away a finished run, and left the time window
+    unpinned by tests. All fixed; on RC9SA-SR2's real log it reads "prepatcher 0.18.9: CLEAN; applied 65 on 43 classes".
+  - *Tests:* `tests/test_prepatcher_log.py`; `tests/test_direct_start.py`'s reload stub returns a LiveResult, as
+    `drive_reload` does. Mutation check: 19 mutants on the first version, all caught; the review fixes, 15 more, all caught.
 - 98.19 (S) **`findings-diff`: one check over `Done/`, old code against new.** `findings-diff A.json B.json` compares two
   runs of `finding-stats`-style per-archive finding lists and prints what was dropped and what appeared, per archive. The
   `bridgeforge-pr` skill runs it for any change to a scanner check. 98.8's hand-made sweep (53 findings become 20, nothing

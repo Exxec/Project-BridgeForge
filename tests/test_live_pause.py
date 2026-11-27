@@ -110,6 +110,7 @@ class EnforcedTests(unittest.TestCase):
     def test_a_paused_queue_installs_nothing_and_keeps_its_checkpoint(self) -> None:
         import json
 
+        from bridgeforge.live.live_run import LiveResult
         from bridgeforge.live_queue import live_queue
         from bridgeforge.run_manifest import CONFIG_RELATIVE
 
@@ -123,7 +124,7 @@ class EnforcedTests(unittest.TestCase):
             def play(_rig, test_id):  # group 1 plays, then the owner pauses
                 played.append(test_id)
                 pause.pause("owner: Pause live testing.", state=root)
-                return mock.Mock(verdict="LIVE_STUCK", stage="combat-round-1", detail="d", log=None)
+                return LiveResult("LIVE_STUCK", "combat-round-1", "d")  # the real shape: a Mock would invent a prepatcher field
 
             installed: list[int] = []
             with mock.patch.dict(os.environ, {pause.PAUSE_FILE_ENV: str(root / "live-paused.json")}):
