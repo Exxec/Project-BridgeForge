@@ -67,11 +67,16 @@ class ReloadDirectTests(unittest.TestCase):
             seen.update(kwargs)
             yield None, None, 0
 
+        from bridgeforge.live.live_run import LiveResult
+
         direct = DirectStart("1920x1440", -200)
-        with mock.patch.object(save_reload_run, "running_game", fake_running_game), \
-                mock.patch.object(save_reload_run, "drive_reload", lambda *a, **k: "result"):
-            self.assertEqual(save_reload_run.reload_run(None, "T-reload", direct=direct), "result")
+        played = LiveResult("LIVE_DONE")
+        # drive_reload returns a LiveResult, and reload_run reads the rig for Prepatcher's summary (98.18): an empty rig has none.
+        with resolved_temp_dir() as rig, mock.patch.object(save_reload_run, "running_game", fake_running_game), \
+                mock.patch.object(save_reload_run, "drive_reload", lambda *a, **k: played):
+            self.assertIs(save_reload_run.reload_run(rig, "T-reload", direct=direct), played)
         self.assertEqual(seen["direct"], direct)
+        self.assertIsNone(played.prepatcher)
 
 
 class RunningGameDirectTests(unittest.TestCase):

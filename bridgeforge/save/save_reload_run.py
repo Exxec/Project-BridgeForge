@@ -115,7 +115,16 @@ def drive_reload(log: Path, hands: Hands, menu_timeout: float = 240, compare_tim
 
 def reload_run(rig: Path, test_id: str, bat_name: str = "run-j25-direct.bat", menu_timeout: float = 240, direct=None) -> LiveResult:
     """Start the rig game again under its own manifest, load the last save and observe the compare line. `direct` starts it
-    without the launcher, as the first run did (ROADMAP-3 95.4)."""
+    without the launcher, as the first run did (ROADMAP-3 95.4). The reload is a new game start, so Prepatcher's agent runs
+    and logs again: the result carries its own summary (98.18)."""
+    from bridgeforge.live.live_run import with_prepatcher
+    from bridgeforge.live.prepatcher_log import run_started
+
+    since = run_started()
+    return with_prepatcher(_reload(rig, test_id, bat_name, menu_timeout, direct), rig, since)
+
+
+def _reload(rig: Path, test_id: str, bat_name: str, menu_timeout: float, direct) -> LiveResult:
     try:
         with running_game(rig, test_id, bat_name, expected=RELOAD_EXPECTED, scenario="probe-group live --save-reload (reload)",
                           direct=direct) as (log, hands, _rows):

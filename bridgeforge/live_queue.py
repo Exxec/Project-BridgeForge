@@ -140,7 +140,8 @@ def _run_group(row: dict, plan: dict, number: int, rig: Path, test_id: str, bat:
     """Install, play and judge one group into `row`; record it only after LIVE_DONE, and only with `archive`."""
     install(plan, number)
     live = play(rig, test_id, bat_name=bat) if bat else play(rig, test_id)
-    row["live"] = {"verdict": live.verdict, "stage": live.stage, "detail": live.detail, "log": live.log}
+    row["live"] = {"verdict": live.verdict, "stage": live.stage, "detail": live.detail, "log": live.log,
+                   "prepatcher": getattr(live, "prepatcher", None)}  # 98.18; a stubbed play may return an older shape
     if live.verdict != "LIVE_DONE":
         actions = Path(f"{live.log}.actions.json") if live.log else None
         row["triage"] = {"log": live.log, "actions": str(actions) if actions and actions.is_file() else None}

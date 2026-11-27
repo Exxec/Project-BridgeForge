@@ -585,6 +585,14 @@ order then continue live testing followed by more roadmap work based on your rec
 - 98.18 (S) **Every live result carries a Prepatcher summary:** patches applied, warnings, errors, rollbacks and the agent
   version, read from `mods/StarsectorPrepatcher/logs/prepatcher.log` for the run's time window. The proof run above needed
   that check by hand.
+  **Done 2026-11-27.** `live/prepatcher_log.py` reads the log lines stamped since the launch began (the agent writes UTC
+  stamps), so an earlier start's log never passes for this one. `LiveResult.prepatcher` holds the verdict (CLEAN,
+  WARNINGS, PROBLEMS, NO_LOG for an enabled agent that wrote nothing, UNREADABLE), the version, patches applied and their
+  classes, warnings, errors, rollbacks, fail-opens and up to five problem lines. The wording counted is the agent jar's own
+  ("APPLIED ... to", "Patched ... structurally", "rolled back", "failed open"; checked 2026-11-27). `live_run` and
+  `reload_run` attach it, `probe-group live` prints one line per launch and keeps it in its JSON, `live-queue` keeps it in
+  each row. A refused run carries none. Tests: `tests/test_prepatcher_log.py`; `tests/test_direct_start.py`'s reload stub
+  returns a LiveResult, as `drive_reload` does.
 - 98.19 (S) **`findings-diff`: one check over `Done/`, old code against new.** `findings-diff A.json B.json` compares two
   runs of `finding-stats`-style per-archive finding lists and prints what was dropped and what appeared, per archive. The
   `bridgeforge-pr` skill runs it for any change to a scanner check. 98.8's hand-made sweep (53 findings become 20, nothing
