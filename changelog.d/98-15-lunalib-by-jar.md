@@ -1,0 +1,1 @@
+- `probe-group install` and `rig-up` enable LunaLib automatically whenever an enabled GraphicsLib's listed jar references `lunalib/lunaSettings/` (RC8-25), not only for GraphicsLib 1.12.1: GraphicsLib 1.12.3 also needs it, and a Neutrino run without it died at start-up.

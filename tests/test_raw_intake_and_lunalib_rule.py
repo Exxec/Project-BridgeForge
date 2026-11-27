@@ -89,9 +89,21 @@ class RenameRetryTests(unittest.TestCase):
 
 
 class LunaLibRuleTests(unittest.TestCase):
-    def _mods(self, root: Path, graphicslib_version: str) -> tuple[Path, dict[str, str]]:
+    def _mods(self, root: Path, graphicslib_version: str, references_lunalib: bool = True) -> tuple[Path, dict[str, str]]:
+        import zipfile
+
         mods = root / "mods"
-        _write(mods / "GraphicsLib" / "mod_info.json", json.dumps({"id": "shaderLib", "version": graphicslib_version}))
+        _write(mods / "GraphicsLib" / "mod_info.json",
+               json.dumps({"id": "shaderLib", "version": graphicslib_version, "jars": ["jars/Graphics.jar"]}))
+        (mods / "GraphicsLib" / "jars").mkdir(parents=True)
+        # GraphicsLib 1.12.1 and 1.12.3 both ship GraphicsLibSettingsListener, which names lunalib/lunaSettings/ (98.15).
+        body = b"\xca\xfe\xba\xbe lunalib/lunaSettings/LunaSettingsListener" if references_lunalib else b"\xca\xfe\xba\xbe org/dark/x"
+        with zipfile.ZipFile(mods / "GraphicsLib" / "jars" / "Graphics.jar", "w") as jar:
+            jar.writestr("org/dark/shaders/util/GraphicsLibSettingsListener.class", body)
+            jar.writestr("org/dark/shaders/util/ShaderLib.class", b"\xca\xfe\xba\xbe")
+        # A jar mod_info.json does not list is never loaded: a reference there does not count.
+        with zipfile.ZipFile(mods / "GraphicsLib" / "jars" / "old.jar", "w") as jar:
+            jar.writestr("a/B.class", b"\xca\xfe\xba\xbe lunalib/lunaSettings/LunaSettingsListener")
         _write(mods / "LunaLib" / "mod_info.json", json.dumps({"id": "lunalib", "version": "2.0.5"}))
         return mods, {"shaderLib": "GraphicsLib", "lunalib": "LunaLib"}
 
@@ -103,6 +115,14 @@ class LunaLibRuleTests(unittest.TestCase):
         self.assertIn("RC8-25", why)
         self.assertIsNone(advice)
 
+    def test_any_graphicslib_whose_jar_references_lunalib_gets_it(self) -> None:
+        # 98.15, RC9NC-LIVE5: GraphicsLib 1.12.3 also needs LunaLib; the rule named 1.12.1 only, and the game died at start-up.
+        with resolved_temp_dir() as root:
+            mods, installed = self._mods(root, "1.12.3")
+            enable, why, _advice = lunalib_rule(["shaderLib"], installed, mods)
+        self.assertTrue(enable)
+        self.assertIn("1.12.3", why)
+
     def test_no_lunalib_opts_out_and_keeps_the_advice(self) -> None:
         with resolved_temp_dir() as root:
             mods, installed = self._mods(root, "1.12.1")
@@ -111,9 +131,9 @@ class LunaLibRuleTests(unittest.TestCase):
         self.assertIn("--no-lunalib", why)
         self.assertIn("--with-lunalib", advice)
 
-    def test_other_versions_stay_advice_only_until_with_lunalib_is_given(self) -> None:
+    def test_a_graphicslib_without_the_reference_stays_advice_only_until_with_lunalib_is_given(self) -> None:
         with resolved_temp_dir() as root:
-            mods, installed = self._mods(root, "1.7.0")
+            mods, installed = self._mods(root, "1.12.1", references_lunalib=False)
             plain = lunalib_rule(["shaderLib"], installed, mods)
             forced = lunalib_rule(["shaderLib"], installed, mods, with_lunalib=True)
         self.assertEqual(plain[0], False)
@@ -126,6 +146,33 @@ class LunaLibRuleTests(unittest.TestCase):
             mods, installed = self._mods(root, "1.12.1")
             self.assertEqual(lunalib_rule(["demo"], installed, mods), (False, None, None))
             self.assertEqual(lunalib_rule(["shaderLib", "lunalib"], installed, mods), (False, None, None))
+
+    def test_a_corrupt_jar_a_string_jar_list_and_windows_separators(self) -> None:
+        # Review, 2026-11-27: a corrupt deflate stream raised zlib.error out of lunalib_rule and crashed probe-group install.
+        import zipfile
+
+        from bridgeforge.probe.probe_group import graphicslib_needs_lunalib
+
+        with resolved_temp_dir() as root:
+            mods, _installed = self._mods(root, "1.12.3")
+            graphicslib = mods / "GraphicsLib"
+            info = graphicslib / "mod_info.json"
+            info.write_text(json.dumps({"id": "shaderLib", "version": "1.12.3", "jars": ["jars\\Graphics.jar"]}), encoding="utf-8")
+            backslash = graphicslib_needs_lunalib(graphicslib)
+            info.write_text(json.dumps({"id": "shaderLib", "version": "1.12.3", "jars": "jars/Graphics.jar"}), encoding="utf-8")
+            as_string = graphicslib_needs_lunalib(graphicslib)
+            corrupt = graphicslib / "jars" / "Broken.jar"
+            with zipfile.ZipFile(corrupt, "w", zipfile.ZIP_DEFLATED) as jar:
+                jar.writestr("a/B.class", b"\xca\xfe\xba\xbe" + b"lunalib/lunaSettings/ " * 400)
+            data = bytearray(corrupt.read_bytes())
+            with zipfile.ZipFile(corrupt) as jar:
+                entry = jar.infolist()[0]
+            start = entry.header_offset + 30 + len(entry.filename.encode()) + len(entry.extra)
+            data[start:start + 16] = b"\xff" * 16
+            corrupt.write_bytes(bytes(data))
+            info.write_text(json.dumps({"id": "shaderLib", "version": "1.12.3", "jars": ["jars/Broken.jar"]}), encoding="utf-8")
+            broken = graphicslib_needs_lunalib(graphicslib)
+        self.assertEqual((backslash, as_string, broken), (True, False, False))
 
     def test_contradicting_flags_are_refused(self) -> None:
         with resolved_temp_dir() as root:
