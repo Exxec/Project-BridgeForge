@@ -113,5 +113,40 @@ class SummaryTests(unittest.TestCase):
         self.assertEqual(found["away_seconds"], 62)
 
 
+class ResultTests(unittest.TestCase):
+    def test_a_run_carries_its_desktop_record(self) -> None:
+        from bridgeforge.live.live_run import LiveResult, with_evidence
+
+        with resolved_temp_dir() as rig:
+            log = rig / "T.stdout.log"
+            log.write_text("", encoding="utf-8")
+            Path(f"{log}.input.csv").write_text(_csv(["other", "game", "other", "game"]), encoding="ascii")
+            done = with_evidence(LiveResult("LIVE_DONE", log=str(log)), rig, None)
+            refused = with_evidence(LiveResult("LIVE_STUCK", "refused", "paused", log=str(log)), rig, None)
+            none_written = with_evidence(LiveResult("LIVE_DONE", log=str(rig / "other.stdout.log")), rig, None)
+        self.assertEqual((done.desktop["segments"], done.desktop["away_seconds"]), ("other 1s | game 1s | other 1s | game 1s", 1))
+        self.assertIsNone(refused.desktop)
+        self.assertIsNone(none_written.desktop)
+
+    def test_probe_group_live_prints_and_keeps_the_desktop_line(self) -> None:
+        import argparse
+        import contextlib
+        import io
+
+        from bridgeforge.live import live_run
+        from bridgeforge.live.live_run import LiveResult
+        from bridgeforge.probe import cmd_probe_group
+
+        desktop = {"file": "x", "samples": 9, "segments": "game 7s | other 2s", "away_seconds": 0}
+        args = argparse.Namespace(interactive=False, save_reload=False, json=False, test_id="T1", bat="run.bat", menu_timeout=1,
+                                  natural_exit=False, exit_wait=1, no_graceful_close=False)
+        out = io.StringIO()
+        with mock.patch.object(live_run, "live_run", return_value=LiveResult("LIVE_DONE", log="T1.stdout.log", desktop=desktop)), \
+                contextlib.redirect_stdout(out), contextlib.redirect_stderr(io.StringIO()):
+            result = cmd_probe_group._probe_live(args, Path("queue"), Path("rig"))
+        self.assertEqual(result["desktop"], desktop)
+        self.assertIn("  desktop: game 7s | other 2s", out.getvalue())
+
+
 if __name__ == "__main__":
     unittest.main()

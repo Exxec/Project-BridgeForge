@@ -219,6 +219,7 @@ def run_duel(rig: Path, test_id: str, bat_name: str = "run-j25-direct.bat", comb
     install_duel_mod(rig)
     played: list[str] = []
     problem: str | None = None
+    from bridgeforge.live.input_recorder import summary as desktop_summary
     from bridgeforge.live.prepatcher_log import run_started, safe_summary
 
     since = run_started()  # 98.18: the duel launch carries Prepatcher's summary too
@@ -233,4 +234,4 @@ def run_duel(rig: Path, test_id: str, bat_name: str = "run-j25-direct.bat", comb
                 problem = f"front: {exc}"
     duels = parse_duel_log(lr._log_text(log))
     return {"played": played, "problem": problem, "summary": summarise(duels), "log": str(log),
-            "prepatcher": safe_summary(rig, since, Path(rig) / bat_name)}
+            "prepatcher": safe_summary(rig, since, Path(rig) / bat_name), "desktop": desktop_summary(Path(f"{log}.input.csv"))}

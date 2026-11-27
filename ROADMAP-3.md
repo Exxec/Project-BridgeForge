@@ -424,6 +424,23 @@ Found during 98.4's runs (2026-11-26), queued the same way:
   - *Also:* the per-second input recorder used for 98.4 (cursor position, whether the game window is in front, the
     last-input tick; no screenshots or titles; kept with Station Augments' `scratch/rc9-remap/`) could become part of
     `probe-group live`. It shows whether a person touched the desktop during a run.
+  **Done 2026-11-27.**
+  - *Actions file:* `live_run.drive` writes `<log>.actions.json` in a `finally`, for every outcome, a passing run too. The
+    reload records its own keys and clicks: `drive_reload` wraps its hands with `recording` (which also applies 98.12's
+    `checked_front`) and writes its file the same way.
+  - *Input recorder:* `bridgeforge/live/input_recorder.py` samples once a second, from Python (user32 through ctypes):
+    the cursor position, whether the foreground window belongs to the game (`live_run.game_pids`, shared with
+    `real_hands`), and the last-input tick. It writes `<log>.input.csv` with the PowerShell recorder's columns. It takes no
+    screenshot and no window title (owner rule). `running_game` records from the launch to the end of the run, so every
+    launch has one: live, reload, duel and gene boots. Outside Windows, or when the file cannot be written or a sample
+    fails, it records nothing and the run goes on.
+  - *In the result:* `LiveResult.desktop` (from `with_evidence`, which also attaches 98.18's Prepatcher summary) gives the
+    record's segments (`other 6s | game 305s | ...`) and `away_seconds`: the time another window had the desktop between
+    the game's first and last stretch. `probe-group live` prints a `desktop:` line per launch and keeps it in its JSON,
+    `live-queue` in each row, and the duel run in its result.
+  - *Tests:* `tests/test_input_recorder.py`; `tests/test_live_run.py` `test_a_passing_run_keeps_its_actions_file_too`;
+    `tests/test_save_fingerprint.py` `test_the_reload_keeps_an_actions_file_of_its_own`; `tests/test_direct_start.py`
+    `test_the_launch_is_recorded_beside_its_log`. One real sample on White_Legion wrote the expected row.
 - 98.14 (M) **StarsectorPrepatcher for RC9: build its name table ourselves, for the rig only.** Approved (owner 2026-11-26:
   "Build an RC9 table ourselves", over asking the author or waiting). The licence is MIT plus the Commons Clause, so
   modifying it for our own use is allowed; selling it is not.
