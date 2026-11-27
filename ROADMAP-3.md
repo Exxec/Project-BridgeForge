@@ -448,7 +448,8 @@ Found during 98.4's runs (2026-11-26), queued the same way:
     order (recorder before `stop_game`), `drive`'s finally and the tick arithmetic held up.
   - *Tests:* `tests/test_input_recorder.py`; `tests/test_live_run.py` `test_a_passing_run_keeps_its_actions_file_too`;
     `tests/test_save_fingerprint.py` `test_the_reload_keeps_an_actions_file_of_its_own`; `tests/test_direct_start.py`
-    `test_the_launch_is_recorded_beside_its_log`; `tests/test_duel_run.py` (the duel's desktop record).
+    `test_the_launch_is_recorded_beside_its_log`; `tests/test_duel_run.py` (the duel's desktop record). Mutation check: 17 mutants
+    through `mutate_batch.py`, all caught.
 - 98.14 (M) **StarsectorPrepatcher for RC9: build its name table ourselves, for the rig only.** Approved (owner 2026-11-26:
   "Build an RC9 table ourselves", over asking the author or waiting). The licence is MIT plus the Commons Clause, so
   modifying it for our own use is allowed; selling it is not.
