@@ -46,9 +46,9 @@ Revivals target 0.98.5a-RC9, the 0.98.5a hotfix (owner 2026-11-25; CLAUDE.md "Ta
   released 1.5.1b for RC9, taken in on Test1, and the owner decides how to keep it. The author of United Aurora Federation
   released 0.8.4c1 for RC9; it is not taken in, and whether to take it is also the owner's choice. 94.G3 slice 2 is done on
   RC7; the RC9 re-bank is 98.6.
-- **Live runs (owner 2026-11-26, evening):** "Lets remove the if idle then live test rule for now. Go ahead and live test
-  until paused again." No idle check is needed until the owner pauses runs. (Earlier that day the rule was 30 minutes
-  without input on Test1's desktop.)
+- **Live runs (owner 2026-11-26, about 18:15):** "Wait until Test1 is idle": about 10 minutes without input on Test1's
+  desktop before each run, with the per-second input recorder alongside (98.13). Before that, the same day: a 30-minute
+  rule in the morning, lifted in the evening; the 2 runs without a gate both failed while someone was using Test1.
 - **Live state 2026-11-26 (98.4):** Neutrino passed on RC9 (RC9NC-LIVE2), and fighters carrying its ported drone AI flew.
   The menu exit of 2026-11-25 did not reproduce in three runs; its cause is unknown. Station Augments passed its standard
   run and the shunt check (control RC9SA-SHUNTCTL fails it, port RC9SA-SHUNT passes; station modules unproven). Its

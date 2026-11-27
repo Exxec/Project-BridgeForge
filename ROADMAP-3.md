@@ -126,8 +126,18 @@ four", "Finish on RC7, re-bank later" (the gene bank), and "Live testing is ok f
     (the same solo plan, `--save-reload-after-days 3`) ended LIVE_STUCK at new-game. The campaign started, then 15 s later
     the game saved, returned to the main menu and exited in order, with no probe check between. The harness had sent
     its last input 15 s before the campaign started, and the probe logged no save of its own. Test1's last keyboard or
-    mouse input came 5 s after the exit, while the harness sent nothing, so a person at the desktop is possible but not
-    shown. It goes back to the owner before a re-run.
+    mouse input came shortly after the exit, while the harness sent nothing, so a person at the desktop is possible but not
+    shown. (Corrected 2026-11-26: this said "5 s after"; the time was taken before the check's own SSH steps.) During that
+    save, SA's `+bf` plugin logged `BF-SA-PATCH|save|detached=35`, so its save-time detach works on RC9.
+  - *After the idle gate was lifted, 2 of 2 runs failed; the 6 runs before it, on a quiet desktop, passed.*
+    - RC9SA-SR: above.
+    - RC9NC-LIVE3-0985a-20261126 (Neutrino's fresh run, before the archive the owner approved): LIVE_STUCK at
+      combat-round-1. A main-menu click opened Load Game instead of the mission list, and the next clicks loaded a save
+      (98.11).
+    - *Evidence of a person at Test1:* idle checks saw input at about 15:47, 16:45 and 17:32, and 0 s idle at 18:12. A
+      5-second input recorder run at 18:14, with no game running, logged the cursor moving and another window in front.
+    - *Owner, about 18:15:* "Wait until Test1 is idle (Recommended)", that is about 10 minutes without input before each
+      run, with the input recorder alongside (98.13).
   - *United Aurora Federation:* the author released 0.8.4c1, which declares 0.98.5a-RC9. The archive (0.8.4c,
     live-validated 2026-11-17) is CLEAN on RC9. Whether to take the update in is the owner's choice, as for Wide Horizons.
 - 98.5 **Done 2026-11-25.** **Repoint the 0.98.5a rigs.** `_rig-0985a`'s `starsector-core` links to RC9 (RC9's launcher,
@@ -197,6 +207,27 @@ Found during 98.4 (2026-11-25), added under the owner's standing instruction to 
   "`target-impact` found no API, linkage or data change affecting this mod" into the revival report and the changelog,
   although each jar was hand-patched first. `retarget` should take a note, or notice that the working jar differs from the
   last archive, so the record says what was ported. Until then, 98.4 above is the record `archive` must cite.
+
+Found during 98.4's runs (2026-11-26), queued the same way:
+- 98.11 (S) **The main-menu reader can click the wrong button, and nothing checks that the mission list opened.**
+  RC9NC-LIVE3-0985a-20261126: after leaving the campaign, the harness clicked (0.660, 0.439) as "Missions". The game then
+  listed two saves, which is the Load Game screen. The probe-row, Play, Deploy and Space clicks went into it and loaded a
+  save, and the game exited about 22 s later with no harness input.
+  - *The reader:* `screen_read.main_menu_target` maps buttons by position, counting from the bottom of a fixed
+    eight-button list, and accepts any band count of eight or more. Two extra bands below Quit shift "Missions" onto
+    "Load Game".
+  - *The missing check:* `to_mission_list` checks only that the main menu went away.
+  - *Fix:* accept only the expected count (eight, or nine with Continue); confirm the mission list is up (its layout read
+    from the screen) before the row click; otherwise take a screenshot and stop.
+  - *Test:* `FakeGame` with extra bands.
+- 98.12 (S) **`Hands.front()` ignores whether the game came to the front.** `game_click.bring_to_front` returns it, and
+  the result is dropped, so a click after a failed foreground lands in whatever window is in front. Record it in the
+  actions log, and retry once or stop.
+- 98.13 (S) **A passing run keeps no actions file,** so a failed run has no baseline to compare with (LIVE3 could not be
+  compared with LIVE2). Write `<log>.actions.json` for every run.
+  - *Also:* the per-second input recorder used for 98.4 (cursor position, whether the game window is in front, the
+    last-input tick; no screenshots or titles; kept with Station Augments' `scratch/rc9-remap/`) could become part of
+    `probe-group live`. It shows whether a person touched the desktop during a run.
 
 **97. The S series' remaining work, re-queued without gates (owner 2026-11-17: "Park S4. Stop treating S2 and S3 as gates.
 Check S series implementation plan and if applicable add remaining items to roadmap queue").**
@@ -3267,7 +3298,7 @@ history as the closure benchmark, a cross-repository trace check, an early Java 
     - *Low:* two genes of one release counted as an allele; an empty blob was not trivial; an unreadable record was
       dropped silently, and a missing blob or a null source crashed; two tests passed against wrong code (path spellings,
       raw vanilla hashing).
-  - **Tests:** `tests/test_gene_bank_reports.py`, 14 tests (one Windows-only). Synthetic banks cover every classification,
+  - **Tests:** `tests/test_gene_bank_reports.py`, 13 tests (one Windows-only). Synthetic banks cover every classification,
     the trivial-string boundary, normalised vanilla text, id-less and broken records, narrowing and drift both ways, every
     output refusal and the CLI. One bank built by the real `put` shows the reports leave its ROOT and `verify` unchanged.
   - **Mutation check:** 17 mutants, all caught. The first run missed one (the resolved-path refusal, covered by file
