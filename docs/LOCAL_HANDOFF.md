@@ -46,16 +46,20 @@ Revivals target 0.98.5a-RC9, the 0.98.5a hotfix (owner 2026-11-25; CLAUDE.md "Ta
   released 1.5.1b for RC9, taken in on Test1, and the owner decides how to keep it. The author of United Aurora Federation
   released 0.8.4c1 for RC9; it is not taken in, and whether to take it is also the owner's choice. 94.G3 slice 2 is done on
   RC7; the RC9 re-bank is 98.6.
-- **Live runs (owner 2026-11-26, about 18:15):** "Wait until Test1 is idle": about 10 minutes without input on Test1's
-  desktop before each run, with the per-second input recorder alongside (98.13). Before that, the same day: a 30-minute
-  rule in the morning, lifted in the evening; the 2 runs without a gate both failed while someone was using Test1.
+- **Live runs: paused** (owner 2026-11-26, about 20:05: "Pause live testing temporarily"). When they resume: about 10
+  minutes without input on Test1's desktop before each run (owner, about 18:15: "Wait until Test1 is idle"), with the
+  per-second input recorder alongside (98.13). Queued: Neutrino's fresh run, then its archive (owner: yes); Station
+  Augments' save-reload re-run.
+- **The rig, updated 2026-11-26** (owner: "Match my RC8 install"): Fast Rendering 1.0.3, Prepatcher 0.18.9, LunaLib 2.1.0,
+  MagicLib 1.6.1, Nexerelin 0.12.3 and GraphicsLib 1.12.3, the versions in the owner's RC8 install. The old versions are in
+  `_rig-0985a\_addons\retired-20261126\`. Prepatcher 0.18.9 names no RC9, so it is expected to fail open there too. Not yet
+  live-run; archives validated earlier ran with the old libraries.
 - **Live state 2026-11-26 (98.4):** Neutrino passed on RC9 (RC9NC-LIVE2), and fighters carrying its ported drone AI flew.
   The menu exit of 2026-11-25 did not reproduce in three runs; its cause is unknown. Station Augments passed its standard
   run and the shunt check (control RC9SA-SHUNTCTL fails it, port RC9SA-SHUNT passes; station modules unproven). Its
   save-reload gate run RC9SA-SR ended LIVE_STUCK: the game saved and exited 15 s into the campaign with no harness input.
-  It waits for the owner before a re-run. Recording and archiving wait for the owner; so do the rig's Prepatcher and Fast
-  Rendering versions (Prepatcher 0.18.8 fails open on RC9; the owner's own RC8 install has Fast Rendering 1.0.3,
-  Prepatcher 0.18.9 and Mikohime).
+  The owner ruled one re-run. Neutrino's archive waits for its fresh run. A Mikohime (Java 28) launcher like the owner's
+  is not set up on the rig yet.
 
 The section below is the RC7 entry point of 2026-11-17, kept for its machine notes; where it says RC7 is the target, read
 RC9.

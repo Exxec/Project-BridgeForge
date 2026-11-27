@@ -137,9 +137,21 @@ four", "Finish on RC7, re-bank later" (the gene bank), and "Live testing is ok f
     - *Evidence of a person at Test1:* idle checks saw input at about 15:47, 16:45 and 17:32, and 0 s idle at 18:12. A
       5-second input recorder run at 18:14, with no game running, logged the cursor moving and another window in front.
     - *Owner, about 18:15:* "Wait until Test1 is idle (Recommended)", that is about 10 minutes without input before each
-      run, with the input recorder alongside (98.13).
+      run, with the input recorder alongside (98.13). The gate then saw Test1 in use at every check from 18:47 to 19:47
+      and launched nothing.
+  - *Owner rulings, about 18:15:* Neutrino: "Fresh run, then archive"; Station Augments' save-reload: re-run once; the
+    rig: "Match my RC8 install"; Wide Horizons and UAF: "Both are active", so neither is revived (the owner's rule for
+    active mods).
+  - *Paused, about 20:05:* "Pause live testing temporarily." The queued Neutrino and Station Augments runs wait.
+  - *The rig, updated about 20:05 (not a live run):* Fast Rendering 1.0.3, Prepatcher 0.18.9, LunaLib 2.1.0, MagicLib
+    1.6.1, Nexerelin 0.12.3 and GraphicsLib 1.12.3, copied from the owner's RC8 install. Before copying, the library folders
+    were checked for edits made after unpacking; there were none. The old versions moved to `_addons/retired-20261126/`,
+    nothing deleted. The rig-local setup script now reads the FR and Prepatcher versions from their archives; the JDK 27
+    launcher was rebuilt from the new files. Prepatcher's 16 checksums match, and rig-doctor passes apart from its usual
+    warnings. Prepatcher 0.18.9 names no RC9, so it is expected to fail open there too.
   - *United Aurora Federation:* the author released 0.8.4c1, which declares 0.98.5a-RC9. The archive (0.8.4c,
-    live-validated 2026-11-17) is CLEAN on RC9. Whether to take the update in is the owner's choice, as for Wide Horizons.
+    live-validated 2026-11-17) is CLEAN on RC9. UAF's own master version file names 0.8.4c1 as the latest release (it
+    still says starsectorVersion 0.98a-RC5). UAF is active, so it is not revived.
 - 98.5 **Done 2026-11-25.** **Repoint the 0.98.5a rigs.** `_rig-0985a`'s `starsector-core` links to RC9 (RC9's launcher,
   `vmparams` and `jre` equal RC7's); `rig-doctor` isolation and launcher_prefs PASS. `_rig-genes` stays on RC7: the gene
   bank is on RC7 until 98.6.
