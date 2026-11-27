@@ -169,9 +169,13 @@ def _scan_data_class_references_missing(root: Path, result: ScanResult, vanilla_
     # A declared dependency's own jar (SEEKER 0.6.6's weapons name MagicLib's data.scripts.weapons.MagicVectorThruster,
     # which MagicLib 1.5.6 still ships for compatibility; 2026-09-28). Needs explicit provider_roots.
     dependency_classes = _dependency_jar_class_names(root, provider_roots)
+    has_rule_commands = any(field == "script(rule-command)" for _file, field, _name in references)
+    rule_packages = _rule_command_packages(root, vanilla_core, provider_roots) if dependency_classes and has_rule_commands else set()
 
     def resolve(fqn: str, is_rule_command: bool) -> str:
         if fqn in result.compiled_class_names or fqn in local_source_fqns or fqn in dependency_classes:
+            return "resolved"
+        if is_rule_command and any(f"{package}.{fqn.rsplit('.', 1)[-1]}" in dependency_classes for package in rule_packages):
             return "resolved"
         if vanilla_core is not None and (fqn in vanilla_jar_classes or fqn in vanilla_loose_fqns):
             return "resolved"
@@ -230,6 +234,28 @@ def _scan_data_class_references_missing(root: Path, result: ScanResult, vanilla_
             file=file,
             evidence=[f"field:{field}", f"class:{class_name}"],
         )
+
+
+VANILLA_RULE_COMMAND_PACKAGE = "com.fs.starfarer.api.impl.campaign.rulecmd"
+
+
+def _rule_command_packages(root: Path, vanilla_core: Path | None, provider_roots: list[Path] | None) -> set[str]:
+    """Packages the game looks a rules.csv command up in (98.9).
+
+    RC9's `com.fs.starfarer.campaign.rules.A` (javap 2026-11-26): its static initializer copies the merged settings'
+    `ruleCommandPackages` entries as they are written, and adds `VANILLA_RULE_COMMAND_PACKAGE` only when that key is missing
+    (its JSONException handler); `getCommandClass(command)` then tries `loadClass(package + "." + command)` for each entry
+    and throws "Command [X] not found in packages" otherwise. The list merges across settings.json files (lists add, RC8-02),
+    so vanilla's, the mod's and each declared dependency's entries all count. Wide Horizons Content 1.5.1b lists
+    `org.widehorizons.rulecmd`, whose commands are in its dependency Wide Horizons Core's jar."""
+    folders = [root, *_dependency_roots(root, provider_roots), *([vanilla_core] if vanilla_core is not None else [])]
+    packages: set[str] = set()
+    for folder in folders:
+        settings = _load_lenient_json_file(Path(folder) / "data" / "config" / "settings.json")
+        listed = settings.get("ruleCommandPackages") if isinstance(settings, dict) else None
+        if isinstance(listed, list):
+            packages |= {entry for entry in listed if isinstance(entry, str) and entry}  # verbatim: the game trims nothing
+    return packages or {VANILLA_RULE_COMMAND_PACKAGE}
 
 
 _DEPENDENCY_ROOTS_CACHE: dict[tuple, list[Path]] = {}
