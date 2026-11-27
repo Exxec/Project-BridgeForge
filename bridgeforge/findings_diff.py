@@ -16,7 +16,10 @@ import json
 import sys
 from pathlib import Path
 
-NOT_AUDITED = frozenset({"ERROR", "NO_MOD_ROOT", "SUPERSEDED", "NOT_REVIVABLE"})
+from bridgeforge.report_status import CLOSED_STATUSES
+
+# done-audit's statuses for an archive it did not scan; a record it marks `closed` is skipped whatever its status says.
+NOT_AUDITED = frozenset({"ERROR", "NO_MOD_ROOT", *CLOSED_STATUSES})
 SHOWN_PER_ARCHIVE = 20
 
 

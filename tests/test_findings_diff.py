@@ -71,6 +71,10 @@ class DiffTests(unittest.TestCase):
         result = self._diff(BEFORE, closed)
         self.assertEqual(result["not_compared"][0], {"archive": "Alpha", "before": None, "after": "SUPERSEDED"})
         self.assertEqual(result["dropped"], 0)
+        # the flag decides even for a status this module does not know yet
+        flagged = _audit([{"mod": "Alpha", "status": "RETIRED", "stale": None, "findings": [], "closed": True}])
+        self.assertEqual(self._diff(BEFORE, flagged)["not_compared"][0]["after"], "RETIRED")
+        self.assertEqual(set(findings_diff.NOT_AUDITED), {"ERROR", "NO_MOD_ROOT", "SUPERSEDED", "NOT_REVIVABLE"})
 
     def test_ids_limit_the_comparison(self) -> None:
         result = self._diff(BEFORE, AFTER, {"check-b"})
