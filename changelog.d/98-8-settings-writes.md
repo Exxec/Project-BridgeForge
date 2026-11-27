@@ -1,0 +1,1 @@
+- `settings-key-missing` no longer reports a key the mod writes itself with `SettingsAPI.setFloat`/`setBoolean` (in a jar, proven from the stack, or in a loose script the game runs), or a jar read whose exception, as the JVM handles it, ends in a handler that returns (Wide Horizons 1.5.1b: 15 keys, none missing).

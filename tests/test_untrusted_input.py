@@ -195,7 +195,7 @@ class JavapClassNameTests(unittest.TestCase):
         with resolved_temp_dir() as root:
             jar = root / "mod.jar"
             _jar_with_class_names(jar, b"com/fs/starfarer/api/SettingsAPI")
-            passed = _javap_class_arguments(javap_batch, lambda: settings_keys.jar_reads(jar, root / "javap.exe"))
+            passed = _javap_class_arguments(javap_batch, lambda: settings_keys.jar_settings(jar, root / "javap.exe").reads)
         self.assertEqual(set(passed), {"a.B"})  # however many calls: only a.B ever reaches javap
 
     def test_procgen_suspects_never_pass_a_hostile_entry_name_to_javap(self) -> None:

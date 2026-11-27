@@ -211,6 +211,81 @@ Found during 98.4 (2026-11-25), added under the owner's standing instruction to 
     try/catch that falls back to the unconverted value.
 
   A key the same jar writes, or reads only inside a catch, should not be reported as missing.
+  **Done 2026-11-26.** The rule as built: a key written in the mod's jars, or in a loose script the game runs, counts as
+  defined. The order of write and read is not checked, and a source's try/catch is not read (no case yet). Every uncertain
+  case counts as a miss: a wrong exemption hides a crash, while a missed one costs only an acceptance.
+  - *Evidence* (javap of RC9's `StarfarerSettings`, 2026-11-26):
+    - `setFloat`/`setBoolean` put the key into the settings JSONObject `getFloat`/`getBoolean` read;
+    - every getter rethrows a missing key as `RuntimeException(JSONException)`, and `JSONException` is a checked
+      `Exception`, so only a handler of RuntimeException, Exception or Throwable can catch it.
+  - *Writes:* `settings_keys.javap_writes` counts a write only when the stack proves it. Between `getSettings(); ldc
+    String key` and the setter, the instructions must leave exactly one value and take nothing from below it
+    (`_only_adds_one_value`).
+    - So `setFloat(key("x"), v)`, `setFloat("x".concat(y), v)` and a getter nested in the value name no key.
+    - A value with a branch, or an instruction the model leaves out (`i++`'s `iinc`), is a missed write.
+    - The value must be boxed right before the setter (`Float.valueOf`, `Boolean.valueOf`, `Boolean.TRUE/FALSE`, a new
+      Float or Boolean). A Float from a call, a cast or a map may be null, and a null write makes the next read throw:
+      the getter's cache holds the null.
+    - Writes are typed: `setFloat` covers `getFloat` and `getInt`, `setBoolean` covers `getBoolean` (javap: a boolean read as
+      a float misses its cache and fails in `JSONObject.getDouble`).
+    - Only jars `mod_info.json` lists count, since a leftover jar never loads.
+    - `source_writes` counts only `Global.getSettings().setX("key", <literal>)`, and the scan takes it only from a loose
+      script under `data/` whose package matches its folders and whose class no jar defines: a bundled `src/` tree never
+      runs, and a jar class wins over its loose copy.
+    - The scan gathers every write before it filters any read.
+  - *Catches:* `_caught` reads the exception table the way the JVM does.
+    - The first row in order that covers the call and catches RuntimeException (a RuntimeException, Exception, Throwable
+      or `any` row) decides.
+    - Its handler is followed through gotos to a return (caught) or an `athrow`; a conditional branch, a loop, the end or
+      a call is undecided, which counts as not caught. The exceptions are logging, building the message and a `java.lang`
+      exception's constructor; `catch (Exception e) { fail(e); return 0f; }` throws from inside `fail`.
+    - After an `athrow` the thrown class is unknown, so only a Throwable or `any` row can be the next stop.
+    - A `JSONException` row never counts; a finally that returns swallows, as in Java.
+  - *Review* (independent, same day): the first version took a `goto` in a handler for a swallow, used any covering row
+    instead of the first, read writes from bundled sources and took the first literal as the key. It suppressed all five
+    reads of a javac-compiled probe, where four crash. All of this was rebuilt as above.
+    A second independent review of the rebuild found that a handler calling a method that throws counted as a return. It
+    also found that writes were untyped, took null-able values, came from unlisted jars, and came from a loose script whose
+    package does not match its folder. All are fixed as above, and its javac probes joined the fixture.
+  - *Acceptance:*
+    - A stub of Wide Horizons 1.5.1b's jar, `mod_info.json` and `settings.json`, against RC9: 17 findings naming the
+      15 keys on main, 0 on the branch. The jar writes 51 keys, including the 14; `campaignSecondsPerDay` and four of
+      its own keys are read under `catch (Throwable)` with a return.
+    - A sweep of Test1's `Done/` (351 archives, this check alone) with main's code and then the branch's (both before
+      and after the review's rework): 53 findings in 10 archives become 20 in 7. Nothing new appears.
+    - The 33 dropped are Wide Horizons 1.5.0 and 1.5.1a (16 each, the same keys) and Detailed Combat Results 5.4.2's
+      `DetailedCombatResults_UseReportedDamagesOnlyV1`, read in `UseReportedDamagesOnly()` under `catch (Throwable)`
+      that returns false.
+  - *Tests* (`tests/test_settings_keys.py`; real javac shapes in `tests/fixtures/settings_keys_javac_shapes.txt`, sources
+    included):
+    - `ReadsUnderACatchTests`:
+      - the real `toDays` listing under Throwable, RuntimeException and Exception rows;
+      - no try, `JSONException`, a finally that rethrows, and rows ending at or starting after the call;
+      - a rethrowing wrapper; a branching handler; a finally that returns; one method's table not leaking into the next;
+      - the javac shapes that crash: ordered catches, try-with-resources, a try or a synchronized block in the catch,
+        `throw new Error(e)` past `catch (Exception)`, a first handler that branches;
+      - the javac shapes that swallow: a plain return, a goto to a return (also with the next handler's `athrow` right
+        after it), and a rethrow an outer `catch (Throwable)` returns from;
+      - the second review's javac shapes: a call that throws on the handler's path, a rethrow after the catch, a finally
+        into a subclass catch, `catch (Error)`, a multi-catch of subclasses, sibling catches, a switch in the handler;
+        and the swallows: a finally into `catch (Throwable)`, a labelled break, a synchronized block inside it;
+      - a handler that loops.
+    - `SettingsWritesTests`:
+      - both of Wide Horizons' setter shapes, a getter nested in the value;
+      - receivers that are stored, passed on, returned by another call, or given a non-literal key;
+      - the javac shapes: `key("x")`, a branching value, `.concat`, `new Float(...)`, a void call before the setter,
+        `i++`;
+      - anchored source writes; which sources are loose scripts; one jar's reads and writes from one listing.
+      - the second review's write shapes: boxed, constant and computed values are written; casts, map values and a Float
+        from a call are missed;
+      - a source write with a non-literal value or another receiver, and a loose script whose package and folder differ.
+    - Three scans:
+      - a loose script setting its own key;
+      - a jar's write covering a loose script's read, typed (`getInt` reads a float write, `getFloat` not a boolean one);
+      - an unlisted jar's write, and writes in `src/` and in a loose script a jar class shadows, defining nothing.
+  - *Also:* `jar_reads` became `jar_settings` (one javap launch per jar gives reads and writes), and its duplication
+    baseline entry is renamed with it.
+  - *Mutation check:* 24 mutants, all caught.
 - 98.9 (S) **data-class-reference-missing ignores a dependency's jars.** Wide Horizons Content's `rules.csv` commands
   (`WHStartBarEventDialog`, `WHStrangeM2Cmd`, ...) are classes in its dependency Wide Horizons Core's jar, under the
   `ruleCommandPackages` entry `org.widehorizons.rulecmd`. The scanner looked only in the mod's own jars. Resolve rule
