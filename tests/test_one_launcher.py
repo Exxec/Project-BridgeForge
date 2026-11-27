@@ -95,11 +95,12 @@ class WindowWatcherTests(unittest.TestCase):
             (rig / "logs" / "W-1.windows.txt").write_text("old\n", encoding="utf-8")
             now = {"t": 0.0}
             shots: list[str] = []
-            watcher = self._watcher(rig, [(7, "Starsector")], {}, shots, lambda: now["t"])
+            watcher = self._watcher(rig, [(7, "Starsector"), (8, "Loading")], {}, shots, lambda: now["t"])
             watcher.poll_once()
             now["t"] = 181.0
             watcher.poll_once()
-            self.assertEqual(shots, [("W-1-no-main-menu.png", 7)])  # the game's window only (93.24)
+            # The second window is shot as itself; the no-menu shot is the game's first window, never the screen (93.24).
+            self.assertEqual(shots, [("W-1-window1.png", 8), ("W-1-no-main-menu.png", 7)])
             self.assertTrue(list((rig / "logs").glob("W-1.windows.*.prev.txt")))
 
     def test_without_a_game_window_nothing_is_captured(self) -> None:
