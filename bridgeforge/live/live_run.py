@@ -22,6 +22,8 @@ from typing import Callable
 from bridgeforge.log_triage import MAIN_MENU_RE
 from bridgeforge.launch import EXIT_POLL_SECONDS, GameRefused, LaunchNoProcess, settle_exit  # noqa: F401  (re-exported: callers and tests import them from here)
 from bridgeforge.live.window_gone import GameWindowGone, detail as window_gone_detail  # noqa: F401  (GameWindowGone re-exported: 93.50)
+from bridgeforge.live.main_menu import (MENU_CHECK_READS, MenuMisread, _main_menu_shown, _menu_buttons,  # noqa: F401
+                                      click_menu, menu_point)  # (re-exported: save_reload_run, duel_run and tests import them from here)
 
 # Client-area fractions of the game window (1280x960 view), measured 2026-10-11.
 MAIN_MENU_NEW_GAME = (0.7195, 0.4625)
@@ -182,69 +184,6 @@ def new_game_flow_for(log_text: str) -> str:
     return "nexerelin" if "nexerelin" in ids else "default"
 
 
-def _menu_buttons(hands: Hands) -> list[tuple[float, float]] | None:
-    """The main menu buttons on screen now, or None when the screen cannot be read."""
-    if not hands.geometry:
-        return None
-    try:
-        import tempfile
-
-        from bridgeforge import game_click
-        from bridgeforge.screen_read import Bitmap, main_menu_buttons
-
-        with tempfile.TemporaryDirectory() as directory:
-            shot = Path(directory) / "menu.bmp"
-            if not game_click.capture_client(hands.geometry(), shot):
-                return None
-            return main_menu_buttons(Bitmap.load(shot))
-    except Exception:
-        return None
-
-
-class MenuMisread(RuntimeError):
-    """The main menu is on screen and stopped moving, but reads as more or fewer buttons than it has: nothing was clicked (98.11).
-    drive ends the run LIVE_STUCK at the stage in progress, with a screenshot."""
-
-
-def menu_point(hands: Hands, name: str, fallback: tuple[float, float]) -> tuple[float, float]:
-    """Where the main menu's `name` button is, read from the screen once the menu has stopped moving (it slides in after a return
-    from the campaign, and a reading taken mid-slide sent a click to the wrong row, GRP-CMU3-20261011); the measured fraction when
-    the screen cannot be read. A steady reading that cannot name the button (not eight or nine buttons) raises MenuMisread rather
-    than clicking a guess: in RC9NC-LIVE3-0985a-20261126 such a click opened Load Game and the next clicks loaded a save (98.11)."""
-    from bridgeforge.screen_read import main_menu_target
-
-    previous = None
-    for _ in range(10):
-        buttons = _menu_buttons(hands)
-        if buttons is None:
-            return fallback
-        if buttons and buttons == previous:
-            target = main_menu_target(buttons, name)
-            if target is None:
-                if len(buttons) in (8, 9):  # a well-read menu without this button: Continue needs a save (RC8-29)
-                    raise MenuMisread(f"the main menu has {len(buttons)} buttons and no '{name}', so nothing was clicked")
-                raise MenuMisread(f"the main menu read as {len(buttons)} buttons, not 8 or 9, so '{name}' was not clicked")
-            return target
-        previous = buttons
-        hands.sleep(1.0)
-    return (main_menu_target(previous, name) if previous else None) or fallback
-
-
-def click_menu(hands: Hands, name: str, fallback: tuple[float, float], attempts: int = 3) -> bool:
-    """Click a main menu button and check the menu went away; try again if it is still there. True once it has gone (or when the
-    screen cannot be read, so the old blind click stands)."""
-    from bridgeforge.screen_read import main_menu_target
-
-    for _ in range(attempts):
-        hands.front()
-        hands.click(*menu_point(hands, name, fallback))
-        hands.sleep(2.5)
-        after = _menu_buttons(hands)
-        if after is None or not main_menu_target(after, name):
-            return True
-    return False
-
-
 def _screen(hands: Hands):
     """The game window as a Bitmap, or None when it cannot be read."""
     if not hands.geometry:
@@ -328,24 +267,6 @@ def generic_new_game(hands: Hands, done: Callable[[], bool], shots_dir: Path | N
 
     hands.front()
     return run_pages(lambda fx, fy: (hands.front(), hands.click(fx, fy)), hands.sleep, capture, done, max_pages, shots_dir=shots_dir)
-
-
-MENU_CHECK_READS = 6  # screen reads, a second apart, for the main menu to appear after leaving the campaign
-
-
-def _main_menu_shown(hands: Hands) -> bool | None:
-    """Whether the main menu is on screen (eight bands or more: a menu misread as too many is still up, and its click is refused
-    later by menu_point, 98.11), waiting up to MENU_CHECK_READS reads; None when the screen cannot be read."""
-    from bridgeforge.screen_read import main_menu_present
-
-    for _ in range(MENU_CHECK_READS):
-        buttons = _menu_buttons(hands)
-        if buttons is None:
-            return None
-        if main_menu_present(buttons):
-            return True
-        hands.sleep(1.0)
-    return False
 
 
 def _leave_campaign(hands: Hands) -> None:

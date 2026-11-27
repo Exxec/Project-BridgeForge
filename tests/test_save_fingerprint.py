@@ -5,7 +5,7 @@ import json
 import unittest
 from pathlib import Path
 
-from bridgeforge.live import live_run
+from bridgeforge.live import live_run, main_menu
 from bridgeforge.save import save_reload_run
 from bridgeforge.save.save_fingerprint import SECTIONS, parse_fingerprint
 from bridgeforge.run_manifest import evaluate_run, read_manifest
@@ -216,7 +216,7 @@ class DriveTests(unittest.TestCase):
                                        scroll=lambda *a: None, sleep=lambda s: None, capture=lambda p: shots.append(p) or True,
                                        geometry=lambda: (0, 0, 0, 1920, 1440))
                 menu = [(0.72, 0.30 + 0.05 * i) for i in range(count)]
-                with mock.patch.object(live_run, "_menu_buttons", lambda _hands: menu):
+                with mock.patch.object(main_menu, "_menu_buttons", lambda _hands: menu):
                     result = save_reload_run.drive_reload(log, hands, menu_timeout=0.2)
             self.assertEqual((result.verdict, result.stage), ("LIVE_STUCK", "continue"))
             self.assertIn(words, result.detail)

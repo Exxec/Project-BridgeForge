@@ -6,7 +6,7 @@ import threading
 import unittest
 from pathlib import Path
 
-from bridgeforge.live import live_run
+from bridgeforge.live import live_run, main_menu
 from tests.support import resolved_temp_dir
 
 
@@ -142,7 +142,7 @@ class FakeGame:
         return True
 
     def menu_buttons(self, _hands) -> list[tuple[float, float]]:
-        """The main menu's nine buttons while it shows, none on any other screen (stands in for live_run._menu_buttons);
+        """The main menu's nine buttons while it shows, none on any other screen (stands in for main_menu._menu_buttons);
         `extra_bands` more below them, as RC9NC-LIVE3's reading had (98.11)."""
         count = 9 + self.extra_bands
         return [(0.72, 0.30 + 0.05 * i) for i in range(count)] if self.menu else []
@@ -333,7 +333,7 @@ class DriveTests(unittest.TestCase):
         with resolved_temp_dir() as base:
             log = base / "run.stdout.log"
             game = FakeGame(log, menu_after_exits=menu_after_exits, extra_bands=extra_bands)
-            with mock.patch.object(live_run, "_menu_buttons", game.menu_buttons):
+            with mock.patch.object(main_menu, "_menu_buttons", game.menu_buttons):
                 result = live_run.drive(log, game.hands(), menu_timeout=0.2, campaign_timeout=0.2, combat_timeout=0.2,
                                         generic_fallback=False)
             actions_file = Path(f"{log}.actions.json")
