@@ -606,8 +606,7 @@ order then continue live testing followed by more roadmap work based on your rec
     summarised a launch with no process, let a failing summary throw away a finished run, and left the time window
     unpinned by tests. All fixed; on RC9SA-SR2's real log it reads "prepatcher 0.18.9: CLEAN; applied 65 on 43 classes".
   - *Tests:* `tests/test_prepatcher_log.py`; `tests/test_direct_start.py`'s reload stub returns a LiveResult, as
-    `drive_reload` does. Mutation check: 19 mutants on the first version, all caught; the review fixes have their own
-    batch.
+    `drive_reload` does. Mutation check: 19 mutants on the first version, all caught; the review fixes, 15 more, all caught.
 - 98.19 (S) **`findings-diff`: one check over `Done/`, old code against new.** `findings-diff A.json B.json` compares two
   runs of `finding-stats`-style per-archive finding lists and prints what was dropped and what appeared, per archive. The
   `bridgeforge-pr` skill runs it for any change to a scanner check. 98.8's hand-made sweep (53 findings become 20, nothing
