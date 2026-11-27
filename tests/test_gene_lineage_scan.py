@@ -185,6 +185,18 @@ class ScanTests(unittest.TestCase):
         self.assertIn("changed since the plan", {r["mod_id"]: r["error"] for r in resumed["candidates"]}["copymod"])
         self.assertEqual(resumed, fresh)
 
+    def test_a_root_whose_describe_failed_unchanged_is_described_again_on_resume(self) -> None:
+        # A failed row is not saved, so a failure that clears (a file held open) is retried, though the root's key is the same.
+        with resolved_temp_dir() as root:
+            base, core, bank, plan_file = _corpus(root, ("Copy", "copymod", None))
+            checkpoint = root / "scan.partial.jsonl"
+            with mock.patch("bridgeforge.genome.gene_set.walk", side_effect=RuntimeError("held open")):
+                first = _scan(plan_file, core, bank, base, checkpoint_path=checkpoint)
+            second = _scan(plan_file, core, bank, base, checkpoint_path=checkpoint)
+        self.assertIn("held open", first["candidates"][0]["error"])
+        self.assertEqual(second["candidates"][0]["error"], None)
+        self.assertTrue(second["candidates"][0]["shared"])
+
     def test_a_changed_core_data_folder_restarts_the_scan(self) -> None:
         with resolved_temp_dir() as root:
             base, core, bank, plan_file = _corpus(root, ("Copy", "copymod", None))

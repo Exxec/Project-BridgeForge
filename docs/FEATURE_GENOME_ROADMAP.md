@@ -133,7 +133,8 @@ lobster tanks built in) is recorded as a dependent, not a failure; a reference t
 
 **G3. Gene bank.** A content-addressed store of manifests and payloads, indexed by kind, anchor, build, licence and allele;
 duplicates across the 300+ mod corpus found; lineage (which mod copied which feature) recorded. RevenantLib is the
-distribution channel for genes from vanished authors, per its policy. `atlas` research runs over the bank.
+distribution channel for genes from vanished authors, per its policy. `atlas` research over the bank moved to G5, as its
+first collision check (owner 2026-11-27, ROADMAP-3 94.G3 slice 3c: it serves the end goal's host collisions, which are G5's).
 *Accept:* the bank holds the pilots and every allele of them in the corpus; licence state per gene; rebuildable from sources.
 Payloads live under BridgeForge's data root, like `Done/`, never in the public repository; only manifests of the owner's own
 or permitted content become committed fixtures (2026-11-19).
@@ -148,7 +149,10 @@ generated registrar for its loci). Then integration into a host on a workspace c
 (as `vendor-copy` does), merge settings lists, add faction knowledge and roles through VoidSmith knowledge packs, generate legal
 variants with VoidSmith, insert the registration statements into the host plugin. Collisions (ids, classes, shadowed files,
 duplicate registrations, new vanilla ids) are found before writing; renames keep saves loadable through generated XStream
-aliases, proven with Salvor.
+aliases, proven with Salvor. The first collision check, moved from G3 (owner 2026-11-27), is a read-only join of Mod Atlas
+facts to banked genes: which other mods define, read or mutate a gene's anchor and closure ids. It covers ids only; atlas
+paths and modification times never enter the bank; genes indexed as atlas entries are reconsidered only if the join proves
+too thin.
 *Accept:* P1-P3 inserted as carriers and boot on 0.98.5a; P1 integrated into a second mod (local-only test); a donor save
 still loads after a forced rename.
 

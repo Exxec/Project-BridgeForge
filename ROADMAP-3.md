@@ -3744,7 +3744,7 @@ history as the closure benchmark, a cross-repository trace check, an early Java 
     identity whenever the bank exists); a test for a bank folder not yet created now catches it.
   - **Full suite:** 3573 tests, OK (skipped=13); hermeticity PASS.
   - **Next:** 3b, starting from the 2a plan's hits on needed-gene ids under other mod ids; which corpus "beyond `Done/`"
-    means comes from that plan or from the owner. 3c is the owner's question.
+    means comes from that plan or from the owner. 3c is the owner's question (answered 2026-11-27: moved to 94.G5, below).
 
   **Slice 3b planned 2026-11-26 (plan only; waits for the owner to name the corpus).** The plan is in
   `docs/GENE_BANK_DESIGN.md` ("3b"). Checked read-only first:
@@ -3802,6 +3802,17 @@ history as the closure benchmark, a cross-repository trace check, an early Java 
     - So no other mod in either corpus defines a banked gene: lineage beyond the bank is 0. *Limit:* only roots that
       define a banked anchor's id are compared; content copied under a new id is not looked for (a raw file-hash sweep
       would be another slice, the owner's call).
+
+  **Slice 3c moved to 94.G5 (owner 2026-11-27).** "`atlas` over the bank" had three readings for the owner: (A) a read-only
+  join of Mod Atlas facts to banked genes, (B) the bank's genes indexed as atlas entries, so the conflict rules run over
+  them, or (C) neither as a G3 slice. The owner chose C after an advisor check: "Follow C but double check with advisor
+  first as i want to make sure the overall goal is reached vs forking then turning around to reach original goal."
+  - *The advisor's check:* C is the straight path, not a fork. The end-goal line the atlas serves ("collisions with the
+    host ... found and resolved, or refused", `docs/FEATURE_GENOME_ROADMAP.md` section 1) is G5's; the phase graph runs
+    G3 -> G5; G3's Accept does not name the atlas, and nothing in G4 needs it.
+  - *So nothing is dropped; it moves:* A's join becomes G5's first collision slice (under 94.G5 below, with its own
+    acceptance), and B is reconsidered only if that join proves too thin. RevenantLib's copy of its G3 portion does not
+    mention the atlas, so it is unchanged.
 - 94.G4 **Adaptation**: target-impact, gated fixers and `src-to-jar` at gene scope; Project Go carries translations; SpriteForge
   validates sprites and slots.
   **Project Go's part, slice 1 (2026-11-22, Project-Go #19): `ssmt-cli gene-carry`, a read-only report.**
@@ -3834,6 +3845,14 @@ history as the closure benchmark, a cross-repository trace check, an early Java 
 - 94.G5 **Insertion**: carrier mod first, then integration on workspace copies (GD-5); collision checks; XStream aliases
   (`ModPlugin.configureXStream`, 0.98.5a API) proven with Salvor; VoidSmith variants and faction-knowledge proposals;
   SpriteForge restyles on request.
+  **First collision slice (moved from 94.G3 slice 3c, owner 2026-11-27):** a read-only join of Mod Atlas facts to banked
+  genes. For a gene's anchor and every id in its closure, `atlas id` lists the other mods that define, read or mutate that
+  id, so an insertion sees its id collisions with a host before anything is written.
+  - *Accept:* a planted id collision between a banked gene and a host is found, and the bank's ROOT and the atlas
+    database are unchanged.
+  - *Invariant:* atlas rows hold paths and modification times, which never enter the bank.
+  - *Limit:* ids only. Classes, shadowed files and duplicate registrations, G5's other collisions, are separate G5 checks.
+    Indexing genes as atlas entries (3c's reading B) is reconsidered only if the join proves too thin.
 - 94.G6 **Expression qualification**: per-kind probe obligations (S3), live runs on the 0.98.5a rig (item 93), SPW per-gene cost,
   Salvor add and remove on save copies.
 - 94.G7 **Engineering**: composed carriers (VoidSmith checks fleet roles), agent-edited genes with independent verification,

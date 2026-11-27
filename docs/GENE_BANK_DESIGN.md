@@ -207,11 +207,15 @@ through `zipsafe`.
        copied member under a new mod id finds exactly that blob.
      - *Owner 2026-11-27:* the corpus is Test1's `In operation/`, widened to White_Legion's mod folder if needed; not the
        Downloads archive. Step 2 is built (`bridgeforge/genome/lineage_scan.py`); step 3 is not needed.
-   - **3c: `atlas` over the bank, an open question for the owner.** Two readings survive, so nothing is built:
+   - **3c: `atlas` over the bank, moved to 94.G5 (owner 2026-11-27).** Two readings survived:
      - a read-only join of atlas facts to banked genes: which other mods define, read or mutate a banked gene's ids
        (`atlas id` per anchor and closure id);
      - indexing the bank's genes as atlas entries, so the atlas's conflict rules run over genes.
-     Either way, atlas rows hold paths and modification times, which must never enter the bank.
+     The owner chose neither as a G3 slice, after an advisor check ("Follow C but double check with advisor first as i want
+     to make sure the overall goal is reached vs forking then turning around to reach original goal"). Both answer host
+     collisions, which are G5's, and G3's Accept does not name the atlas. The join becomes G5's first collision slice
+     (ROADMAP-3 94.G5); the second reading is reconsidered only if the join proves too thin. Atlas rows hold paths and
+     modification times, which must never enter the bank.
 
 ## Rules
 
