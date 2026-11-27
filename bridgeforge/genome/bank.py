@@ -501,10 +501,17 @@ def add_bank_parser(gene_sub) -> None:
     lineage_cmd.add_argument("--vanilla-core", type=Path, help="also exclude blobs equal to a file of this core's data/")
     licences_cmd = bank_sub.add_parser("licences", help="read-only: each current record's licence, the genes a local-only path "
                                                         "narrows, and drift from today's ledger (94.G3 slice 3a)")
-    for command in (lineage_cmd, licences_cmd):
+    scan_cmd = bank_sub.add_parser("lineage-scan", help="read-only: for each root of an alleles plan that defines a banked anchor under "
+                                                        "another mod id, describe it in memory and list its member blobs the bank "
+                                                        "also holds; one progress line per candidate, resumable (94.G3 slice 3b)")
+    scan_cmd.add_argument("plan", type=Path, help="the plan `gene bank alleles` wrote, on this machine")
+    scan_cmd.add_argument("--vanilla-core", type=Path, required=True,
+                          help="starsector-core of the bank's build: describe needs it, and its data/ files are excluded")
+    scan_cmd.add_argument("--quiet", action="store_true", help="no progress lines on stderr")
+    for command in (lineage_cmd, licences_cmd, scan_cmd):
         command.add_argument("--out", type=Path, required=True,
                              help="the report JSON to write, outside the bank; it names mods and members, so keep it local")
-    for command in (put_cmd, verify_cmd, rebuild_cmd, list_cmd, alleles_cmd, put_plan_cmd, lineage_cmd, licences_cmd):
+    for command in (put_cmd, verify_cmd, rebuild_cmd, list_cmd, alleles_cmd, put_plan_cmd, lineage_cmd, licences_cmd, scan_cmd):
         command.add_argument("--bank", type=Path, help="the bank folder (default: <data root>/Genes)")
 
 
@@ -533,6 +540,10 @@ def run_bank_cli(args) -> int:
         from bridgeforge.genome.bank_plan import run_put_plan_cli
 
         return run_put_plan_cli(args)
+    if args.bank_command == "lineage-scan":
+        from bridgeforge.genome.lineage_scan import run_lineage_scan_cli
+
+        return run_lineage_scan_cli(args)
     try:
         if args.bank_command in ("lineage", "licences"):
             from bridgeforge.genome.bank_reports import run_report_cli

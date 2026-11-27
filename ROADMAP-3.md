@@ -3756,6 +3756,25 @@ history as the closure benchmark, a cross-repository trace check, an early Java 
     3a's exclusions.
   - *Corpus:* the Downloads archive (mostly zips, outside the data root) would be its own slice of bounded zip reads.
   - *For the owner:* the corpus: `In operation/`, the Downloads archive, or both.
+  **Owner 2026-11-27:** Test1's `In operation/` (the recommended option: 350 folders, including the 264 mods intaken from
+  the Ironclads archive on 2026-09-14, no new reader needed), "that sounds fine. you can expand search to include white
+  legion's mod folder as well if needed." The Downloads archive itself (zips) was not chosen.
+  **Slice 3b built 2026-11-27: `gene bank lineage-scan PLAN --out OUT --vanilla-core CORE`** (`bridgeforge/genome/lineage_scan.py`),
+  read-only.
+  - *Candidates:* every plan row that defines one of the bank's anchors under a mod id the bank does not hold that anchor
+    for (a root with no mod id is always one).
+  - *Each candidate* is described in memory with the same walk `put` uses, after checking its `mod_info.json` is still
+    the plan's, and its member hashes are intersected with the bank's member blobs. A match is reported as "shared by",
+    with the bank's holders; 3a's exclusions are counted apart (donor side, trivial value, vanilla file), and so is a
+    match only with the candidate's own mod id (`same_mod`, an allele).
+  - *Bounds:* the core must report the bank's build (describe's closure depends on it); one progress line per candidate
+    and a checkpoint keyed by the plan and the bank's ROOT, kept while errors remain; a root changed or gone since the
+    plan, or a describe that fails, is an error for that candidate and the scan goes on; the report goes through 3a's
+    `write_report`, which refuses a path inside the bank, and names mods, so it stays on the machine.
+  - *Tests:* `tests/test_gene_lineage_scan.py`: over a bank built by the real `put`, a full copy under another mod id
+    shares both of its members, a copy whose ship file was edited shares exactly the unchanged CSV row, a plan with only
+    the banked mod finds nothing, and the bank's files and `verify` are unchanged; plus each exclusion, errors and resume,
+    the build refusal and the CLI.
 - 94.G4 **Adaptation**: target-impact, gated fixers and `src-to-jar` at gene scope; Project Go carries translations; SpriteForge
   validates sprites and slots.
   **Project Go's part, slice 1 (2026-11-22, Project-Go #19): `ssmt-cli gene-carry`, a read-only report.**

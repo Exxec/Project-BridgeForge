@@ -205,6 +205,8 @@ through `zipsafe`.
         That is a separate slice, because it reads untrusted archives at scale.
      - *Acceptance:* the scan over Test1's `Done/` finds 0 shared blobs, matching 3a's lineage. A synthetic corpus with a
        copied member under a new mod id finds exactly that blob.
+     - *Owner 2026-11-27:* the corpus is Test1's `In operation/`, widened to White_Legion's mod folder if needed; not the
+       Downloads archive. Step 2 is built (`bridgeforge/genome/lineage_scan.py`); step 3 is not needed.
    - **3c: `atlas` over the bank, an open question for the owner.** Two readings survive, so nothing is built:
      - a read-only join of atlas facts to banked genes: which other mods define, read or mutate a banked gene's ids
        (`atlas id` per anchor and closure id);

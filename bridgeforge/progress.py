@@ -108,6 +108,7 @@ LONG_RUNNING_COMMANDS = (
     ("gene", "bank", "rebuild"),
     ("gene", "bank", "alleles"),
     ("gene", "bank", "put-plan"),
+    ("gene", "bank", "lineage-scan"),
     ("portfolio-scan",),
     ("recipe-trial",),
     ("local-kit", "build"),
