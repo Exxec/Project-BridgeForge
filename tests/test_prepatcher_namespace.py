@@ -173,7 +173,7 @@ class PrepatcherNamespaceTests(unittest.TestCase):
             _agent(rig, {"windows-0.98.5a-RC9": RC9}, ["windows-0.98.5a-RC9"], True)
             no_engine = pn.check(rig)
         self.assertEqual((no_detector["status"], no_engine["status"]), ("WARN", "WARN"))
-        self.assertIn("GameNamespaceDetector", no_detector["detail"])
+        self.assertIn(f"the agent jar has no {pn.DETECTOR}", no_detector["detail"])
         self.assertIn("no table", no_engine["detail"])
 
     def test_the_first_of_two_rows_wins_as_in_the_agent(self) -> None:
