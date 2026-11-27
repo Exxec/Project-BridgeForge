@@ -195,7 +195,7 @@ through `zipsafe`.
      The plan, once the owner names the corpus:
      1. Run `gene bank alleles CORPUS --out PLAN` over it, unchanged for a queue under the data root. Its rows already
         list every root that defines one of the current records' anchors, with the mod id it defines it under.
-     2. A new read-only command, `gene bank lineage-scan PLAN --out OUT [--vanilla-core CORE]`. For each plan row whose
+     2. A new read-only command, `gene bank lineage-scan PLAN --out OUT --vanilla-core CORE` (the core is required: describe needs it). For each plan row whose
         mod id differs from the record's, it describes that root's gene in memory and intersects the member hashes with
         the bank's blobs. It applies 3a's exclusions (donor side, trivial JSON, vanilla data) and reports "shared by",
         never "copied from".
@@ -205,11 +205,17 @@ through `zipsafe`.
         That is a separate slice, because it reads untrusted archives at scale.
      - *Acceptance:* the scan over Test1's `Done/` finds 0 shared blobs, matching 3a's lineage. A synthetic corpus with a
        copied member under a new mod id finds exactly that blob.
-   - **3c: `atlas` over the bank, an open question for the owner.** Two readings survive, so nothing is built:
+     - *Owner 2026-11-27:* the corpus is Test1's `In operation/`, widened to White_Legion's mod folder if needed; not the
+       Downloads archive. Step 2 is built (`bridgeforge/genome/lineage_scan.py`); step 3 is not needed.
+   - **3c: `atlas` over the bank, moved to 94.G5 (owner 2026-11-27).** Two readings survived:
      - a read-only join of atlas facts to banked genes: which other mods define, read or mutate a banked gene's ids
        (`atlas id` per anchor and closure id);
      - indexing the bank's genes as atlas entries, so the atlas's conflict rules run over genes.
-     Either way, atlas rows hold paths and modification times, which must never enter the bank.
+     The owner chose neither as a G3 slice, after an advisor check ("Follow C but double check with advisor first as i want
+     to make sure the overall goal is reached vs forking then turning around to reach original goal"). Both answer host
+     collisions, which are G5's, and G3's Accept does not name the atlas. The join becomes G5's first collision slice
+     (ROADMAP-3 94.G5); the second reading is reconsidered only if the join proves too thin. Atlas rows hold paths and
+     modification times, which must never enter the bank.
 
 ## Rules
 

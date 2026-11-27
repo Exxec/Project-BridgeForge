@@ -79,15 +79,21 @@ def is_trivial_value(data: bytes) -> bool:
     return isinstance(value, str) and len(value) <= TRIVIAL_STRING_CHARS
 
 
-def vanilla_hashes(vanilla_core: Path) -> set[str]:
-    """The hash of every file under the core's data/, taken the way a file member's blob is (member_bytes)."""
+def vanilla_file_hashes(vanilla_core: Path) -> dict[str, str]:
+    """{path under the core: hash} for every file under the core's data/, hashed the way a file member's blob is
+    (member_bytes)."""
     import hashlib
 
     data = Path(vanilla_core) / "data"
     if not data.is_dir():
         raise BankError(f"{vanilla_core} has no data folder: name a starsector-core")
-    return {hashlib.sha256(member_bytes(Path(vanilla_core), "file", path.relative_to(vanilla_core).as_posix())).hexdigest()
-            for path in sorted(data.rglob("*")) if path.is_file()}
+    files = (path.relative_to(vanilla_core).as_posix() for path in sorted(data.rglob("*")) if path.is_file())
+    return {rel: hashlib.sha256(member_bytes(Path(vanilla_core), "file", rel)).hexdigest() for rel in files}
+
+
+def vanilla_hashes(vanilla_core: Path) -> set[str]:
+    """The hash of every file under the core's data/, taken the way a file member's blob is (member_bytes)."""
+    return set(vanilla_file_hashes(vanilla_core).values())
 
 
 def _holder(rid: str, record: dict, path: str) -> dict:

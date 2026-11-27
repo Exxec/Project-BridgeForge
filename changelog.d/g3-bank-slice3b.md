@@ -1,0 +1,1 @@
+- New `gene bank lineage-scan PLAN --out OUT --vanilla-core CORE` (94.G3 slice 3b): for each root of an alleles plan that defines a banked anchor under another mod id, describes it in memory and lists its member blobs the bank also holds, with slice 3a's exclusions counted apart. Read-only; resumable; the report stays on the machine.

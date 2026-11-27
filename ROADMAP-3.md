@@ -3744,7 +3744,7 @@ history as the closure benchmark, a cross-repository trace check, an early Java 
     identity whenever the bank exists); a test for a bank folder not yet created now catches it.
   - **Full suite:** 3573 tests, OK (skipped=13); hermeticity PASS.
   - **Next:** 3b, starting from the 2a plan's hits on needed-gene ids under other mod ids; which corpus "beyond `Done/`"
-    means comes from that plan or from the owner. 3c is the owner's question.
+    means comes from that plan or from the owner. 3c is the owner's question (answered 2026-11-27: moved to 94.G5, below).
 
   **Slice 3b planned 2026-11-26 (plan only; waits for the owner to name the corpus).** The plan is in
   `docs/GENE_BANK_DESIGN.md` ("3b"). Checked read-only first:
@@ -3756,6 +3756,80 @@ history as the closure benchmark, a cross-repository trace check, an early Java 
     3a's exclusions.
   - *Corpus:* the Downloads archive (mostly zips, outside the data root) would be its own slice of bounded zip reads.
   - *For the owner:* the corpus: `In operation/`, the Downloads archive, or both.
+  **Owner 2026-11-27:** Test1's `In operation/` (the recommended option: 350 folders, including the 264 mods intaken from
+  the Ironclads archive on 2026-09-14, no new reader needed), "that sounds fine. you can expand search to include white
+  legion's mod folder as well if needed." The Downloads archive itself (zips) was not chosen.
+  **Slice 3b built 2026-11-27: `gene bank lineage-scan PLAN --out OUT --vanilla-core CORE`** (`bridgeforge/genome/lineage_scan.py`),
+  read-only.
+  - *Candidates:* each plan root that defines banked anchors under a mod the bank does not hold them for; a root with no
+    mod id is keyed by its path, as 3a keys an id-less source.
+  - *Each candidate root* is described in memory once, walking each of its candidate anchors with the walk `put` uses
+    (after checking its `mod_info.json` is still the plan's), and the member hashes of every gene reached are compared
+    with the bank's member blobs. Each blob is classified once, in order: `donor_side` (the bank holds it only as a donor
+    need), `same_mod` (only the candidate's own mod holds it), `trivial_value`, `vanilla_file`, else shared, with the
+    bank's holders of other mods, as "shared by". Counts are of distinct blobs; refused anchors and refused needs are
+    recorded per root.
+  - *Bounds:* the core must report the bank's build, and so must the current records; the plan must come from this data
+    root and cover every anchor the bank holds now; one progress line per root and a checkpoint keyed by the plan, the
+    bank's ROOT, the build and the core's data files, kept while errors remain; a root changed or gone since the plan, or
+    a describe that fails, is that root's error only. The CLI refuses an output or checkpoint inside the bank before it
+    starts, and the report goes through 3a's `write_report`; it names mods, so it stays on the machine.
+  - *Independent review:* with `--out` inside the bank, the first version wrote its checkpoint into the bank and refused
+    only after the scan, which left a file that made `put` and `verify` fail (HIGH). It also compared an id-less banked
+    root with itself, did not notice a plan older than the bank, dropped refused needs, walked and counted a root once per
+    anchor, and resumed a scan made with another core's data. All fixed with tests.
+  - *Second review, of the reworked module:*
+    - A resumed scan replayed a root changed or gone after its row was saved. The checkpoint key held the plan's
+      `mod_info.json` hash, which the plan's digest already fixes. It now holds the hash read at scan time, as
+      `gene bank alleles` keys its rows, so such a root is described again and fails the plan check, as in a fresh scan.
+    - The core's digest held content hashes without paths, so a renamed data file resumed. It now digests path and hash
+      (`bank_reports.vanilla_file_hashes`).
+    - The resume test compared counts that were 0 in both runs. It now compares the resumed report with a fresh one.
+  - *Tests:* `tests/test_gene_lineage_scan.py` (26), over banks built by the real `put`: a full copy under another mod id
+    shares both its members, a copy whose ship file was edited shares exactly the unchanged CSV row, a plan with only the
+    banked mod finds nothing, and the bank's files and `verify` are unchanged; plus id-less roots, a root with two anchors
+    (walked once), refused needs, each bucket and its order, a blob classified once, distinct counts, errors, resume
+    (equal to a fresh scan; a root changed after its row was saved; a failed describe retried), every refusal, and the CLI.
+  - *Mutation check:* 28 mutants of the reworked module; the first batch missed 5 (the walk-once skip, a blob two genes
+    hold, trivial before vanilla, distinct bucket counts, a plan without anchors). A test now catches each; the re-run caught
+    all 28. After the second review, 31 (three for its fixes, including both old lines): 30 caught. The 31st, a failed row
+    saved to the checkpoint, survived because the new key no longer matches a gone root; a test of a failed describe on an
+    unchanged root now catches it (re-run at that commit; the module was unchanged).
+  - *The runs (counts only; the plans and reports stay on their machines):*
+    - Test1's `In operation/`, `gene bank alleles --exclude "_*"`: 715 roots, 0 errors; 8 define a banked anchor, all
+      the pilots' own working and original copies. 0 candidates.
+    - White_Legion's RC8 install `mods/` (the owner's "if needed"; its RC9 install's `mods/` is empty), the same plan
+      read against a copy of Test1's bank: 205 roots, 0 errors; 4 define a banked anchor, all the four pilots' own
+      installed copies. 0 candidates.
+    - So no other mod in either corpus defines a banked gene: lineage beyond the bank is 0. *Limit:* only roots that
+      define a banked anchor's id are compared; content copied under a new id is not looked for (a raw file-hash sweep
+      would be another slice, the owner's call).
+
+  **Slice 3c moved to 94.G5 (owner 2026-11-27).** "`atlas` over the bank" had three readings for the owner: (A) a read-only
+  join of Mod Atlas facts to banked genes, (B) the bank's genes indexed as atlas entries, so the conflict rules run over
+  them, or (C) neither as a G3 slice. The owner chose C after an advisor check: "Follow C but double check with advisor
+  first as i want to make sure the overall goal is reached vs forking then turning around to reach original goal."
+  - *The advisor's check:* C is the straight path, not a fork. The end-goal line the atlas serves ("collisions with the
+    host ... found and resolved, or refused", `docs/FEATURE_GENOME_ROADMAP.md` section 1) is G5's; the phase graph runs
+    G3 -> G5; G3's Accept does not name the atlas, and nothing in G4 needs it.
+  - *So nothing is dropped; it moves:* A's join becomes G5's first collision slice (under 94.G5 below, with its own
+    acceptance), and B is reconsidered only if that join proves too thin. RevenantLib's copy of its G3 portion does not
+    mention the atlas, so it is unchanged.
+
+  **94.G3 Done 2026-11-27: its Accept is met** ("the bank holds the pilots and every allele of them in the corpus; licence
+  state per gene; rebuildable from sources").
+  - *The pilots and their alleles:* the bank holds the 12 pilot copies in `Done/` (slice 2b: ROOT `0f1c4f9c...`, 415
+    records). Beyond `Done/`, a read-only check the same day (the advisor: 3b skips a mod's own copies, so it says nothing
+    about whether they are banked):
+    - Test1's `In operation/`: the 8 roots that define banked anchors under the pilots' own ids (each pilot's original
+      and working copy) were described in memory, gene by gene. All 166 genes equal a current record's members: 0 differ,
+      0 absent, 0 refused, 0 errors.
+    - White_Legion's RC8 install: its 4 pilot folders are byte-identical to the original releases on Test1, apart from 7
+      junk files intake strips (`desktop.ini`, `.png~` backups), which no gene holds.
+    So no copy in either corpus holds an allele the bank lacks.
+  - *Licence state per gene:* slice 3a's `gene bank licences` (415 records, all LOCAL_ONLY, 0 narrowed, 0 drift).
+  - *Rebuildable from sources:* slice 2b's rebuilds, in place and into an empty folder, gave the same ROOT.
+  - *Lineage:* 0 shared blobs across mods, in the bank (3a) and beyond it (3b). 3c moved to G5. Re-banking on RC9 is 98.6.
 - 94.G4 **Adaptation**: target-impact, gated fixers and `src-to-jar` at gene scope; Project Go carries translations; SpriteForge
   validates sprites and slots.
   **Project Go's part, slice 1 (2026-11-22, Project-Go #19): `ssmt-cli gene-carry`, a read-only report.**
@@ -3788,6 +3862,14 @@ history as the closure benchmark, a cross-repository trace check, an early Java 
 - 94.G5 **Insertion**: carrier mod first, then integration on workspace copies (GD-5); collision checks; XStream aliases
   (`ModPlugin.configureXStream`, 0.98.5a API) proven with Salvor; VoidSmith variants and faction-knowledge proposals;
   SpriteForge restyles on request.
+  **First collision slice (moved from 94.G3 slice 3c, owner 2026-11-27):** a read-only join of Mod Atlas facts to banked
+  genes. For a gene's anchor and every id in its closure, `atlas id` lists the other mods that define, read or mutate that
+  id, so an insertion sees its id collisions with a host before anything is written.
+  - *Accept:* a planted id collision between a banked gene and a host is found, and the bank's ROOT and the atlas
+    database are unchanged.
+  - *Invariant:* atlas rows hold paths and modification times, which never enter the bank.
+  - *Limit:* ids only. Classes, shadowed files and duplicate registrations, G5's other collisions, are separate G5 checks.
+    Indexing genes as atlas entries (3c's reading B) is reconsidered only if the join proves too thin.
 - 94.G6 **Expression qualification**: per-kind probe obligations (S3), live runs on the 0.98.5a rig (item 93), SPW per-gene cost,
   Salvor add and remove on save copies.
 - 94.G7 **Engineering**: composed carriers (VoidSmith checks fleet roles), agent-edited genes with independent verification,
