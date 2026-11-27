@@ -4081,6 +4081,18 @@ fixes of 93.28. 93.26-93.35 are that day's findings.
   experiment, 2026-11-17). Capture the game's own window (`PrintWindow` with `PW_RENDERFULLCONTENT`), start the task's console
   minimised, and record the desktop size with each capture.
   **Owner 2026-11-22:** parked ("For everything else I will follow your recommendations."): the skills work around it.
+  **Done 2026-11-27, the capture half.** The owner asked for live tests on White_Legion, the owner's own desktop ("run live
+  testing on white legion"), and the standing rule is that the owner's desktop is never captured. The window watcher took
+  the whole virtual screen for every second or error-titled window and for the 180 s no-main-menu shot.
+  - `window_watch.save_screenshot(path, handle)` now captures only that window's rectangle (DPI-aware `GetWindowRect`, the
+    handle in an environment variable as 93.47 requires). Without a window it captures nothing.
+  - The watcher passes each dialog's own window, and for the no-menu shot the game's first window. With no game window there
+    is no shot.
+  - Tests: `tests/test_one_launcher.py` (the dialog's window, the game window, no window means no capture) and
+    `tests/test_command_line_names.py` (no handle means nothing runs; the script names `GetWindowRect` and not the virtual
+    screen). The script was also run against an invalid window: it compiled, refused the handle (exit 3) and wrote nothing.
+  - `PrintWindow` (a window covered by another) and the minimised console stay open; `CopyFromScreen` of the window's
+    rectangle shows whatever is in front of it there.
 - 93.25 **Two stale notes.** `probe_group.smoke_group` says `run-j25-direct.bat` starts java "so there is no launcher to
   click"; the bat starts `StarfarerLauncher`, which shows the launcher ("direct" means without `starsector.exe`). The
   `signature_rewrites`/`jar_call_rewrites` notes that 0.98.5a has only `ShipAIConfig(ShipAPI)` hold for RC3: `api-diff` RC3 ->

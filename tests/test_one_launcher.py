@@ -69,7 +69,8 @@ class OneLauncherTests(unittest.TestCase):
 class WindowWatcherTests(unittest.TestCase):
     def _watcher(self, rig: Path, windows, texts, shots, clock):
         return window_watch.WindowWatcher(rig, "W-1", lambda: {5}, enumerate_fn=lambda pids: list(windows), child_text_fn=lambda h: texts.get(h, ""),
-                                          screenshot=lambda path: shots.append(path.name), clock=clock, sleep=lambda _s: None)
+                                          screenshot=lambda path, handle: shots.append((path.name, handle)), clock=clock,
+                                          sleep=lambda _s: None)
 
     def test_dialog_text_goes_to_the_file_log_triage_reads(self) -> None:
         with resolved_temp_dir() as directory:
@@ -81,7 +82,7 @@ class WindowWatcherTests(unittest.TestCase):
             watcher.poll_once()  # nothing is recorded twice
             text = (rig / "logs" / "W-1.windows.txt").read_text(encoding="utf-8")
             self.assertEqual(text.count("window: 'Fatal Error'"), 1)
-            self.assertEqual(shots, ["W-1-window1.png"])
+            self.assertEqual(shots, [("W-1-window1.png", 2)])  # the dialog's own window, not the screen (93.24)
             (rig / "logs" / "W-1.stdout.log").write_text("x\n", encoding="utf-8")
             fatals = log_triage._dialog_fatals(rig / "logs" / "W-1.windows.txt")
             self.assertEqual(len(fatals), 1)
@@ -94,11 +95,23 @@ class WindowWatcherTests(unittest.TestCase):
             (rig / "logs" / "W-1.windows.txt").write_text("old\n", encoding="utf-8")
             now = {"t": 0.0}
             shots: list[str] = []
+            watcher = self._watcher(rig, [(7, "Starsector")], {}, shots, lambda: now["t"])
+            watcher.poll_once()
+            now["t"] = 181.0
+            watcher.poll_once()
+            self.assertEqual(shots, [("W-1-no-main-menu.png", 7)])  # the game's window only (93.24)
+            self.assertTrue(list((rig / "logs").glob("W-1.windows.*.prev.txt")))
+
+    def test_without_a_game_window_nothing_is_captured(self) -> None:
+        # 93.24: the no-main-menu shot was the whole screen; on the owner's desktop there must be no capture at all.
+        with resolved_temp_dir() as directory:
+            rig = Path(directory)
+            now = {"t": 0.0}
+            shots: list[str] = []
             watcher = self._watcher(rig, [], {}, shots, lambda: now["t"])
             now["t"] = 181.0
             watcher.poll_once()
-            self.assertEqual(shots, ["W-1-no-main-menu.png"])
-            self.assertTrue(list((rig / "logs").glob("W-1.windows.*.prev.txt")))
+            self.assertEqual(shots, [])
             self.assertFalse((rig / "logs" / "W-1.windows.txt").exists())
 
     def test_both_callers_start_the_watcher(self) -> None:

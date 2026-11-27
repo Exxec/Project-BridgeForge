@@ -3,7 +3,8 @@
 Starsector shows a Java Fatal Error only as a modal dialog; it never reaches the redirected log. This records the text of every new
 visible top-level window of the game's processes to `<rig>/logs/<TESTID>.windows.txt` in the format log-triage reads
 (`HH:mm:ss window: '<title>'`, `HH:mm:ss dialog: '<title>' text: '<text>'`), takes a screenshot of a second or error-titled window
-(`<TESTID>-window<N>.png`, at most 10) and one when java runs 180 s without the main menu (`<TESTID>-no-main-menu.png`).
+(`<TESTID>-window<N>.png`, at most 10) and one of the game's window when java runs 180 s without the main menu
+(`<TESTID>-no-main-menu.png`). Each capture is that window's rectangle only, never the whole screen (ROADMAP-3 93.24).
 The window enumeration, child-text read, screenshot and clock are injectable for tests.
 """
 from __future__ import annotations
@@ -49,20 +50,30 @@ def child_text(handle: int) -> str:
     return " ".join(parts).replace("\r", " ").replace("\n", " ")
 
 
-def save_screenshot(path: Path) -> bool:
-    """The whole virtual screen as a PNG (PowerShell + System.Drawing).
+def save_screenshot(path: Path, handle: int | None = None) -> bool:
+    """One of the game's windows as a PNG: that window's rectangle only, DPI-aware, never the whole screen. Without a window
+    nothing is captured. Owner 2026-11-27: live tests run on White_Legion, the owner's own desktop, which is never captured
+    (ROADMAP-3 93.24); the earlier capture took the whole virtual screen.
 
-    The path goes to PowerShell in an environment variable, never inside the script: a single-quoted string also ends at
-    U+2018-U+201B, and the mass test's paths carried a mod's id (ROADMAP-3 93.47)."""
+    The path and the window go to PowerShell in environment variables, never inside the script: a single-quoted string also ends
+    at U+2018-U+201B, and the mass test's paths carried a mod's id (ROADMAP-3 93.47)."""
     import os
     import subprocess
 
-    script = ("Add-Type -AssemblyName System.Windows.Forms, System.Drawing; $v=[System.Windows.Forms.SystemInformation]::VirtualScreen; "
-              "$b=New-Object System.Drawing.Bitmap $v.Width,$v.Height; $g=[System.Drawing.Graphics]::FromImage($b); "
-              "$g.CopyFromScreen($v.Left,$v.Top,0,0,$b.Size); $b.Save($env:BF_IMAGE_PATH, [System.Drawing.Imaging.ImageFormat]::Png)")
+    if not handle:
+        return False
+    script = ("Add-Type -AssemblyName System.Drawing; Add-Type 'using System; using System.Runtime.InteropServices; public class BfWindow { "
+              "[DllImport(\"user32.dll\")] public static extern bool SetProcessDPIAware(); "
+              "[StructLayout(LayoutKind.Sequential)] public struct Rect { public int Left; public int Top; public int Right; public int Bottom; } "
+              "[DllImport(\"user32.dll\")] public static extern bool GetWindowRect(IntPtr window, out Rect rect); }'; "
+              "[BfWindow]::SetProcessDPIAware() | Out-Null; $r=New-Object BfWindow+Rect; "
+              "if (-not [BfWindow]::GetWindowRect([IntPtr][long]$env:BF_WINDOW, [ref]$r)) { exit 3 }; "
+              "$w=$r.Right-$r.Left; $h=$r.Bottom-$r.Top; if ($w -le 0 -or $h -le 0) { exit 3 }; "
+              "$b=New-Object System.Drawing.Bitmap $w,$h; $g=[System.Drawing.Graphics]::FromImage($b); "
+              "$g.CopyFromScreen($r.Left,$r.Top,0,0,$b.Size); $b.Save($env:BF_IMAGE_PATH, [System.Drawing.Imaging.ImageFormat]::Png)")
     try:
         subprocess.run(["powershell", "-NoProfile", "-Command", script], capture_output=True, timeout=60, check=True,
-                       env={**os.environ, "BF_IMAGE_PATH": str(path)})
+                       env={**os.environ, "BF_IMAGE_PATH": str(path), "BF_WINDOW": str(int(handle))})
     except Exception:
         return False
     return Path(path).is_file()
@@ -82,6 +93,7 @@ class WindowWatcher:
         self._clock, self._now, self._sleep = clock, now, sleep
         self._marker = MAIN_MENU_MARKER
         self._seen: set[tuple[int, str]] = set()
+        self._game_window: int | None = None
         self._shots = 0
         self._menu_reached = False
         self._suspect_shot = False
@@ -110,6 +122,8 @@ class WindowWatcher:
             if (handle, title) in self._seen:
                 continue
             self._seen.add((handle, title))
+            if self._game_window is None:
+                self._game_window = handle  # the first window of the game's processes: the one a no-menu shot shows
             self.note(f"window: '{title}'")
             text = self._child_text(handle)
             if text:
@@ -117,10 +131,11 @@ class WindowWatcher:
             if (len(self._seen) > 1 or ERROR_TITLE.search(title)) and self._shots < MAX_WINDOW_SHOTS:
                 self._sleep(0.8)
                 self._shots += 1
-                self._screenshot(self.logs / f"{self.test_id}-window{self._shots}.png")
+                self._screenshot(self.logs / f"{self.test_id}-window{self._shots}.png", handle)  # that window only
         if pids and not self._menu_reached and not self._suspect_shot and self._clock() - self._started > NO_MENU_SECONDS:
             self._suspect_shot = True
-            self._screenshot(self.logs / f"{self.test_id}-no-main-menu.png")
+            if self._game_window is not None:  # with no game window there is nothing to show, and the screen is never captured
+                self._screenshot(self.logs / f"{self.test_id}-no-main-menu.png", self._game_window)
 
     def _run(self) -> None:
         while not self._stop.is_set():
