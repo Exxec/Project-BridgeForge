@@ -592,7 +592,7 @@ order then continue live testing followed by more roadmap work based on your rec
   ("APPLIED ... to", "Patched ... structurally", "rolled back", "failed open"; checked 2026-11-27). `live_run` and
   `reload_run` attach it, `probe-group live` prints one line per launch and keeps it in its JSON, `live-queue` keeps it in
   each row. A refused run carries none. Tests: `tests/test_prepatcher_log.py`; `tests/test_direct_start.py`'s reload stub
-  returns a LiveResult, as `drive_reload` does.
+  returns a LiveResult, as `drive_reload` does. Mutation check: 19 mutants through `mutate_batch.py`, all caught.
 - 98.19 (S) **`findings-diff`: one check over `Done/`, old code against new.** `findings-diff A.json B.json` compares two
   runs of `finding-stats`-style per-archive finding lists and prints what was dropped and what appeared, per archive. The
   `bridgeforge-pr` skill runs it for any change to a scanner check. 98.8's hand-made sweep (53 findings become 20, nothing
