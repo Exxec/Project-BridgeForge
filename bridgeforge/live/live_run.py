@@ -629,8 +629,12 @@ def running_game(rig: Path, test_id: str, bat_name: str = "run-j25-direct.bat", 
     manifest (see graceful_exit.py) and records NATURAL with the code, or KILLED when it had to be stopped."""
     from bridgeforge import launch
     from bridgeforge.boot_test import LAUNCH_WATCHDOG_SECONDS, _is_link, _running_java_under, watchdog_message
+    from bridgeforge.live.pause import refusal
     from bridgeforge.run_manifest import ManifestError, read_staging_state
 
+    paused = refusal()  # before anything is written or started (98.16)
+    if paused:
+        raise GameRefused(paused)
     rig = Path(rig).expanduser().resolve()
     if not _is_link(rig / "starsector-core"):
         raise GameRefused(f"{rig / 'starsector-core'} is not a junction/symlink; refusing to run in a shared install")

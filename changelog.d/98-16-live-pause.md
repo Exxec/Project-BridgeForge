@@ -1,0 +1,1 @@
+- `bridgeforge live pause [--reason]`, `live resume` and `live status` keep a pause flag in `bridgeforge-state/live-paused.json`. While it is set, no live, save-reload, duel, smoke or boot run starts on that machine (`running_game` raises `GameRefused`, `run_boot_test` returns REFUSED), so a gate left polling in the background cannot launch a game during a pause.

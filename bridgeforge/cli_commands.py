@@ -29,6 +29,7 @@ COMMAND_MODULES: dict[str, tuple[str, ...]] = {
     "cmd_behavior_comparison": ("case-behavior-compare",),
     "cmd_local_kit": ("local-kit",),
     "live.live_ledger": ("live-ledger",),
+    "live.pause": ("live",),
     "roadmap_lint": ("roadmap-lint",),
     "agent_diff_check": ("agent-diff-check",),
     "hygiene": ("hygiene",),

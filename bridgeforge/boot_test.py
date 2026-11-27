@@ -134,7 +134,11 @@ def run_boot_test(runtime_dir: Path, mods: list[str], timeout: int = 240, log_na
     refuses if a java.exe already runs from under runtime_dir (stale process from a previous test).
     """
     from . import launch
+    from .live.pause import refusal
 
+    paused = refusal()  # live testing paused on this machine: nothing starts (98.16)
+    if paused:
+        return _result("REFUSED", paused)
     runtime_dir = Path(runtime_dir).expanduser().resolve()
 
     core_path = runtime_dir / "starsector-core"
