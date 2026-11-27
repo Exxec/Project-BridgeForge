@@ -3778,10 +3778,14 @@ history as the closure benchmark, a cross-repository trace check, an early Java 
     only after the scan, which left a file that made `put` and `verify` fail (HIGH). It also compared an id-less banked
     root with itself, did not notice a plan older than the bank, dropped refused needs, walked and counted a root once per
     anchor, and resumed a scan made with another core's data. All fixed with tests.
-  - *Tests:* `tests/test_gene_lineage_scan.py` (18), over banks built by the real `put`: a full copy under another mod id
+  - *Tests:* `tests/test_gene_lineage_scan.py` (23), over banks built by the real `put`: a full copy under another mod id
     shares both its members, a copy whose ship file was edited shares exactly the unchanged CSV row, a plan with only the
-    banked mod finds nothing, and the bank's files and `verify` are unchanged; plus id-less roots, a root with two anchors,
-    refused needs, each bucket and its order, errors and resume, every refusal, and the CLI.
+    banked mod finds nothing, and the bank's files and `verify` are unchanged; plus id-less roots, a root with two anchors
+    (walked once), refused needs, each bucket and its order, a blob classified once, distinct counts, errors and resume,
+    every refusal, and the CLI.
+  - *Mutation check:* 28 mutants of the reworked module; the first batch missed 5 (the walk-once skip, a blob two genes
+    hold, trivial before vanilla, distinct bucket counts, a plan without anchors). A test now catches each; the re-run caught
+    all 28.
   - *The runs (counts only; the plans and reports stay on their machines):*
     - Test1's `In operation/`, `gene bank alleles --exclude "_*"`: 715 roots, 0 errors; 8 define a banked anchor, all
       the pilots' own working and original copies. 0 candidates.
