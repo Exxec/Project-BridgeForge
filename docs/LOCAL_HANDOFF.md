@@ -52,8 +52,11 @@ Revivals target 0.98.5a-RC9, the 0.98.5a hotfix (owner 2026-11-25; CLAUDE.md "Ta
   Augments' save-reload re-run.
 - **The rig, updated 2026-11-26** (owner: "Match my RC8 install"): Fast Rendering 1.0.3, Prepatcher 0.18.9, LunaLib 2.1.0,
   MagicLib 1.6.1, Nexerelin 0.12.3 and GraphicsLib 1.12.3, the versions in the owner's RC8 install. The old versions are in
-  `_rig-0985a\_addons\retired-20261126\`. Prepatcher 0.18.9 names no RC9, so it is expected to fail open there too. Not yet
-  live-run; archives validated earlier ran with the old libraries.
+  `_rig-0985a\_addons\retired-20261126\`. Not yet live-run; archives validated earlier ran with the old libraries.
+  **Prepatcher on RC9 (corrected 2026-11-26, javap):** stock 0.18.9 does not fail to match on Windows RC9. RC9's
+  `CombatEngine.getResults()` returns `combat/B/D`, which is the Linux 0.98.5a-RC8 table's name for it, so the stock
+  detector loads the Linux RC8 table. Offline, the agent then stops with unmapped optimizer targets. A rig-only jar with
+  an RC9 table is built (98.14), not proven. Which jar the rig uses waits for the owner, and no live run until then.
 - **Live state 2026-11-26 (98.4):** Neutrino passed on RC9 (RC9NC-LIVE2), and fighters carrying its ported drone AI flew.
   The menu exit of 2026-11-25 did not reproduce in three runs; its cause is unknown. Station Augments passed its standard
   run and the shunt check (control RC9SA-SHUNTCTL fails it, port RC9SA-SHUNT passes; station modules unproven). Its
