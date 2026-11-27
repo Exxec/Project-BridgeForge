@@ -275,10 +275,13 @@ Found during 98.4's runs (2026-11-26), queued the same way:
 - 98.14 (M) **StarsectorPrepatcher for RC9: build its name table ourselves, for the rig only.** Approved (owner 2026-11-26:
   "Build an RC9 table ourselves", over asking the author or waiting). The licence is MIT plus the Commons Clause, so
   modifying it for our own use is allowed; selling it is not.
-  - *Why it fails open on RC9:* Prepatcher 0.18.9 (2026-11-19, its last release; RC9 came 2026-11-25) writes its patches
+  - *Why it fails on RC9:* Prepatcher 0.18.9 (2026-11-19, its last release; RC9 came 2026-11-25) writes its patches
     against Windows 0.98a-RC8's obfuscated names and carries one table per other build translating them. It identifies the
-    build from `CombatEngine.getResults()`'s return type (`GameNamespaceDetector`), and RC9 matches no table. Missing names
-    fall back to themselves, so a partial table could patch the wrong class: the class map must be complete.
+    build from `CombatEngine.getResults()`'s return type (`GameNamespaceDetector`). Missing names fall back to themselves,
+    so a partial table could patch the wrong class: the class map must be complete.
+    *Corrected 2026-11-26 (javap):* RC9 does not "match no table". Its `getResults()` returns `combat/B/D`, which is the
+    Linux 0.98.5a-RC8 table's name for that class, so the stock detector loads the Linux RC8 table on Windows RC9.
+    Offline, Prepatcher's own native test then stops with unmapped optimizer targets.
   - *Measured* (read-only, 2026-11-26): the author's RC3 table, checked against the real RC3 jars, resolves 2961/2961
     classes and over 99% of members, which validates the check. Against RC9, about half of the class names still exist,
     and most of those were never obfuscated: RC9 is a fresh re-obfuscation of the 0.98.5a code (2962 classes).
@@ -292,6 +295,32 @@ Found during 98.4's runs (2026-11-26), queued the same way:
     - Prepatcher's own namespace tests pass (read its build scripts before running them).
   - *Deliverable:* a rig-only agent jar kept beside the stock 0.18.9 one, recorded as built, not proven. *Done* when a rig
     run's Prepatcher log shows its patches applied, which waits for live testing to resume.
+  **Progress 2026-11-26: built, not proven.**
+  - *Route taken:* the owner provided the 0.98.5a-RC8 installer, whose jars the author's RC8 table describes exactly. So
+    the match ran RC8 -> RC9 and was composed with canonical -> RC8; RC3 served as the scored control.
+    The work was a background agent's, re-checked in the main session (hashes, jar contents, the detector change).
+  - *The matcher:*
+    - Scored RC3 -> RC8 against the author's two tables: 2841/2841 classes, 17853 fields, 28299 methods, none wrong.
+    - RC8 -> RC9: 2962/2962 classes and every member, no ties, agreeing with the author's own generator on every row
+      the two share.
+    - The RC9 table has the RC8 table's row set. It is complete and one-to-one, and every row resolves in RC9's jars
+      apart from the JDK-inherited members every control shares.
+    - The needed set (94 classes and 216 members the agent names) is all mapped.
+  - *Prepatcher's own test:* `NativeNamespaceCompatibilityTest` gives `OK targets=73 patched=72` on RC9 with the rig jar,
+    line for line the same as the stock jar on RC8. Its `GameNamespaceSelectionTest` fails on the author's synthetic probe,
+    which carries only `getResults()` and is now ambiguous (below). A variant with `getCombatMap()` passes.
+  - *The rig jar:* a copy of the stock jar with the RC9 table added and `GameNamespaceDetector` rebuilt. Every other entry
+    is byte-identical, and the stock jar matches its release checksum.
+    - Adding the table alone would make RC9 match two tables, so the detector breaks a tie by `getCombatMap()`, whose type
+      differs in every build. It runs only when more than one table matches.
+    - Detection: canonical, RC8 and RC9 each find their own table, and RC3 still fails open.
+  - *Not exercised offline:* the agent's start-up and its payload classes inside the game. RC9 also changed one method
+    in a patched area (`CommodityOnMarket.getModValueForQuantity`); the patch still applies, but only a live run shows
+    whether it still behaves.
+  - *Kept locally* (data root, `bridgeforge-state/prepatcher-rc9/`): the table, the jar, the changed detector source and
+    the scripts. Nothing is on Test1 yet.
+  - *For the owner:* whether to accept the tie-break, and which jar the RC9 rig runs (the stock one loads the wrong
+    table there).
 
 **97. The S series' remaining work, re-queued without gates (owner 2026-11-17: "Park S4. Stop treating S2 and S3 as gates.
 Check S series implementation plan and if applicable add remaining items to roadmap queue").**
