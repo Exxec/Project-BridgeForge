@@ -70,6 +70,21 @@ call the main checkout's `.venv/Scripts/python.exe` by its full path. Read the r
 `OK (skipped=K)` and `Test hermeticity PASS` lines. (The `hermeticity FAIL` lines that appear inside test_guard's own
 self-tests are expected.)
 
+### A change to a scanner check: the archive, old code against new
+
+A check that passes its tests can still drop real findings, or add new ones, across the 184 archives in Test1's `Done/`
+(98.8: 53 `settings-key-missing` findings became 20 and each dropped one had to be explained). Measure it before review:
+1. On Test1, put main and the branch side by side: `git fetch origin <branch>` and `git worktree add <dir> origin/<branch>`
+   (push the branch first, no PR needed yet).
+2. Run `done-audit` once with each checkout's code, one after the other, never at the same time. From the checkout's folder,
+   with `PYTHONPATH` set to that folder (a worktree otherwise imports the main checkout's code):
+   `<repo>\.venv\Scripts\python.exe -m bridgeforge done-audit --done "<repo>\Done" --queue "<repo>\In operation" --vanilla-core @target`.
+   Each run rewrites `Done\DONE_AUDIT.json`: copy it aside after each. Its checkpoint does not record the code, so after an
+   interrupted run, delete `Done\DONE_AUDIT.partial.jsonl` before starting the other checkout's run.
+3. `bridgeforge findings-diff main.json branch.json --id <the check's id>` lists, per archive, the findings dropped and the
+   new ones. An archive one run could not audit is listed as not compared.
+4. In the PR body, give the totals line and a reason for every dropped finding. Read every new one before merging.
+
 ## 5. Review before pushing
 
 Get a reading that is not anchored on yours: the `code-review` skill, or one review agent per batch of diffs, given the

@@ -611,6 +611,14 @@ order then continue live testing followed by more roadmap work based on your rec
   runs of `finding-stats`-style per-archive finding lists and prints what was dropped and what appeared, per archive. The
   `bridgeforge-pr` skill runs it for any change to a scanner check. 98.8's hand-made sweep (53 findings become 20, nothing
   new) is the model.
+  **Done 2026-11-27.** `bridgeforge/findings_diff.py` reads `done-audit`'s `DONE_AUDIT.json` (it lists each archive's
+  crash-class, MANUAL and UNKNOWN findings the baseline does not accept) or a plain `{archive: [finding, ...]}` map, matches
+  a finding by id, file and first evidence line, and prints the totals, then per archive the findings dropped and the new
+  ones; `--id` limits it to one check, `--json` lists everything. An archive one run could not audit (ERROR, NO_MOD_ROOT,
+  closed by the owner) is listed as not compared, so a failed scan never reads as findings dropped. On 98.8's own sweep files
+  it prints "53 findings become 20 over 351 archives: 33 dropped, 0 new, in 3 archive(s)", the hand count. The
+  `bridgeforge-pr` skill's step 4 now has the sweep for a scanner-check change: `done-audit` once with each checkout's code
+  on Test1, one after the other, then `findings-diff`. Tests: `tests/test_findings_diff.py`.
 - *Machine-local skills* (each machine's `~/.claude/skills`, mirrored by `memory-mirror`, not this repository):
   - `live-run`: the bounded idle gate, the input recorder, the run `.cmd` generator, the post-run checks and the pause
     procedure;

@@ -14,6 +14,7 @@ COMMAND_MODULES: dict[str, tuple[str, ...]] = {
     'atlas.atlas_report': ("atlas",),
     "api_how": ("api",),
     "duplication_audit": ("duplication-audit",),
+    "findings_diff": ("findings-diff",),
     "substitution_proposals": ("substitution-proposals",),
     "baseline_audit": ("baseline-audit", "baseline-accept"),
     "baseline_accept_finding": ("baseline-accept-finding",),
