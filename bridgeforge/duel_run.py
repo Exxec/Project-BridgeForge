@@ -191,14 +191,17 @@ def run_duel(rig: Path, test_id: str, bat_name: str = "run-j25-direct.bat", comb
         else:
             hands.sleep(20)
             hands.front()
-            lr.click_menu(hands, "Missions", lr.MAIN_MENU_MISSIONS)
+            try:
+                lr.click_menu(hands, "Missions", lr.MAIN_MENU_MISSIONS)
+            except lr.MenuMisread as exc:  # nothing was clicked on a misread menu (98.11)
+                problem = f"main-menu: {exc}"
             hands.sleep(3)
             layout = lr.mission_list_layout(lr._log_text(log), vanilla_rows, DUEL_MOD_ID)
             below, total = layout if layout else (0, None)
             rows_in_mod = len(DUEL_MISSIONS)
             # The mod is named "zz ..." so the launcher lists it last and its missions sit at the bottom of the list; a mission more
             # than MAX_ROWS_REACHABLE rows up is off-screen and a click there replays whatever was selected (DUEL12-20261011).
-            if below + rows_in_mod - 1 > lr.MAX_ROWS_REACHABLE:
+            if problem is None and below + rows_in_mod - 1 > lr.MAX_ROWS_REACHABLE:
                 problem = f"the duel missions sit {below} rows above the bottom of the mission list; only {lr.MAX_ROWS_REACHABLE} are reachable"
             for position, label in enumerate(DUEL_MISSIONS if problem is None else ()):
                 if only and label not in only:

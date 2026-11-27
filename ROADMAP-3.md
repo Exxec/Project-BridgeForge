@@ -220,6 +220,38 @@ Found during 98.4's runs (2026-11-26), queued the same way:
   - *Fix:* accept only the expected count (eight, or nine with Continue); confirm the mission list is up (its layout read
     from the screen) before the row click; otherwise take a screenshot and stop.
   - *Test:* `FakeGame` with extra bands.
+  **Progress 2026-11-26: the strict reading is built; confirming the mission list is still open.** Branch
+  `fix/98-11-menu-count`.
+  - `screen_read.main_menu_target` names a button only from a reading of exactly eight buttons, or nine with Continue.
+    `main_menu_present` (eight bands or more) says whether a menu is up at all.
+  - The menu helpers moved to `bridgeforge/live/main_menu.py` (re-exported by `live_run`, which was over its 800-line
+    ceiling).
+  - `main_menu.menu_point` raises `MenuMisread` on a steady reading that looks like a menu (eight bands or more) but cannot
+    name the button, rather than clicking a guess. The message tells a misread (not 8 or 9) from a well-read menu without
+    the button (Continue with no save). A steady reading of fewer bands (a menu sliding in, another screen) and an unreadable
+    screen keep the old behaviour: read again, then click the measured fraction.
+  - `click_menu` takes any menu-like reading after its click as "still up", so a misread menu is read again, not left
+    behind for the Play click; `_main_menu_shown` likewise counts a misread menu as shown, so the campaign is not left a
+    second time onto it.
+  - Where it stops: `live_run.drive` ends LIVE_STUCK at the stage in progress with a screenshot
+    (`<TESTID>.<stage>-menu.png`) and the actions file; `save_reload_run.drive_reload` ends LIVE_STUCK with a screenshot;
+    `duel_run.run_duel` reports it as the run's problem. Nothing is clicked on that menu.
+  - *Review (independent, same day):* the first version refused any steady reading that was not 8 or 9, including a
+    few bands before the menu settled, and its after-click check still used the strict namer; both fixed as above.
+  - *Tests:*
+    - `tests/test_screen_read.py` `test_more_bands_than_the_menu_has_give_nothing`;
+    - `tests/test_main_menu.py` (6 tests: a reading not yet a menu, a steady misread, an unreadable screen, a menu still up
+      after the click, a menu that gives way, the eight-band boundary);
+    - `tests/test_live_run.py` `test_a_menu_that_reads_with_extra_bands_is_not_clicked_and_the_run_stops`;
+    - `tests/test_save_fingerprint.py` `test_continue_on_a_misread_or_save_less_menu_clicks_nothing`;
+    - `tests/test_duel_run.py` `test_a_misread_main_menu_plays_no_duel`.
+  - *Mutation check:* 11 mutants, all caught. *Full suite:* 3583 tests, OK (skipped=13); hermeticity PASS. Not yet run live.
+  - *Still open:*
+    - confirming the mission list is up before the row click (`screen_read.list_rows` reads the list's thumbnails; whether
+      the Load Game screen reads differently needs a screenshot of each, which the next refusal will give);
+    - eight buttons plus one extra band read like nine with Continue, and nine that lose a band read like eight (band
+      spacing, or whether a save exists, could tell them apart);
+    - an unreadable capture, or ten unsteady readings, still click the measured fraction.
 - 98.12 (S) **`Hands.front()` ignores whether the game came to the front.** `game_click.bring_to_front` returns it, and
   the result is dropped, so a click after a failed foreground lands in whatever window is in front. Record it in the
   actions log, and retry once or stop.

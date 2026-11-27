@@ -22,6 +22,8 @@ from typing import Callable
 from bridgeforge.log_triage import MAIN_MENU_RE
 from bridgeforge.launch import EXIT_POLL_SECONDS, GameRefused, LaunchNoProcess, settle_exit  # noqa: F401  (re-exported: callers and tests import them from here)
 from bridgeforge.live.window_gone import GameWindowGone, detail as window_gone_detail  # noqa: F401  (GameWindowGone re-exported: 93.50)
+from bridgeforge.live.main_menu import (MENU_CHECK_READS, MenuMisread, _main_menu_shown, _menu_buttons,  # noqa: F401
+                                      click_menu, menu_point)  # (re-exported: save_reload_run, duel_run and tests import them from here)
 
 # Client-area fractions of the game window (1280x960 view), measured 2026-10-11.
 MAIN_MENU_NEW_GAME = (0.7195, 0.4625)
@@ -182,58 +184,6 @@ def new_game_flow_for(log_text: str) -> str:
     return "nexerelin" if "nexerelin" in ids else "default"
 
 
-def _menu_buttons(hands: Hands) -> list[tuple[float, float]] | None:
-    """The main menu buttons on screen now, or None when the screen cannot be read."""
-    if not hands.geometry:
-        return None
-    try:
-        import tempfile
-
-        from bridgeforge import game_click
-        from bridgeforge.screen_read import Bitmap, main_menu_buttons
-
-        with tempfile.TemporaryDirectory() as directory:
-            shot = Path(directory) / "menu.bmp"
-            if not game_click.capture_client(hands.geometry(), shot):
-                return None
-            return main_menu_buttons(Bitmap.load(shot))
-    except Exception:
-        return None
-
-
-def menu_point(hands: Hands, name: str, fallback: tuple[float, float]) -> tuple[float, float]:
-    """Where the main menu's `name` button is, read from the screen once the menu has stopped moving (it slides in after a return
-    from the campaign, and a reading taken mid-slide sent a click to the wrong row, GRP-CMU3-20261011); the measured fraction when
-    the screen cannot be read."""
-    from bridgeforge.screen_read import main_menu_target
-
-    previous = None
-    for _ in range(10):
-        buttons = _menu_buttons(hands)
-        if buttons is None:
-            return fallback
-        if buttons and buttons == previous and main_menu_target(buttons, name):
-            return main_menu_target(buttons, name)
-        previous = buttons
-        hands.sleep(1.0)
-    return (main_menu_target(previous, name) if previous else None) or fallback
-
-
-def click_menu(hands: Hands, name: str, fallback: tuple[float, float], attempts: int = 3) -> bool:
-    """Click a main menu button and check the menu went away; try again if it is still there. True once it has gone (or when the
-    screen cannot be read, so the old blind click stands)."""
-    from bridgeforge.screen_read import main_menu_target
-
-    for _ in range(attempts):
-        hands.front()
-        hands.click(*menu_point(hands, name, fallback))
-        hands.sleep(2.5)
-        after = _menu_buttons(hands)
-        if after is None or not main_menu_target(after, name):
-            return True
-    return False
-
-
 def _screen(hands: Hands):
     """The game window as a Bitmap, or None when it cannot be read."""
     if not hands.geometry:
@@ -317,24 +267,6 @@ def generic_new_game(hands: Hands, done: Callable[[], bool], shots_dir: Path | N
 
     hands.front()
     return run_pages(lambda fx, fy: (hands.front(), hands.click(fx, fy)), hands.sleep, capture, done, max_pages, shots_dir=shots_dir)
-
-
-MENU_CHECK_READS = 6  # screen reads, a second apart, for the main menu to appear after leaving the campaign
-
-
-def _main_menu_shown(hands: Hands) -> bool | None:
-    """Whether the main menu is on screen (its Missions button found), waiting up to MENU_CHECK_READS reads; None when the screen
-    cannot be read."""
-    from bridgeforge.screen_read import main_menu_target
-
-    for _ in range(MENU_CHECK_READS):
-        buttons = _menu_buttons(hands)
-        if buttons is None:
-            return None
-        if main_menu_target(buttons, "Missions"):
-            return True
-        hands.sleep(1.0)
-    return False
 
 
 def _leave_campaign(hands: Hands) -> None:
@@ -560,6 +492,11 @@ def drive(log: Path, hands: Hands, menu_timeout: float = 240, campaign_timeout: 
                       new_game_grace, vanilla_rows, save_reload, probe_saves)
     except GameWindowGone:
         result.stage, result.detail = at[0], window_gone_detail(_log_text(log))
+        _write_actions(log, result.actions)
+        return result
+    except MenuMisread as exc:  # nothing was clicked; the menu is still up, so the screenshot shows what was misread (98.11)
+        shot = _capture(hands, log, f"{at[0]}-menu")
+        result.stage, result.detail = at[0], f"{exc}" + (f"; screenshot {shot}" if shot else "")
         _write_actions(log, result.actions)
         return result
 

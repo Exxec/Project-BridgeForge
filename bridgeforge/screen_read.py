@@ -94,16 +94,26 @@ def main_menu_buttons(bitmap: Bitmap) -> list[tuple[float, float]]:
     return [(best_x / bitmap.width, (s + e) / 2 / bitmap.height) for s, e in best]
 
 
+MAIN_MENU_ORDER = ("Tutorials", "Missions", "New Game", "Load Game", "Codex", "Settings", "Credits", "Quit")
+
+
 def main_menu_target(buttons: list[tuple[float, float]], name: str) -> tuple[float, float] | None:
     """The button by name from the RC8 main menu order: [Continue,] Tutorials, Missions, New Game, Load Game, Codex, Settings,
-    Credits, Quit. Continue is only there with a save, so the list is read from the bottom."""
-    order = ["Tutorials", "Missions", "New Game", "Load Game", "Codex", "Settings", "Credits", "Quit"]
-    if name == "Continue":  # first button, present only with a save (RC8-29: it loads the save the game last wrote or loaded)
-        return buttons[-len(order) - 1] if len(buttons) > len(order) else None
-    if len(buttons) < len(order):
+    Credits, Quit. Continue is only there with a save, so the list is read from the bottom. Only a reading of exactly eight
+    buttons, or nine with Continue, names anything (98.11: in RC9NC-LIVE3-0985a-20261126 two extra bands below Load Game shifted
+    "Missions" onto "Load Game", and the harness's next clicks loaded a save)."""
+    order = MAIN_MENU_ORDER
+    if len(buttons) not in (len(order), len(order) + 1):
         return None
-    tail = buttons[-len(order):]
-    return tail[order.index(name)]
+    if name == "Continue":  # first button, present only with a save (RC8-29: it loads the save the game last wrote or loaded)
+        return buttons[0] if len(buttons) == len(order) + 1 else None
+    return buttons[-len(order):][order.index(name)]
+
+
+def main_menu_present(buttons: list[tuple[float, float]]) -> bool:
+    """Whether a reading looks like the main menu at all (eight bands or more), even one too many to name a button: such a menu
+    is up but misread, and leaving the campaign again would only send Escape and Exit clicks onto it (98.11)."""
+    return len(buttons) >= len(MAIN_MENU_ORDER)
 
 
 def nexerelin_fleet_select(bitmap: Bitmap, fx: float = 0.627) -> tuple[float, float] | None:

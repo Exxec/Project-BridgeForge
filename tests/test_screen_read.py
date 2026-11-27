@@ -74,6 +74,18 @@ class ScreenReadTests(unittest.TestCase):
     def test_too_few_buttons_gives_nothing(self) -> None:
         self.assertIsNone(main_menu_target([(0.7, 0.5)] * 3, "Missions"))
 
+    def test_more_bands_than_the_menu_has_give_nothing(self) -> None:
+        # 98.11, RC9NC-LIVE3-0985a-20261126: two extra bands below Load Game shifted "Missions" onto "Load Game", and the
+        # harness's next clicks loaded a save. Only eight buttons, or nine with Continue, can be named.
+        rows = [(0.7, 0.30 + 0.04 * i) for i in range(11)]
+        for count in (10, 11):
+            for name in ("Missions", "New Game", "Continue"):
+                self.assertIsNone(main_menu_target(rows[:count], name), (count, name))
+        self.assertEqual(main_menu_target(rows[:9], "Missions"), rows[2])
+        self.assertEqual(main_menu_target(rows[:9], "Continue"), rows[0])
+        self.assertEqual(main_menu_target(rows[:8], "Missions"), rows[1])
+        self.assertIsNone(main_menu_target(rows[:8], "Continue"))
+
 
 if __name__ == "__main__":
     unittest.main()
