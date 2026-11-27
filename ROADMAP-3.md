@@ -498,6 +498,20 @@ order then continue live testing followed by more roadmap work based on your rec
   background kept polling, and launched RC9NC-LIVE4 at 22:03 when Test1 went idle. *Fix:* `bridgeforge live pause [--reason]`
   and `live resume` keep a flag in `bridgeforge-state/`. `probe-group live`, `smoke`, `live-queue` and `duel`, and the
   save-reload run, refuse to start while it is set, so a stray gate cannot launch anything.
+  **Done 2026-11-26.**
+  - *The flag:* `bridgeforge/live/pause.py`. `live pause [--reason]`, `live resume` and `live status` keep
+    `bridgeforge-state/live-paused.json` on the machine that runs the game, so the pause goes on Test1. An unreadable flag
+    still counts as paused.
+  - *Where it is enforced:* the two places a game starts.
+    - `live_run.running_game` raises `GameRefused` before it looks at the rig, which covers the live, save-reload and
+      duel runs, and `live-queue` through them.
+    - `boot_test.run_boot_test` returns REFUSED, which covers smoke runs, java-matrix and gene boots.
+    - The refusal names the reason and the time.
+  - *The suite:* `tests/support.py` points the flag at a temporary path (`BRIDGEFORGE_LIVE_PAUSE_FILE`), so a paused
+    machine's real flag cannot fail the tests that start a fake game.
+  - *Tests:* `tests/test_live_pause.py` (7): pause and resume, an unreadable flag, the suite's path, `running_game`
+    refusing, a live run ending `refused`, a boot test refused, and the CLI.
+  - *Mutation check:* 8 mutants through `mutate_batch.py`, all caught.
 - 98.17 (S) **`rig-doctor` checks Prepatcher against the rig's build.** Stock 0.18.9 picks a table by
   `CombatEngine.getResults()`'s return type, and on Windows RC9 that is the Linux RC8 table (RC9NC-LIVE4 above). *Fix:*
   `rig-doctor` reads the agent jar's tables and the rig core's `CombatEngine` offline. It says which table the agent will
