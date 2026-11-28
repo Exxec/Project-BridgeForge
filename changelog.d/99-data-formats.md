@@ -1,0 +1,1 @@
+- Data-format fixers tested against RC9 (ROADMAP-3 99.3): full-width digits read as 0 and CP-1252 bytes in JSON as U+FFFD, so those fixes stay; extra CSV cells, a space before a quote and a missing design-type column change nothing the game reads (RC8-60 to RC8-62).

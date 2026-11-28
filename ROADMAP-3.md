@@ -32,13 +32,21 @@ its change.
     meant it), `jar-linkage-unresolved`, `rules-csv-curly-quote-unreadable`, `variant-weapon-slot-missing`.
   - *Proven unneeded (kept as authored):* slot mismatches and extra wings (99.1). Over-budget variants are proven to load
     (RC8-06: RC8 ships 12 of its own over budget).
-  - *Assumed, never shown:*
-    - `mod-info-game-version-inexact`;
-    - `data-file-not-utf8`;
-    - `csv-fullwidth-number`;
-    - `csv-missing-design-type-column`;
-    - `csv-row-extra-columns`: its padding case; its space-before-quote case is unclear;
-    - `shippable-work-file`: hygiene, and the game never loads those files.
+  - *The data-format fixers, now tested* (DATAFMT-BOOT-0985a-20261127; RC8-60 to RC8-62). Owner 2026-11-27: "I will
+    follow your recommendations on what to do as I can't imagine these would effect any mods significantly."
+    - `csv-fullwidth-number`: needed, because full-width digits read as 0 (RC8-61). The standing fix stays.
+    - `data-file-not-utf8`: needed for JSON files, where the byte becomes U+FFFD (RC8-60). In a CSV only one byte was tested,
+      and it read as an ASCII apostrophe. The fix makes the file valid UTF-8, which the game reads correctly, and a CSV that
+      mixes UTF-8 text with such a byte is untested. So the standing fix stays as it is, for both kinds of file.
+    - `csv-row-extra-columns` and `csv-missing-design-type-column`: change nothing the game reads (RC8-62). Their standing
+      approvals are withdrawn on Test1, and the findings are accepted as authored (the revive skill). Already-archived
+      changes stay: they alter nothing the game reads.
+    - The space-before-quote case misleads only BridgeForge's own CSV reader (Python's csv), not the game. Queued: read
+      such rows the way the game does, and stop flagging them.
+  - *Still assumed:*
+    - `mod-info-game-version-inexact`: it labels the build validated. Mods declaring older builds (the probe, LazyLib)
+      load on RC9 by direct start; the launcher's display is untested. The standing fix stays as the retarget label.
+    - `shippable-work-file`: hygiene, and the game never loads those files. It stays.
   - *Evidence does not settle it:*
     - `undeclared-library-dependency`;
     - `target-interface-method-missing`;
@@ -52,8 +60,11 @@ its change.
   - **Done 2026-11-27:** the campaign: NPC fleet autofit (`DefaultFleetInflater`), save/reload, and the game's own fit
     verdict (`WeaponSlotAPI.weaponFits`) for the 99.1 cases and an over-budget variant (RC8-59, SLOTCAMP-SR-0985a-20261127).
     Not tested: the refit screen's handling when a player edits such a ship;
-  - start-up tests, one scratch mod per case: gameVersion, CP-1252 bytes, full-width digits, the design-type column, extra
-    CSV cells, a space before a quote;
+  - **Done 2026-11-27:** start-up tests of the data-format cases, run as one scratch mod read back through the API
+    (RC8-60 to RC8-62).
+  - Still to run:
+    - a CSV that mixes UTF-8 text with a CP-1252 byte;
+    - the launcher's display of a mismatched gameVersion;
   - then the unsettled code fixers.
 
 **98. The 0.98.5a-RC9 hotfix (owner 2026-11-25).** The owner installed RC9 over RC7 on White_Legion and asked for it on
