@@ -44,11 +44,14 @@ its change.
         are byte-identical to the archive and the game carried on. One WARN-level caught exception came from a mod's own
         CSV loader.
       - One mod's two missing weapon rows: "Archive as authored". `javap` showed the only code naming them never runs.
-    - Two of the 15 archives rest on an acceptance that waits for the owner's review:
+    - Two of the 15 archives rested on an acceptance the owner had not given:
       - one carried from a standing acceptance that was a session decision, not the owner's;
       - one `class-sweep` acceptance under the owner's setup-dependent rule. The rule has three conditions: the other mod
         was not enabled in the run; the mod declares or integrates with it; and the class loads in a run where that mod
         is enabled. The third was shown only from the code, not in a run.
+
+      Asked "accept" or "re-check" for each, the owner answered "Accept" (2026-11-27). The ruling is quoted in both
+      workspaces' standing `probe_accepted.json` entries. The archives in `Done/` are unchanged.
     - The 7 blocked are staged only, never archived. Each is blocked by one or more of these:
       - `undeclared-library-dependency` agent packets (4 of the 7);
       - a `declared-library-unreferenced` decision;
