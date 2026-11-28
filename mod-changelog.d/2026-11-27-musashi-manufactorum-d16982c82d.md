@@ -1,0 +1,1 @@
+- **Musashi Manufactorum** 1.4.4+bf.1: revived for 0.98.5a-RC9 and archived (live validated)

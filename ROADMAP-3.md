@@ -27,6 +27,38 @@ its change.
   - Order: a pilot of three through to a report, then the rest. Then groups are live-tested and re-archived with `+bf.N`.
     Anything not live-tested stays staged.
   - The per-archive list names mods, so it stays on the machines (`bridgeforge-state/reassess-20261127/`).
+  - **15 of the 22 re-archived 2026-11-27.** All 22 were restored and bumped. 15 reached UNATTENDED_DONE with an RC9 report;
+    the other 7 are blocked by checks added since they were archived (below).
+    - The 15 ran live on both machines (JDK 25 + Fast Rendering + Prepatcher, RC9; 7 runs; every one LIVE_DONE, no Fatal).
+      They were recorded and archived on Test1; each earlier archive is in `Done/_replaced-2026-11-27/`.
+    - The done check passed for all 15:
+      - every restored variant is byte-identical to the author's;
+      - the build is RC9 and the version carries `+bf.N`;
+      - no variant is listed as changed.
+    - Owner rulings on the way:
+      - "Accept when unchanged": a probe line or caught exception is accepted with a written reason when the files involved
+        are byte-identical to the archive and the game carried on. One WARN-level caught exception came from a mod's own
+        CSV loader.
+      - One mod's two missing weapon rows: "Archive as authored". `javap` showed the only code naming them never runs.
+    - Two acceptances wait for the owner's review:
+      - one carried from a standing acceptance that was a session decision, not the owner's;
+      - one class-sweep acceptance whose third condition was shown only from the code, not in a run.
+    - The 7 blocked, staged only, never archived:
+      - `undeclared-library-dependency` agent packets (4 mods);
+      - a `declared-library-unreferenced` decision;
+      - `system-generation-unguarded` (code tier);
+      - `faction-known-lists-missing` packets;
+      - `saved-object-holds-market-ref` (to inspect);
+      - `mission-variant-not-defined` (a decision).
+  - Found on the way (queued with 98.23 d): `restore-from-done --for-retarget` builds the new workspace from the archive's
+    shipped copy and leaves the old one's records in `_stale-<date>/`. Lost that way:
+    - the standing `working/reports/probe_accepted.json`;
+    - everything the shipped-copy audit reads: fixer `.bak` backups, `scratch/` jar-patch and work-file records, the
+      escalation ledger, `REVIVE.json`, `SHIPPED_CHANGES.json`.
+    So every retargeted archive came back unexplained. Today these were carried by script, each from the stale record and
+    only for byte-identical files. Restore should carry them itself.
+  - `probe-group record --accept` stops the whole group when one member has an uncovered line. Today's way through was
+    `accept` per workspace with `--accept-findings`.
 - 99.3 **Every other standing rule, by evidence** (an audit of the code, docs and tests, spot-checked).
   - *Proven needed:* `faction-known-lists-missing`, `procgen-planet-row-missing`, `procgen-mod-body-leak` (if the author
     meant it), `jar-linkage-unresolved`, `rules-csv-curly-quote-unreadable`, `variant-weapon-slot-missing`.

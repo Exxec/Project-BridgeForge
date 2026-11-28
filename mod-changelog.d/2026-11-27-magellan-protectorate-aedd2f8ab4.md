@@ -1,0 +1,1 @@
+- **Magellan Protectorate** 1.5a+bf.1: revived for 0.98.5a-RC9 and archived (live validated)

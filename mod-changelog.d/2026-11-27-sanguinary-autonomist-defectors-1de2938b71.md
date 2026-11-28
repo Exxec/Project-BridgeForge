@@ -1,0 +1,1 @@
+- **Sanguinary Autonomist Defectors** 1.2+bf.1: revived for 0.98.5a-RC9 and archived (live validated)

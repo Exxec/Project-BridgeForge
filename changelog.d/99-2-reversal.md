@@ -1,0 +1,1 @@
+- The withdrawn slot rule reversed in 15 archived mods (ROADMAP-3 99.2): the authors' variants restored, retargeted to RC9, live-validated and re-archived; the mod changelog fragments of both machines are committed.
