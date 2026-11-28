@@ -28,8 +28,9 @@ its change.
     Anything not live-tested stays staged.
   - The per-archive list names mods, so it stays on the machines (`bridgeforge-state/reassess-20261127/`).
   - The owner's "20" was the count before wings were counted as a multiset. The recount added two archives made for RC8
-    (22 in all: 19 made for RC8, 3 for RC7), handled under the same ruling. They were not in the `target-impact` run above;
-    `revive` on the RC9 core checked them like the rest.
+    (22 in all: 19 made for RC8, 3 for RC7), handled under the same ruling. They were not in the `target-impact` run above.
+    A second run over their RC8 archives the same evening read CLEAN too, so all 19 RC8 archives read CLEAN for RC8 -> RC9.
+    Both are among the 15 re-archived below.
   - **15 of the 22 re-archived 2026-11-27.** All 22 were restored and bumped. 15 reached UNATTENDED_DONE with an RC9 report;
     the other 7 are blocked by checks added since they were archived (below).
     - The 15 ran live on both machines (JDK 25 + Fast Rendering + Prepatcher, RC9; 7 runs; every one LIVE_DONE, no Fatal).
@@ -64,8 +65,8 @@ its change.
 
       So every retargeted archive came back unexplained. On 2026-11-27 these were carried by script, each from the stale
       record and only for byte-identical files. Restore should carry them itself.
-    - `probe-group record --accept` stops the whole group when one member has an uncovered line. On 2026-11-27 the way
-      through was `accept` per workspace with `--accept-findings`.
+    - Queued as 98.23 (m): `probe-group record --accept` stops the whole group when one member has an uncovered line. On
+      2026-11-27 the way through was `accept` per workspace with `--accept-findings`.
 - 99.3 **Every other standing rule, by evidence** (an audit of the code, docs and tests, spot-checked).
   - *Proven needed:* `faction-known-lists-missing`, `procgen-planet-row-missing`, `procgen-mod-body-leak` (if the author
     meant it), `jar-linkage-unresolved`, `rules-csv-curly-quote-unreadable`, `variant-weapon-slot-missing`.
@@ -939,6 +940,8 @@ order then continue live testing followed by more roadmap work based on your rec
     next run (WLJ28VAN-A). Add `rig-up --vanilla`.
   - (d) A re-intaked upstream version loses its probe acceptances. A carry command would bring the baseline and the probe
     acceptances from the earlier workspace, for byte-identical files only, with the owner's ruling quoted.
+    `restore-from-done --for-retarget` has the same gap, and a wider one: it also loses every record the shipped-copy audit
+    reads (99.2). The carry should cover both.
   - (e) After `bump-version`, `revive --draft-report` refused to replace the old report. It should keep a copy and redraft.
     `bump-version` should also move a name's `[BF rN]` tag.
   - (f) 98.20's visibility check.
@@ -964,6 +967,8 @@ order then continue live testing followed by more roadmap work based on your rec
     - (l) Revive still asks the owner to approve the fixer for every `variant-weapon-slot-mismatch`, though the standing
       rule now accepts them as authored. A standing acceptance that revive applies by itself, quoting the rule, would end
       the question.
+    - (m) `probe-group record --accept` refuses the whole group when one member has a probe line or caught exception no
+      acceptance covers (99.2). The members that are covered should be recorded, and the uncovered one named.
   - *Deferred to G5:*
     - a probe check that every ring band and every graphics key resolves to its mod's own file;
     - a static check for graphics keys two mods share;
