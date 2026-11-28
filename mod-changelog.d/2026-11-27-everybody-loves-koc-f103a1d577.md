@@ -1,0 +1,1 @@
+- **Everybody loves KoC** 1.05.49a+bf.1: revived for 0.98.5a-RC9 and archived (live validated)
